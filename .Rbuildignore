@@ -1,6 +1,14 @@
-^psdness\.Rcheck$
-^psdness_.*\.tar\.gz$
+^.*\.Rcheck$
+^.*\.tar\.gz$
 ^\.git$
+^\.gitignore$
+^\.gitattributes$
+^\.DS_Store$
+.*\.DS_Store$
 ^validation$
 ^doc$
 ^Meta$
+^vignettes/.*\.html$
+^cran-comments\.md$
+^CRAN-SUBMISSION$
+^\.github$
