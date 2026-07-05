@@ -1,6 +1,6 @@
 ---
 title: "psdness validation — Sim 3: power to detect genuine errors"
-author: "Authors names go here"
+author: "Ian Hussey"
 date: today
 format:
   html:
@@ -86,6 +86,7 @@ The **target is the true box-feasibility status**, supplied by the independent o
 ```{r}
 library(tidyr)
 library(dplyr)
+library(readr)
 library(furrr)
 library(janitor)
 library(simhelpers)
@@ -160,16 +161,22 @@ experiment_parameters_grid <- expand_grid(
 ## Run simulation
 
 ```{r}
-set.seed(42)
-fo <- furrr_options(seed = TRUE, packages = c("psdness", "clusterGeneration"))
-
-simulation <- experiment_parameters_grid |>
-  mutate(res = future_pmap(
-    .l = list(generator = generator, p = p, seed = seed, eta = eta, loading_sd = loading_sd,
-              decimals = decimals, type = type, magnitude = magnitude,
-              i = i, j = j, var = var, jitter_seed = jitter_seed),
-    .f = run_condition, .options = fo, .progress = TRUE)) |>
-  unnest(res)
+if(file.exists("simulation3.rds")){
+  simulation <- read_rds("simulation3.rds")
+} else {
+  set.seed(42)
+  fo <- furrr_options(seed = TRUE, packages = c("psdness", "clusterGeneration"))
+  
+  simulation <- experiment_parameters_grid |>
+    mutate(res = future_pmap(
+      .l = list(generator = generator, p = p, seed = seed, eta = eta, loading_sd = loading_sd,
+                decimals = decimals, type = type, magnitude = magnitude,
+                i = i, j = j, var = var, jitter_seed = jitter_seed),
+      .f = run_condition, .options = fo, .progress = TRUE)) |>
+    unnest(res)
+  
+  write_rds(simulation, "simulation3.rds", compress = "gz")
+}
 ```
 
 # Results

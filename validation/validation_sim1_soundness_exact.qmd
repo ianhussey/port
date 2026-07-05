@@ -1,6 +1,6 @@
 ---
 title: "psdness validation — Sim 1: soundness on exact valid matrices"
-author: "Authors names go here"
+author: "Ian Hussey"
 date: today
 format:
   html:
@@ -98,6 +98,7 @@ Because the primary estimate targets 0, the Wald/binomial MCSE `sqrt(phat(1-phat
 ```{r}
 library(tidyr)
 library(dplyr)
+library(readr)
 library(furrr)
 library(janitor)
 library(simhelpers)
@@ -147,28 +148,34 @@ experiment_parameters_grid <- expand_grid(
 ## Run simulation
 
 ```{r}
-set.seed(42)
-
-fo <- furrr_options(seed = TRUE, packages = c("psdness", "clusterGeneration"))
-
-simulation <- experiment_parameters_grid |>
-  # generate a valid base matrix
-  mutate(R = future_pmap(
-    .l = list(generator = generator, p = p, seed = seed, eta = eta, loading_sd = loading_sd),
-    .f = function(generator, p, seed, eta, loading_sd)
-      generate_data(generator, p, seed,
-                    eta = if (is.na(eta)) 1 else eta,
-                    loading_sd = if (is.na(loading_sd)) 0.35 else loading_sd),
-    .options = fo, .progress = TRUE)) |>
-  # off-diagonal distribution (auditing generator plausibility)
-  mutate(offdiag = future_pmap(list(R = R), offdiag_summary, .options = fo)) |>
-  # run the tool with a tiny delta (box = the point)
-  mutate(check = future_pmap(list(R = R), \(R) analyse_check(R, delta = 1e-8),
-                             .options = fo, .progress = TRUE)) |>
-  # independent oracle status (ground-truth cross-check)
-  mutate(oracle = future_pmap(list(R = R),
-    \(R) tibble::tibble(oracle_status = box_is_feasible(R, 1e-8, witness = R)$status),
-    .options = fo))
+if(file.exists("simulation1.rds")){
+  simulation <- read_rds("simulation1.rds")
+} else {
+  set.seed(42)
+  
+  fo <- furrr_options(seed = TRUE, packages = c("psdness", "clusterGeneration"))
+  
+  simulation <- experiment_parameters_grid |>
+    # generate a valid base matrix
+    mutate(R = future_pmap(
+      .l = list(generator = generator, p = p, seed = seed, eta = eta, loading_sd = loading_sd),
+      .f = function(generator, p, seed, eta, loading_sd)
+        generate_data(generator, p, seed,
+                      eta = if (is.na(eta)) 1 else eta,
+                      loading_sd = if (is.na(loading_sd)) 0.35 else loading_sd),
+      .options = fo, .progress = TRUE)) |>
+    # off-diagonal distribution (auditing generator plausibility)
+    mutate(offdiag = future_pmap(list(R = R), offdiag_summary, .options = fo)) |>
+    # run the tool with a tiny delta (box = the point)
+    mutate(check = future_pmap(list(R = R), \(R) analyse_check(R, delta = 1e-8),
+                               .options = fo, .progress = TRUE)) |>
+    # independent oracle status (ground-truth cross-check)
+    mutate(oracle = future_pmap(list(R = R),
+                                \(R) tibble::tibble(oracle_status = box_is_feasible(R, 1e-8, witness = R)$status),
+                                .options = fo))
+  
+  write_rds(simulation, "simulation1.rds", compress = "gz")
+}
 ```
 
 # Results

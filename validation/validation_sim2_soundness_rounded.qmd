@@ -1,6 +1,6 @@
 ---
 title: "psdness validation — Sim 2: soundness under rounding"
-author: "Authors names go here"
+author: "Ian Hussey"
 date: today
 format:
   html:
@@ -85,6 +85,7 @@ The **target is the true feasibility status**, which is fixed by the theorem: th
 ```{r}
 library(tidyr)
 library(dplyr)
+library(readr)
 library(furrr)
 library(janitor)
 library(simhelpers)
@@ -152,34 +153,41 @@ experiment_parameters_grid <- base_grid |>
 ## Run simulation
 
 ```{r}
-set.seed(42)
-fo <- furrr_options(seed = TRUE, packages = c("psdness", "clusterGeneration"))
-
-# Step 1: generate the base matrix (list column, reused via the shared seed).
-base <- base_grid |>
-  mutate(R = future_pmap(
-    .l = list(generator = generator, p = p, seed = seed, eta = eta, loading_sd = loading_sd),
-    .f = function(generator, p, seed, eta, loading_sd)
-      generate_data(generator, p, seed,
-                    eta = if (is.na(eta)) 1 else eta,
-                    loading_sd = if (is.na(loading_sd)) 0.35 else loading_sd),
-    .options = fo, .progress = TRUE))
-
-simulation <- experiment_parameters_grid |>
-  left_join(select(base, gen_label, p, iteration, R), by = c("gen_label", "p", "iteration")) |>
-  # Step 2: contaminate (round off-diagonals under the chosen rule)
-  mutate(R_tilde = future_pmap(
-    list(R = R, decimals = decimals, rounding_method = rounding_method),
-    \(R, decimals, rounding_method) contaminate_data(R, decimals, rounding_method)$R_tilde,
-    .options = fo, .progress = TRUE)) |>
-  # Step 3: analyse with the tool's delta
-  mutate(check = future_pmap(list(R_tilde = R_tilde, delta = delta_used),
-    \(R_tilde, delta) analyse_check(R_tilde, delta = delta), .options = fo, .progress = TRUE)) |>
-  # Step 4: independent oracle at the tool's own delta (sound-about-its-box check)
-  mutate(oracle = future_pmap(list(R_tilde = R_tilde, delta = delta_used, R = R),
-    \(R_tilde, delta, R) tibble::tibble(oracle_status = box_is_feasible(R_tilde, delta, witness = R)$status),
-    .options = fo)) |>
-  select(-R, -R_tilde)
+if(file.exists("simulation2.rds")){
+  simulation <- read_rds("simulation2.rds")
+} else {
+  set.seed(42)
+  
+  fo <- furrr_options(seed = TRUE, packages = c("psdness", "clusterGeneration"))
+  
+  # Step 1: generate the base matrix (list column, reused via the shared seed).
+  base <- base_grid |>
+    mutate(R = future_pmap(
+      .l = list(generator = generator, p = p, seed = seed, eta = eta, loading_sd = loading_sd),
+      .f = function(generator, p, seed, eta, loading_sd)
+        generate_data(generator, p, seed,
+                      eta = if (is.na(eta)) 1 else eta,
+                      loading_sd = if (is.na(loading_sd)) 0.35 else loading_sd),
+      .options = fo, .progress = TRUE))
+  
+  simulation <- experiment_parameters_grid |>
+    left_join(select(base, gen_label, p, iteration, R), by = c("gen_label", "p", "iteration")) |>
+    # Step 2: contaminate (round off-diagonals under the chosen rule)
+    mutate(R_tilde = future_pmap(
+      list(R = R, decimals = decimals, rounding_method = rounding_method),
+      \(R, decimals, rounding_method) contaminate_data(R, decimals, rounding_method)$R_tilde,
+      .options = fo, .progress = TRUE)) |>
+    # Step 3: analyse with the tool's delta
+    mutate(check = future_pmap(list(R_tilde = R_tilde, delta = delta_used),
+                               \(R_tilde, delta) analyse_check(R_tilde, delta = delta), .options = fo, .progress = TRUE)) |>
+    # Step 4: independent oracle at the tool's own delta (sound-about-its-box check)
+    mutate(oracle = future_pmap(list(R_tilde = R_tilde, delta = delta_used, R = R),
+                                \(R_tilde, delta, R) tibble::tibble(oracle_status = box_is_feasible(R_tilde, delta, witness = R)$status),
+                                .options = fo)) |>
+    select(-R, -R_tilde)
+  
+  write_rds(simulation, "simulation2.rds", compress = "gz")
+}
 ```
 
 # Results
