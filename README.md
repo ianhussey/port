@@ -168,8 +168,8 @@ under-identified — the tool reports an honest localization class and never
 manufactures a single culprit when the evidence only supports a set.
 
 Everything is box-aware: every feasibility/interval computation respects the
-rounding box, never the reported point values. Four independent, box-aware
-components feed a deterministic ruleset:
+rounding box, never the reported point values. Independent, box-aware components
+feed a deterministic ruleset:
 
 - **A. per-cell interval / sole culprit** — for each cell, the interval it could
   take given the others within rounding; a nonempty interval marks a sole-culprit
@@ -180,29 +180,68 @@ components feed a deterministic ruleset:
 - **C. leave-one-out** — variables whose removal restores feasibility.
 - **D. sparse correction / severity** — the smallest set of cells whose joint
   correction restores feasibility, plus severity measures.
+- **R² localizer** — per-variable squared multiple correlation
+  (van Tilburg & van Tilburg 2023): variables that are over-determined by the
+  others (`R² > 100%`). Implemented as the regression-residual **witness
+  direction** `v = (M₋ᵢ⁻¹cᵢ ; −1)`, for which `vᵀMv = 1 − R²ᵢ`, so it reuses the
+  box-witness bound exactly — no interval determinant, no verified inversion. A
+  variable-level voter, not an arbiter; clean blame requires a PD complement.
 
 The verdict is one of `cell`, `cell_tentative`, `triad`, `variable`, `joint`,
 `diffuse`, or `none`.
 
+### Causes: benign structural vs substantive violation
+
+Non-PSDness is *often benign* — a composite plus its subscores, or a full set of
+category dummies, is exactly (rank-)deficient by construction (van Tilburg &
+van Tilburg 2023; Lorenzo-Seva & Ferrando 2021). For a forensic tool the report
+must surface these before anything that reads as a data-integrity inference.
+Every impossible result carries a `structural` diagnosis that separates a benign
+near-boundary rank-deficiency from a substantive over-the-boundary violation
+(using the severity relative to the rounding step) and names the likely
+generator (ipsative / composite / localized) from the near-dependency direction.
+
 ```r
-R <- matrix(c(1, 0.9, 0.9, 0.9, 1, -0.9, 0.9, -0.9, 1), 3, 3)
-localize_psd_fault(R, decimals = 2)
-#> <psd_fault>
-#>   Impossible given rounding (delta = 0.005).
-#>   Verdict: TRIAD - Attributable to an inconsistent triangle (three cells)
-#>     cells: (1,2), (1,3), (2,3)
-#>     Not separable: any one of the three edits would resolve the violation.
-#>   Severity: largest single edit needed 0.395 (egregious ...; delta = 0.005);
-#>             total mass (Frobenius) 0.684; best achievable lambda_min -0.79.
+# A composite ~ its subscores, nudged just past the rounding boundary:
+localize_psd_fault(Cn, decimals = 2)
+#>   Verdict: DIFFUSE - Diffuse: no small explanation
+#>   Structural: The matrix sits within rounding of a singular (boundary)
+#>     correlation matrix. The near-dependency has one variable opposite a cluster
+#>     of {1, 2, 3, 4}, consistent with a composite built from its subscores.
+#>     Structural rank-deficiency of this kind is often a benign modelling
+#>     artifact, not evidence of a data problem (van Tilburg & van Tilburg 2023;
+#>     Lorenzo-Seva & Ferrando 2021).
+#>   Severity: largest single edit needed 0.0117 (beyond rounding; delta = 0.005) ...
 ```
+
+When a matrix is **possible**, the result reports a `plausibility` gradient — the
+per-variable reported-point `R²` and its closest approach to the 100% ceiling —
+so "passes but sits at 96%" (or "exceeds 100% at face value but survives
+rounding") is visible without implying a verdict.
+
+### Implied intervals and single-cell imputation
+
+`implied_interval()` gives the interval a cell could occupy for the matrix to be
+valid, holding the others at their reported points (a fast closed form,
+van Tilburg & van Tilburg 2023) or letting them roam their boxes. Pointed at a
+genuinely missing (`NA`) entry, it imputes the interval that entry must have
+occupied.
 
 **Same engine, no solver.** The localizer reuses the base package's primitives
 throughout — POCS as a *search* (finding feasible points, bisecting for
 intervals and severities) and the witness bound + Rump verification as the
 *certificates*. Impossibility sub-claims (an empty per-cell interval; "removal
-still impossible"; an impossible triple) are sound; feasibility sub-claims
-exhibit a Rump-verified witnessing matrix. Pass `verify = FALSE` to skip the
-certification and run search-based only. No CVXR or other optimizer is required.
+still impossible"; an impossible triple; an over-determined variable) are sound;
+feasibility sub-claims exhibit a Rump-verified witnessing matrix. Pass
+`verify = FALSE` to skip the certification and run search-based only. No CVXR or
+other optimizer is required.
+
+**Scope.** This is a *forensic, post-hoc, rounding-aware* tool: it interrogates
+only the cells actually present in a given reported matrix. It deliberately does
+**not** import van Tilburg & van Tilburg's design-time arguments — that a
+correlation structure is impossible because of *unmeasured population* variables,
+or the "add a variable and it becomes impossible" construction — which concern
+populations and hypotheses rather than a specific reported matrix.
 
 ## API
 
@@ -212,8 +251,9 @@ certification and run search-based only. No CVXR or other optimizer is required.
 | `certificate(x)` | extract the witness vector and margin |
 | `check_corr_psd_batch(mats, ...)` | screen a list of matrices → tibble |
 | `localize_psd_fault(x, verify = TRUE, sparse_k = 3, ...)` | localize the fault in an impossible matrix; returns a `psd_fault` |
-| `fault_evidence(x)` | the raw A–D evidence behind a `psd_fault` |
+| `fault_evidence(x)` | the raw A–D + R² evidence behind a `psd_fault` |
 | `impossible_triples(R, decimals = 2, ...)` | standalone component B (rounding-robust impossible triples) → tibble |
+| `implied_interval(R, cells, ...)` | interval a cell could occupy; imputes a missing (`NA`) entry → tibble |
 | `localize_psd_fault_batch(mats, ...)` | localize over a list of matrices → tibble |
 
 ## Provenance of the methods
@@ -227,13 +267,17 @@ table records what was drawn from each source, and what is original here.
 | A-priori floating-point error bounds `γₙ = nu/(1−nu)` for the witness quadratic form (`R/rigor.R`, `R/witness.R`, `R/box.R`), and the Cholesky backward-error bound behind the PSD test | Higham (2002), *Accuracy and Stability of Numerical Algorithms* | The γₙ inner-product / quadratic-form error bounds and the Cholesky backward-error bound used to size the rigorous slack. |
 | Verified positive semidefiniteness by a one-sided Cholesky of `A − cI` (`R/verify.R`) | Rump (2006) | The test itself and the constant `c` that bounds the Cholesky rounding error. |
 | Possibility search / feasibility oracle by alternating projection onto the box and the PSD cone; nearest-correlation-matrix helper (`R/pocs.R`, `R/box.R`, `R/localize-sparse.R`) | Higham (2002, *IMA J. Numer. Anal.*); Cheney & Goldstein (1959) | Alternating projection onto the PSD cone and the unit-diagonal set (Higham's nearest-correlation-matrix iteration); convergence of projections onto two convex sets (Cheney–Goldstein). |
+| Fault-localization layer: the R² / VIF variable localizer, the per-cell implied-interval closed form, single-cell imputation, the plausibility gradient, and the benign-vs-substantive causes taxonomy (`R/localize-rsquared.R`, `R/localize-causes.R`, `R/implied-interval.R`) | van Tilburg & van Tilburg (2023); Lorenzo-Seva & Ferrando (2021) | The squared-multiple-correlation impossibility criterion and its VIF / determinant identities (V1–V2); the closed-form per-cell interval (V3); single-unknown solving / imputation (V8); the possibility-vs-plausibility gradient (V4); and the taxonomy of benign structural causes to surface before any integrity inference (V5–V6). Realized on this package's box-aware witness/POCS engine rather than via matrix inversion or interval determinants (see below). |
 
 **Original to this package** (derivations, not taken from the above): the
 closed-form box quadratic-form maximum `v'Rv + δ(‖v‖₁²−‖v‖₂²)` and its use as a
 box-aware witness; the sound interval determinant bound
 `det = (1−b²)(1−c²) − (a−bc)²` for the impossible-triple scan; the greedy
-minimal-cardinality fault localization; and the tiered checker and localization
-ruleset.
+minimal-cardinality fault localization; the tiered checker and localization
+ruleset; and the observation that van Tilburg's R²>1 criterion is the
+regression-residual **witness vector** `v = (M₋ᵢ⁻¹cᵢ ; −1)` (since
+`vᵀMv = 1 − R²ᵢ`), which is what lets the R² localizer reuse the existing
+box-witness rigor model instead of an interval determinant or a verified inverse.
 
 ## References
 
@@ -248,8 +292,16 @@ ruleset.
   Analysis*, 46(1):180–200. [doi:10.1137/050622870](https://doi.org/10.1137/050622870)
 - C. Jansson (2009), "On verified numerical computations in convex programming,"
   *Japan Journal of Industrial and Applied Mathematics*, 26(2–3):337–363.
+- U. Lorenzo-Seva and P. J. Ferrando (2021), "Not positive definite correlation
+  matrices in exploratory item factor analysis: causes, consequences and a
+  proposed solution," *Structural Equation Modeling*, 28(1):138–147.
+  [doi:10.1080/10705511.2020.1735393](https://doi.org/10.1080/10705511.2020.1735393)
 - S. M. Rump (2006), "Verification of positive definiteness," *BIT Numerical
   Mathematics*, 46(2):433–452.
+- W. A. P. van Tilburg and L. J. A. van Tilburg (2023), "Impossible hypotheses
+  and effect-size limits," *Advances in Methods and Practices in Psychological
+  Science*, 6(4).
+  [doi:10.1177/25152459231197605](https://doi.org/10.1177/25152459231197605)
 
 ## License
 

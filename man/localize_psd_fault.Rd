@@ -53,7 +53,22 @@ provably negative (sound interval bound; no solver).}
 \item{C. leave-one-out}{variables whose removal restores feasibility.}
 \item{D. sparse correction / severity}{smallest set of cells whose joint
 correction restores feasibility, plus severity measures.}
+\item{R^2 localizer}{per-variable squared multiple correlation (van Tilburg
+& van Tilburg 2023): variables the regression-residual witness direction
+rigorously flags as over-determined (\code{R^2 > 1}), conditional on the
+complementary submatrix being PD. A variable-level voter, not an arbiter.}
 }
+}
+
+\section{Structural cause and plausibility}{
+
+Every impossible result also carries a \code{structural} diagnosis that separates a
+benign near-boundary rank-deficiency (composite+subscores, a full set of
+category dummies) from a substantive over-the-boundary violation, using the
+severity relative to the rounding step and the pattern of the near-dependency
+direction (van Tilburg & van Tilburg 2023; Lorenzo-Seva & Ferrando 2021). For
+a \code{possible} matrix the result reports a \code{plausibility} gradient: the
+per-variable reported-point \code{R^2} and its closest approach to the 100\% ceiling.
 }
 
 \section{Localization verdicts}{

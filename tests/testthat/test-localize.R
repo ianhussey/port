@@ -91,6 +91,6 @@ test_that("print.psd_fault narrates the inference", {
 test_that("fault_evidence returns the A-D evidence", {
   ev <- fault_evidence(localize_psd_fault(triad_R, decimals = 2))
   expect_named(ev, c("sole_culprit_cells", "impossible_triples",
-                     "lofo_restoring", "sparse_support"))
+                     "lofo_restoring", "sparse_support", "rsquared"))
   expect_error(fault_evidence(42), "psd_fault")
 })

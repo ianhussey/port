@@ -6,14 +6,17 @@
 
 .new_psd_fault <- function(localization_verdict, implicated, convergence,
                            evidence, severity, delta, p, verify,
-                           notes = character(0), base_check = NULL) {
+                           notes = character(0), base_check = NULL,
+                           structural = NULL, plausibility = NULL) {
   structure(
     list(
       localization_verdict = localization_verdict,
       implicated = implicated,          # list(cells = matrix|NULL, variable = int|NULL)
       convergence = convergence,        # "all" / "partial" / NA
-      evidence = evidence,              # A-D raw outputs
+      evidence = evidence,              # A-D + R^2 raw outputs
       severity = severity,              # severity_max/frob/best_lambda_min/witness_margin
+      structural = structural,          # benign-vs-substantive cause diagnosis
+      plausibility = plausibility,      # per-variable R^2 gradient (possible matrices)
       delta = delta,
       p = p,
       verify = verify,
@@ -47,7 +50,20 @@
 #'   \item{C. leave-one-out}{variables whose removal restores feasibility.}
 #'   \item{D. sparse correction / severity}{smallest set of cells whose joint
 #'     correction restores feasibility, plus severity measures.}
+#'   \item{R^2 localizer}{per-variable squared multiple correlation (van Tilburg
+#'     & van Tilburg 2023): variables the regression-residual witness direction
+#'     rigorously flags as over-determined (`R^2 > 1`), conditional on the
+#'     complementary submatrix being PD. A variable-level voter, not an arbiter.}
 #' }
+#'
+#' @section Structural cause and plausibility:
+#' Every impossible result also carries a `structural` diagnosis that separates a
+#' benign near-boundary rank-deficiency (composite+subscores, a full set of
+#' category dummies) from a substantive over-the-boundary violation, using the
+#' severity relative to the rounding step and the pattern of the near-dependency
+#' direction (van Tilburg & van Tilburg 2023; Lorenzo-Seva & Ferrando 2021). For
+#' a `possible` matrix the result reports a `plausibility` gradient: the
+#' per-variable reported-point `R^2` and its closest approach to the 100% ceiling.
 #'
 #' @section Localization verdicts:
 #' `cell` (a single cell, methods converge), `cell_tentative` (single cell,
@@ -97,20 +113,29 @@ localize_psd_fault <- function(x, decimals = 2, delta = NULL,
   }
   p <- nrow(R)
 
-  # Rule 7: not impossible -> localization not applicable.
+  # Rule 7: not impossible -> localization not applicable, but still report the
+  # plausibility gradient (per-variable R^2 distance to the 100% ceiling, V4).
   if (!identical(chk$verdict, "impossible")) {
+    plaus <- .plausibility_gradient(R, delta)
+    note <- sprintf("Matrix is '%s' given rounding; localization not applicable.",
+                    chk$verdict)
+    if (isTRUE(plaus$near_ceiling)) {
+      tail <- if (plaus$max_r2 >= 1)
+        "exceeds 100% at the exact reported values, but possible within rounding."
+      else "possible, but close to the 100% ceiling."
+      note <- c(note, sprintf("Plausibility: variable %d has reported-point R^2 = %.1f%% -- %s",
+        plaus$max_var, 100 * plaus$max_r2, tail))
+    }
     return(.new_psd_fault(
       localization_verdict = "none",
       implicated = list(cells = NULL, variable = NULL),
       convergence = NA_character_,
       evidence = list(sole_culprit_cells = NULL, impossible_triples = NULL,
-                      lofo_restoring = NULL, sparse_support = NULL),
+                      lofo_restoring = NULL, sparse_support = NULL, rsquared = plaus$rsquared),
       severity = list(severity_max = NA_real_, severity_frob = NA_real_,
                       best_lambda_min = NA_real_, witness_margin = chk$margin),
-      delta = delta, p = p, verify = verify,
-      notes = sprintf("Matrix is '%s' given rounding; localization not applicable.",
-                      chk$verdict),
-      base_check = chk))
+      delta = delta, p = p, verify = verify, plausibility = plaus,
+      notes = note, base_check = chk))
   }
 
   # ---- Evidence A-D -------------------------------------------------------
@@ -135,6 +160,10 @@ localize_psd_fault <- function(x, decimals = 2, delta = NULL,
     best_lambda_min = .best_lambda_min(R, delta),
     witness_margin = chk$margin)
 
+  rsq <- .rsquared_evidence(R, delta)                                   # R^2 (V1+V2)
+  S_r2 <- which(.rsquared_blamed(rsq))                                  # cleanly-blamed vars
+  structural <- .structural_diagnosis(R, delta, sev$severity_max)       # causes (V5)
+
   # ---- Precompute set primitives -----------------------------------------
   S_sole_keys <- if (nrow(sole_cells) > 0L) {
     apply(sole_cells, 1L, function(rw) .cell_key(rw[1], rw[2]))
@@ -154,11 +183,15 @@ localize_psd_fault <- function(x, decimals = 2, delta = NULL,
     sole_culprit_cells = sole_records,
     impossible_triples = triples,
     lofo_restoring = lofo,
-    sparse_support = sparse)
+    sparse_support = sparse,
+    rsquared = rsq)
 
   key_to_cell <- function(key) as.integer(strsplit(key, "-", fixed = TRUE)[[1]])
 
   # ---- Deterministic ruleset (first match) --------------------------------
+  # The verdict CLASS is decided by A-D (below); the R^2 localizer and structural
+  # diagnosis are voters/annotations layered on afterwards, never arbiters.
+  decide <- function() {
   # Rule 1 / 2: single sole culprit.
   if (length(S_sole_keys) == 1L) {
     c_key <- S_sole_keys[1]
@@ -210,12 +243,15 @@ localize_psd_fault <- function(x, decimals = 2, delta = NULL,
     in_col <- function(keys) Filter(function(key) k %in% key_to_cell(key), keys)
     col_cells <- unique(c(in_col(S_sole_keys), in_col(S_sparse_keys)))
     likely <- if (length(col_cells) > 0L) do.call(rbind, lapply(col_cells, key_to_cell)) else NULL
+    r2_agrees <- k %in% S_r2
+    notes <- sprintf("Removing variable %d restores possibility given rounding.", k)
+    if (r2_agrees) notes <- c(notes,
+      sprintf("Corroborated by the R^2 localizer (variable %d is over-determined).", k))
     return(.new_psd_fault("variable",
       implicated = list(cells = likely, variable = k),
-      convergence = if (!is.null(likely)) "partial" else NA_character_,
+      convergence = if (r2_agrees) "all" else if (!is.null(likely)) "partial" else NA_character_,
       evidence = evidence, severity = sev, delta = delta, p = p, verify = verify,
-      notes = sprintf("Removing variable %d restores possibility given rounding.", k),
-      base_check = chk))
+      notes = notes, base_check = chk))
   }
 
   # Rule 5: joint -- no single cell suffices but a small set does.
@@ -236,4 +272,18 @@ localize_psd_fault <- function(x, decimals = 2, delta = NULL,
     delta = delta, p = p, verify = verify,
     notes = "No small explanation: ranked evidence only (see fault_evidence()).",
     base_check = chk)
+  }
+
+  res <- decide()
+
+  # Layer the causes diagnosis (V5) and the R^2 attribution (V1+V2, V6) onto the
+  # verdict as annotations. These never change the verdict CLASS.
+  res$structural <- structural
+  r2_note <- if (length(S_r2) > 0L) {
+    sprintf(paste0("R^2 localizer: variable(s) {%s} are over-determined by the ",
+      "others (R^2 > 100%%) -- conditional on the other cells being correct."),
+      paste(S_r2, collapse = ", "))
+  } else NULL
+  res$notes <- c(res$notes, .structural_note(structural), r2_note)
+  res
 }

@@ -11,7 +11,8 @@ fault_evidence(x)
 }
 \value{
 The \code{evidence} list: \code{sole_culprit_cells} (component A),
-\code{impossible_triples} (B), \code{lofo_restoring} (C), and \code{sparse_support} (D).
+\code{impossible_triples} (B), \code{lofo_restoring} (C), \code{sparse_support} (D), and
+\code{rsquared} (per-variable R^2 localizer).
 }
 \description{
 Accessor for the raw fault-localization evidence

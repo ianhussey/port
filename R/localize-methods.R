@@ -12,15 +12,16 @@
 print.psd_fault <- function(x, digits = 3, ...) {
   cat("<psd_fault>\n")
   v <- x$localization_verdict
+  d <- x$delta
+
   if (identical(v, "none")) {
     cat("  localization: NONE -", x$notes[1], "\n")
+    for (n in x$notes[-1]) cat("  ", n, "\n", sep = "")
     return(invisible(x))
   }
 
-  d <- x$delta
   cat(sprintf("  Impossible given rounding (delta = %g).\n", d))
 
-  # Headline attribution.
   sole <- Filter(function(c) isTRUE(c$sole), x$evidence$sole_culprit_cells)
   find_rec <- function(i, j) {
     for (c in sole) if (c$i == i && c$j == j) return(c)
@@ -36,6 +37,7 @@ print.psd_fault <- function(x, digits = 3, ...) {
     v)
   cat("  Verdict:", toupper(v), "-", hl, "\n")
 
+  # Verdict-specific detail.
   if (v %in% c("cell", "cell_tentative")) {
     rc <- x$implicated$cells[1, ]
     rec <- find_rec(rc[1], rc[2])
@@ -46,13 +48,10 @@ print.psd_fault <- function(x, digits = 3, ...) {
                   digits, rec$lo, digits, rec$hi))
       cat(sprintf("    required edit %+.*g, %s the %g rounding tolerance.\n",
                   digits, rec$required_edit,
-                  if (abs(rec$required_edit) > d) "far exceeding" else "within",
-                  d))
+                  if (abs(rec$required_edit) > d) "far exceeding" else "within", d))
     }
-    for (n in x$notes) cat("    -", n, "\n")
-  } else if (identical(v, "triad")) {
+  } else if (v %in% c("triad", "joint")) {
     cat("    cells:", .cells_str(x$implicated$cells), "\n")
-    cat("    ", x$notes[1], "\n", sep = "")
   } else if (identical(v, "variable")) {
     cat(sprintf("    variable %d (its removal restores possibility given rounding).\n",
                 x$implicated$variable))
@@ -60,14 +59,15 @@ print.psd_fault <- function(x, digits = 3, ...) {
       cat("    most likely cell(s) within its column:",
           .cells_str(x$implicated$cells), "\n")
     }
-  } else if (identical(v, "joint")) {
-    cat("    cells:", .cells_str(x$implicated$cells), "\n")
-    cat("    ", x$notes[1], "\n", sep = "")
   } else if (identical(v, "diffuse")) {
     nt <- length(x$evidence$impossible_triples)
     cat(sprintf("    %d impossible triple(s); leave-one-out restoring vars: {%s}.\n",
                 nt, paste(x$evidence$lofo_restoring$restoring, collapse = ", ")))
-    cat("    See fault_evidence() for the full ranked evidence.\n")
+  }
+
+  # Structural cause (benign explanations first).
+  if (!is.null(x$structural)) {
+    cat("  Structural:", .structural_note(x$structural), "\n")
   }
 
   # Severity (always).
@@ -81,6 +81,11 @@ print.psd_fault <- function(x, digits = 3, ...) {
   }
   cat(sprintf(";\n            total mass (Frobenius) %.*g; best achievable lambda_min %.*g.\n",
               digits, s$severity_frob, digits, s$best_lambda_min))
+
+  # Notes (verdict corroboration + R^2 attribution).
+  drop <- if (!is.null(x$structural)) .structural_note(x$structural) else character(0)
+  extra <- setdiff(x$notes, drop)
+  for (n in extra) cat("  -", n, "\n")
   if (!isTRUE(x$verify)) cat("  (verify = FALSE: impossibility sub-claims are search-based.)\n")
   invisible(x)
 }
@@ -89,7 +94,8 @@ print.psd_fault <- function(x, digits = 3, ...) {
 #'
 #' @param x A `psd_fault` object.
 #' @return The `evidence` list: `sole_culprit_cells` (component A),
-#'   `impossible_triples` (B), `lofo_restoring` (C), and `sparse_support` (D).
+#'   `impossible_triples` (B), `lofo_restoring` (C), `sparse_support` (D), and
+#'   `rsquared` (per-variable R^2 localizer).
 #' @examples
 #' R <- matrix(c(1, 0.9, 0.9, 0.9, 1, -0.9, 0.9, -0.9, 1), 3, 3)
 #' fault_evidence(localize_psd_fault(R, decimals = 2))
