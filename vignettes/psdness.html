@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="utf-8" />
+<meta name="generator" content="pandoc" />
+<meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
+
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+
+
+
+<title>Getting started with psdness</title>
+
+<script>// Pandoc 2.9 adds attributes on both header and div. We remove the former (to
+// be compatible with the behavior of Pandoc < 2.8).
+document.addEventListener('DOMContentLoaded', function(e) {
+  var hs = document.querySelectorAll("div.section[class*='level'] > :first-child");
+  var i, h, a;
+  for (i = 0; i < hs.length; i++) {
+    h = hs[i];
+    if (!/^h[1-6]$/i.test(h.tagName)) continue;  // it should be a header h1-h6
+    a = h.attributes;
+    while (a.length > 0) h.removeAttribute(a[0].name);
+  }
+});
+</script>
+
+<style type="text/css">
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+span.underline{text-decoration: underline;}
+div.column{display: inline-block; vertical-align: top; width: 50%;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+</style>
+
+
+
+<style type="text/css">
+code {
+white-space: pre;
+}
+.sourceCode {
+overflow: visible;
+}
+</style>
+<style type="text/css" data-origin="pandoc">
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+{ counter-reset: source-line 0; }
+pre.numberSource code > span
+{ position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+{ content: counter(source-line);
+position: relative; left: -1em; text-align: right; vertical-align: baseline;
+border: none; display: inline-block;
+-webkit-touch-callout: none; -webkit-user-select: none;
+-khtml-user-select: none; -moz-user-select: none;
+-ms-user-select: none; user-select: none;
+padding: 0 4px; width: 4em;
+color: #aaaaaa;
+}
+pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa; padding-left: 4px; }
+div.sourceCode
+{ }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+code span.al { color: #ff0000; font-weight: bold; } 
+code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.at { color: #7d9029; } 
+code span.bn { color: #40a070; } 
+code span.bu { color: #008000; } 
+code span.cf { color: #007020; font-weight: bold; } 
+code span.ch { color: #4070a0; } 
+code span.cn { color: #880000; } 
+code span.co { color: #60a0b0; font-style: italic; } 
+code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.do { color: #ba2121; font-style: italic; } 
+code span.dt { color: #902000; } 
+code span.dv { color: #40a070; } 
+code span.er { color: #ff0000; font-weight: bold; } 
+code span.ex { } 
+code span.fl { color: #40a070; } 
+code span.fu { color: #06287e; } 
+code span.im { color: #008000; font-weight: bold; } 
+code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.kw { color: #007020; font-weight: bold; } 
+code span.op { color: #666666; } 
+code span.ot { color: #007020; } 
+code span.pp { color: #bc7a00; } 
+code span.sc { color: #4070a0; } 
+code span.ss { color: #bb6688; } 
+code span.st { color: #4070a0; } 
+code span.va { color: #19177c; } 
+code span.vs { color: #4070a0; } 
+code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } 
+</style>
+<script>
+// apply pandoc div.sourceCode style to pre.sourceCode instead
+(function() {
+  var sheets = document.styleSheets;
+  for (var i = 0; i < sheets.length; i++) {
+    if (sheets[i].ownerNode.dataset["origin"] !== "pandoc") continue;
+    try { var rules = sheets[i].cssRules; } catch (e) { continue; }
+    var j = 0;
+    while (j < rules.length) {
+      var rule = rules[j];
+      // check if there is a div.sourceCode rule
+      if (rule.type !== rule.STYLE_RULE || rule.selectorText !== "div.sourceCode") {
+        j++;
+        continue;
+      }
+      var style = rule.style.cssText;
+      // check if color or background-color is set
+      if (rule.style.color === '' && rule.style.backgroundColor === '') {
+        j++;
+        continue;
+      }
+      // replace div.sourceCode by a pre.sourceCode rule
+      sheets[i].deleteRule(j);
+      sheets[i].insertRule('pre.sourceCode{' + style + '}', j);
+    }
+  }
+})();
+</script>
+
+
+
+
+<style type="text/css">body {
+background-color: #fff;
+margin: 1em auto;
+max-width: 700px;
+overflow: visible;
+padding-left: 2em;
+padding-right: 2em;
+font-family: "Open Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+font-size: 14px;
+line-height: 1.35;
+}
+#TOC {
+clear: both;
+margin: 0 0 10px 10px;
+padding: 4px;
+width: 400px;
+border: 1px solid #CCCCCC;
+border-radius: 5px;
+background-color: #f6f6f6;
+font-size: 13px;
+line-height: 1.3;
+}
+#TOC .toctitle {
+font-weight: bold;
+font-size: 15px;
+margin-left: 5px;
+}
+#TOC ul {
+padding-left: 40px;
+margin-left: -1.5em;
+margin-top: 5px;
+margin-bottom: 5px;
+}
+#TOC ul ul {
+margin-left: -2em;
+}
+#TOC li {
+line-height: 16px;
+}
+table {
+margin: 1em auto;
+border-width: 1px;
+border-color: #DDDDDD;
+border-style: outset;
+border-collapse: collapse;
+}
+table th {
+border-width: 2px;
+padding: 5px;
+border-style: inset;
+}
+table td {
+border-width: 1px;
+border-style: inset;
+line-height: 18px;
+padding: 5px 5px;
+}
+table, table th, table td {
+border-left-style: none;
+border-right-style: none;
+}
+table thead, table tr.even {
+background-color: #f7f7f7;
+}
+p {
+margin: 0.5em 0;
+}
+blockquote {
+background-color: #f6f6f6;
+padding: 0.25em 0.75em;
+}
+hr {
+border-style: solid;
+border: none;
+border-top: 1px solid #777;
+margin: 28px 0;
+}
+dl {
+margin-left: 0;
+}
+dl dd {
+margin-bottom: 13px;
+margin-left: 13px;
+}
+dl dt {
+font-weight: bold;
+}
+ul {
+margin-top: 0;
+}
+ul li {
+list-style: circle outside;
+}
+ul ul {
+margin-bottom: 0;
+}
+pre, code {
+background-color: #f7f7f7;
+border-radius: 3px;
+color: #333;
+white-space: pre-wrap; 
+}
+pre {
+border-radius: 3px;
+margin: 5px 0px 10px 0px;
+padding: 10px;
+}
+pre:not([class]) {
+background-color: #f7f7f7;
+}
+code {
+font-family: Consolas, Monaco, 'Courier New', monospace;
+font-size: 85%;
+}
+p > code, li > code {
+padding: 2px 0px;
+}
+div.figure {
+text-align: center;
+}
+img {
+background-color: #FFFFFF;
+padding: 2px;
+border: 1px solid #DDDDDD;
+border-radius: 3px;
+border: 1px solid #CCCCCC;
+margin: 0 5px;
+}
+h1 {
+margin-top: 0;
+font-size: 35px;
+line-height: 40px;
+}
+h2 {
+border-bottom: 4px solid #f7f7f7;
+padding-top: 10px;
+padding-bottom: 2px;
+font-size: 145%;
+}
+h3 {
+border-bottom: 2px solid #f7f7f7;
+padding-top: 10px;
+font-size: 120%;
+}
+h4 {
+border-bottom: 1px solid #f7f7f7;
+margin-left: 8px;
+font-size: 105%;
+}
+h5, h6 {
+border-bottom: 1px solid #ccc;
+font-size: 105%;
+}
+a {
+color: #0033dd;
+text-decoration: none;
+}
+a:hover {
+color: #6666ff; }
+a:visited {
+color: #800080; }
+a:visited:hover {
+color: #BB00BB; }
+a[href^="http:"] {
+text-decoration: underline; }
+a[href^="https:"] {
+text-decoration: underline; }
+
+code > span.kw { color: #555; font-weight: bold; } 
+code > span.dt { color: #902000; } 
+code > span.dv { color: #40a070; } 
+code > span.bn { color: #d14; } 
+code > span.fl { color: #d14; } 
+code > span.ch { color: #d14; } 
+code > span.st { color: #d14; } 
+code > span.co { color: #888888; font-style: italic; } 
+code > span.ot { color: #007020; } 
+code > span.al { color: #ff0000; font-weight: bold; } 
+code > span.fu { color: #900; font-weight: bold; } 
+code > span.er { color: #a61717; background-color: #e3d2d2; } 
+</style>
+
+
+
+
+</head>
+
+<body>
+
+
+
+
+<h1 class="title toc-ignore">Getting started with psdness</h1>
+
+
+
+<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" tabindex="-1"></a><span class="fu">library</span>(psdness)</span></code></pre></div>
+<div id="the-question" class="section level2">
+<h2>The question</h2>
+<p>A correlation matrix is only valid if it is <strong>positive
+semidefinite</strong> (PSD). Reported matrices in papers, though, are
+<em>rounded</em> — you see <code>0.62</code>, not the real number behind
+it. So the honest question is not “is this exact matrix PSD?” but</p>
+<blockquote>
+<p>given that every off-diagonal was rounded to <code>d</code> decimals,
+does <strong>any</strong> PSD matrix exist inside the rounding box
+around the reported values?</p>
+</blockquote>
+<p><code>psdness</code> answers that <strong>box</strong> question.
+Writing <code>delta = 0.5 * 10^(-d)</code>, the box is
+<code>X_ii = 1</code>, and for <code>i != j</code>, <code>X_ij</code> in
+<code>[R_ij - delta, R_ij + delta]</code> intersected with
+<code>[-1, 1]</code>. The verdict is one of:</p>
+<ul>
+<li><strong><code>impossible</code></strong> — no PSD matrix fits the
+box, so the reported matrix cannot be a genuine correlation matrix (a
+rigorous certificate; this is the payload);</li>
+<li><strong><code>possible</code></strong> — a PSD matrix in the box is
+exhibited (or none was ruled out);</li>
+<li><strong><code>undecided</code></strong> — precision-limited; the box
+grazes the PSD boundary.</li>
+</ul>
+</div>
+<div id="checking-a-matrix" class="section level2">
+<h2>Checking a matrix</h2>
+<p>A genuine correlation matrix, rounded, comes back
+<code>possible</code>:</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" tabindex="-1"></a>R_ok <span class="ot">&lt;-</span> <span class="fu">matrix</span>(<span class="fu">c</span>(<span class="dv">1</span>,    <span class="fl">0.30</span>, <span class="fl">0.20</span>,</span>
+<span id="cb2-2"><a href="#cb2-2" tabindex="-1"></a>                 <span class="fl">0.30</span>, <span class="dv">1</span>,    <span class="fl">0.25</span>,</span>
+<span id="cb2-3"><a href="#cb2-3" tabindex="-1"></a>                 <span class="fl">0.20</span>, <span class="fl">0.25</span>, <span class="dv">1</span>), <span class="dv">3</span>, <span class="dv">3</span>)</span>
+<span id="cb2-4"><a href="#cb2-4" tabindex="-1"></a><span class="fu">check_corr_psd</span>(R_ok, <span class="at">decimals =</span> <span class="dv">2</span>)</span>
+<span id="cb2-5"><a href="#cb2-5" tabindex="-1"></a><span class="co">#&gt; &lt;corr_psd_check&gt;</span></span>
+<span id="cb2-6"><a href="#cb2-6" tabindex="-1"></a><span class="co">#&gt;   verdict : POSSIBLE    (not shown impossible)</span></span>
+<span id="cb2-7"><a href="#cb2-7" tabindex="-1"></a><span class="co">#&gt;   tier    : witness</span></span>
+<span id="cb2-8"><a href="#cb2-8" tabindex="-1"></a><span class="co">#&gt;   p       : 3      delta : 0.005</span></span>
+<span id="cb2-9"><a href="#cb2-9" tabindex="-1"></a><span class="co">#&gt;   margin  : B_upper = 0.699  (&gt;= 0: no impossibility certificate)</span></span>
+<span id="cb2-10"><a href="#cb2-10" tabindex="-1"></a><span class="co">#&gt;   evidence: the reported matrix itself is PSD</span></span></code></pre></div>
+<p>An inconsistent one comes back <code>impossible</code>. The classic
+case is a “frustrated triangle”: variables 1 and 2 are both strongly
+correlated with 3, yet reported as strongly <em>negatively</em>
+correlated with each other.</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" tabindex="-1"></a>R_bad <span class="ot">&lt;-</span> <span class="fu">matrix</span>(<span class="fu">c</span>(<span class="dv">1</span>,    <span class="fl">0.9</span>,  <span class="fl">0.9</span>,</span>
+<span id="cb3-2"><a href="#cb3-2" tabindex="-1"></a>                  <span class="fl">0.9</span>,  <span class="dv">1</span>,   <span class="sc">-</span><span class="fl">0.9</span>,</span>
+<span id="cb3-3"><a href="#cb3-3" tabindex="-1"></a>                  <span class="fl">0.9</span>, <span class="sc">-</span><span class="fl">0.9</span>,  <span class="dv">1</span>), <span class="dv">3</span>, <span class="dv">3</span>)</span>
+<span id="cb3-4"><a href="#cb3-4" tabindex="-1"></a>res <span class="ot">&lt;-</span> <span class="fu">check_corr_psd</span>(R_bad, <span class="at">decimals =</span> <span class="dv">2</span>)</span>
+<span id="cb3-5"><a href="#cb3-5" tabindex="-1"></a>res</span>
+<span id="cb3-6"><a href="#cb3-6" tabindex="-1"></a><span class="co">#&gt; &lt;corr_psd_check&gt;</span></span>
+<span id="cb3-7"><a href="#cb3-7" tabindex="-1"></a><span class="co">#&gt;   verdict : IMPOSSIBLE  (no PSD matrix fits the rounding box)</span></span>
+<span id="cb3-8"><a href="#cb3-8" tabindex="-1"></a><span class="co">#&gt;   tier    : witness</span></span>
+<span id="cb3-9"><a href="#cb3-9" tabindex="-1"></a><span class="co">#&gt;   p       : 3      delta : 0.005</span></span>
+<span id="cb3-10"><a href="#cb3-10" tabindex="-1"></a><span class="co">#&gt;   margin  : B = -0.79  (B_upper = -0.79 &lt; 0)</span></span>
+<span id="cb3-11"><a href="#cb3-11" tabindex="-1"></a><span class="co">#&gt;   witness : v = (0.5774, -0.5774, -0.5774) </span></span>
+<span id="cb3-12"><a href="#cb3-12" tabindex="-1"></a><span class="co">#&gt;   certificate: v&#39;Rv + delta*(||v||_1^2 - ||v||_2^2) = -0.79 &lt; 0</span></span></code></pre></div>
+<div id="the-certificate-and-the-rigor-guarantee" class="section level3">
+<h3>The certificate and the rigor guarantee</h3>
+<p>An <code>impossible</code> verdict carries a <strong>witness
+vector</strong> <code>v</code>: a direction along which no in-box matrix
+has a nonnegative quadratic form, so none can be PSD. Extract it with
+<code>certificate()</code>:</p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" tabindex="-1"></a><span class="fu">certificate</span>(res)</span>
+<span id="cb4-2"><a href="#cb4-2" tabindex="-1"></a><span class="co">#&gt; $witness</span></span>
+<span id="cb4-3"><a href="#cb4-3" tabindex="-1"></a><span class="co">#&gt; [1]  0.5774 -0.5774 -0.5774</span></span>
+<span id="cb4-4"><a href="#cb4-4" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb4-5"><a href="#cb4-5" tabindex="-1"></a><span class="co">#&gt; $margin</span></span>
+<span id="cb4-6"><a href="#cb4-6" tabindex="-1"></a><span class="co">#&gt; [1] -0.79</span></span>
+<span id="cb4-7"><a href="#cb4-7" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb4-8"><a href="#cb4-8" tabindex="-1"></a><span class="co">#&gt; $b_upper</span></span>
+<span id="cb4-9"><a href="#cb4-9" tabindex="-1"></a><span class="co">#&gt; [1] -0.79</span></span>
+<span id="cb4-10"><a href="#cb4-10" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb4-11"><a href="#cb4-11" tabindex="-1"></a><span class="co">#&gt; $verdict</span></span>
+<span id="cb4-12"><a href="#cb4-12" tabindex="-1"></a><span class="co">#&gt; [1] &quot;impossible&quot;</span></span>
+<span id="cb4-13"><a href="#cb4-13" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb4-14"><a href="#cb4-14" tabindex="-1"></a><span class="co">#&gt; $tier</span></span>
+<span id="cb4-15"><a href="#cb4-15" tabindex="-1"></a><span class="co">#&gt; [1] &quot;witness&quot;</span></span></code></pre></div>
+<p>The guarantee is that the verdict is
+<strong>floating-point-safe</strong>: the witness quantity
+<code>v&#39;Rv + delta * (||v||_1^2 - ||v||_2^2)</code> is evaluated with a
+rigorous a-priori error bound (Higham 2002), so <code>impossible</code>
+never rests on a solver tolerance. A corollary is soundness in the other
+direction: because the bound is a sound over-estimate, a box that
+contains any PSD matrix can never be reported <code>impossible</code>.
+In particular a real correlation matrix rounded to <code>d</code>
+decimals is never a false positive.</p>
+</div>
+</div>
+<div id="screening-a-corpus" class="section level2">
+<h2>Screening a corpus</h2>
+<p><code>check_corr_psd_batch()</code> runs the check over a list of
+matrices and returns a tidy table — useful for screening many reported
+matrices at once.</p>
+<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" tabindex="-1"></a>mats <span class="ot">&lt;-</span> <span class="fu">list</span>(<span class="at">ok =</span> R_ok, <span class="at">frustrated_triangle =</span> R_bad, <span class="at">identity =</span> <span class="fu">diag</span>(<span class="dv">4</span>))</span>
+<span id="cb5-2"><a href="#cb5-2" tabindex="-1"></a><span class="fu">check_corr_psd_batch</span>(mats, <span class="at">decimals =</span> <span class="dv">2</span>, <span class="at">quiet =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb5-3"><a href="#cb5-3" tabindex="-1"></a><span class="co">#&gt; # A tibble: 3 × 8</span></span>
+<span id="cb5-4"><a href="#cb5-4" tabindex="-1"></a><span class="co">#&gt;   id                  verdict    tier    margin b_upper delta     p message     </span></span>
+<span id="cb5-5"><a href="#cb5-5" tabindex="-1"></a><span class="co">#&gt;   &lt;chr&gt;               &lt;chr&gt;      &lt;chr&gt;    &lt;dbl&gt;   &lt;dbl&gt; &lt;dbl&gt; &lt;int&gt; &lt;chr&gt;       </span></span>
+<span id="cb5-6"><a href="#cb5-6" tabindex="-1"></a><span class="co">#&gt; 1 ok                  possible   witness  0.699   0.699 0.005     3 the reporte…</span></span>
+<span id="cb5-7"><a href="#cb5-7" tabindex="-1"></a><span class="co">#&gt; 2 frustrated_triangle impossible witness -0.79   -0.790 0.005     3 &lt;NA&gt;        </span></span>
+<span id="cb5-8"><a href="#cb5-8" tabindex="-1"></a><span class="co">#&gt; 3 identity            possible   witness  1       1.00  0.005     4 the reporte…</span></span></code></pre></div>
+</div>
+<div id="localizing-the-fault" class="section level2">
+<h2>Localizing the fault</h2>
+<p>When a matrix is impossible, <code>localize_psd_fault()</code> asks
+<strong>where</strong> the problem is and <strong>how severe</strong> it
+is. Non-PSDness is a global property, so a unique culprit is often
+under-identified; the tool reports an honest localization class rather
+than inventing one. The verdict is one of <code>cell</code>,
+<code>cell_tentative</code>, <code>triad</code>, <code>variable</code>,
+<code>joint</code>, <code>diffuse</code>, or <code>none</code>.</p>
+<div id="a-frustrated-triangle-is-a-triad" class="section level3">
+<h3>A frustrated triangle is a <code>triad</code></h3>
+<p>Fixing <em>any one</em> of the three correlations would resolve the
+violation, so the fault is not separable to a single cell:</p>
+<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" tabindex="-1"></a><span class="fu">localize_psd_fault</span>(R_bad, <span class="at">decimals =</span> <span class="dv">2</span>)</span>
+<span id="cb6-2"><a href="#cb6-2" tabindex="-1"></a><span class="co">#&gt; &lt;psd_fault&gt;</span></span>
+<span id="cb6-3"><a href="#cb6-3" tabindex="-1"></a><span class="co">#&gt;   Impossible given rounding (delta = 0.005).</span></span>
+<span id="cb6-4"><a href="#cb6-4" tabindex="-1"></a><span class="co">#&gt;   Verdict: TRIAD - Attributable to an inconsistent triangle (three cells) </span></span>
+<span id="cb6-5"><a href="#cb6-5" tabindex="-1"></a><span class="co">#&gt;     cells: (1,2), (1,3), (2,3) </span></span>
+<span id="cb6-6"><a href="#cb6-6" tabindex="-1"></a><span class="co">#&gt;   Structural: Substantive: no correlation matrix lies within rounding of the reported values (smallest correction is ~79x the rounding step), so it is not explained by rounding of a structural dependency. </span></span>
+<span id="cb6-7"><a href="#cb6-7" tabindex="-1"></a><span class="co">#&gt;   Severity: largest single edit needed 0.395 (egregious, rounding cannot excuse it; delta = 0.005);</span></span>
+<span id="cb6-8"><a href="#cb6-8" tabindex="-1"></a><span class="co">#&gt;             total mass (Frobenius) 0.684; best achievable lambda_min -0.79.</span></span>
+<span id="cb6-9"><a href="#cb6-9" tabindex="-1"></a><span class="co">#&gt;   - Not separable: any one of the three edits would resolve the violation. </span></span>
+<span id="cb6-10"><a href="#cb6-10" tabindex="-1"></a><span class="co">#&gt;   - R^2 localizer: variable(s) {1, 2, 3} are over-determined by the others (R^2 &gt; 100%) -- conditional on the other cells being correct.</span></span></code></pre></div>
+</div>
+<div id="a-single-bad-cell" class="section level3">
+<h3>A single bad cell</h3>
+<p>Here one transcription-style error makes a 5-variable matrix
+impossible. The tool localizes it to the offending cell, states the
+interval that cell <em>should</em> have occupied, and how far beyond
+rounding it must move:</p>
+<div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" tabindex="-1"></a>R_cell <span class="ot">&lt;-</span> <span class="fu">matrix</span>(<span class="fu">c</span>( <span class="dv">1</span>,    <span class="fl">0.56</span>,  <span class="fl">0.68</span>,  <span class="fl">0.05</span>,  <span class="fl">0.82</span>,</span>
+<span id="cb7-2"><a href="#cb7-2" tabindex="-1"></a>                    <span class="fl">0.56</span>, <span class="dv">1</span>,    <span class="sc">-</span><span class="fl">0.26</span>, <span class="sc">-</span><span class="fl">0.31</span>, <span class="sc">-</span><span class="fl">0.75</span>,</span>
+<span id="cb7-3"><a href="#cb7-3" tabindex="-1"></a>                    <span class="fl">0.68</span>, <span class="sc">-</span><span class="fl">0.26</span>, <span class="dv">1</span>,    <span class="sc">-</span><span class="fl">0.18</span>,  <span class="fl">0.50</span>,</span>
+<span id="cb7-4"><a href="#cb7-4" tabindex="-1"></a>                    <span class="fl">0.05</span>, <span class="sc">-</span><span class="fl">0.31</span>, <span class="sc">-</span><span class="fl">0.18</span>, <span class="dv">1</span>,     <span class="fl">0.27</span>,</span>
+<span id="cb7-5"><a href="#cb7-5" tabindex="-1"></a>                    <span class="fl">0.82</span>, <span class="sc">-</span><span class="fl">0.75</span>, <span class="fl">0.50</span>,  <span class="fl">0.27</span>,  <span class="dv">1</span>), <span class="dv">5</span>, <span class="dv">5</span>, <span class="at">byrow =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb7-6"><a href="#cb7-6" tabindex="-1"></a><span class="fu">localize_psd_fault</span>(R_cell, <span class="at">decimals =</span> <span class="dv">2</span>)</span>
+<span id="cb7-7"><a href="#cb7-7" tabindex="-1"></a><span class="co">#&gt; &lt;psd_fault&gt;</span></span>
+<span id="cb7-8"><a href="#cb7-8" tabindex="-1"></a><span class="co">#&gt;   Impossible given rounding (delta = 0.005).</span></span>
+<span id="cb7-9"><a href="#cb7-9" tabindex="-1"></a><span class="co">#&gt;   Verdict: CELL - Attributable to a single cell </span></span>
+<span id="cb7-10"><a href="#cb7-10" tabindex="-1"></a><span class="co">#&gt;     cell (1,2): reported 0.56, but given the other cells (within rounding) it must lie in [-0.884, -0.243];</span></span>
+<span id="cb7-11"><a href="#cb7-11" tabindex="-1"></a><span class="co">#&gt;     required edit -0.798, far exceeding the 0.005 rounding tolerance.</span></span>
+<span id="cb7-12"><a href="#cb7-12" tabindex="-1"></a><span class="co">#&gt;   Structural: Substantive: no correlation matrix lies within rounding of the reported values (smallest correction is ~42x the rounding step), so it is not explained by rounding of a structural dependency. </span></span>
+<span id="cb7-13"><a href="#cb7-13" tabindex="-1"></a><span class="co">#&gt;   Severity: largest single edit needed 0.209 (egregious, rounding cannot excuse it; delta = 0.005);</span></span>
+<span id="cb7-14"><a href="#cb7-14" tabindex="-1"></a><span class="co">#&gt;             total mass (Frobenius) 0.392; best achievable lambda_min -0.46.</span></span>
+<span id="cb7-15"><a href="#cb7-15" tabindex="-1"></a><span class="co">#&gt;   - Single sole culprit corroborated by the sparse correction and an impossible triple. </span></span>
+<span id="cb7-16"><a href="#cb7-16" tabindex="-1"></a><span class="co">#&gt;   - R^2 localizer: variable(s) {1, 2} are over-determined by the others (R^2 &gt; 100%) -- conditional on the other cells being correct.</span></span></code></pre></div>
+</div>
+<div id="a-joint-fault-no-single-cell-suffices" class="section level3">
+<h3>A joint fault (no single cell suffices)</h3>
+<p>Two independent inconsistencies mean no single edit repairs the
+matrix:</p>
+<div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" tabindex="-1"></a>blk <span class="ot">&lt;-</span> <span class="fu">matrix</span>(<span class="fu">c</span>(<span class="dv">1</span>, <span class="fl">0.9</span>, <span class="fl">0.9</span>, <span class="fl">0.9</span>, <span class="dv">1</span>, <span class="sc">-</span><span class="fl">0.9</span>, <span class="fl">0.9</span>, <span class="sc">-</span><span class="fl">0.9</span>, <span class="dv">1</span>), <span class="dv">3</span>, <span class="dv">3</span>)</span>
+<span id="cb8-2"><a href="#cb8-2" tabindex="-1"></a>R_joint <span class="ot">&lt;-</span> <span class="fu">matrix</span>(<span class="dv">0</span>, <span class="dv">6</span>, <span class="dv">6</span>); R_joint[<span class="dv">1</span><span class="sc">:</span><span class="dv">3</span>, <span class="dv">1</span><span class="sc">:</span><span class="dv">3</span>] <span class="ot">&lt;-</span> blk; R_joint[<span class="dv">4</span><span class="sc">:</span><span class="dv">6</span>, <span class="dv">4</span><span class="sc">:</span><span class="dv">6</span>] <span class="ot">&lt;-</span> blk</span>
+<span id="cb8-3"><a href="#cb8-3" tabindex="-1"></a><span class="fu">diag</span>(R_joint) <span class="ot">&lt;-</span> <span class="dv">1</span></span>
+<span id="cb8-4"><a href="#cb8-4" tabindex="-1"></a><span class="fu">localize_psd_fault</span>(R_joint, <span class="at">decimals =</span> <span class="dv">2</span>)<span class="sc">$</span>localization_verdict</span>
+<span id="cb8-5"><a href="#cb8-5" tabindex="-1"></a><span class="co">#&gt; [1] &quot;joint&quot;</span></span></code></pre></div>
+</div>
+<div id="the-raw-evidence" class="section level3">
+<h3>The raw evidence</h3>
+<p>Every verdict carries the full box-aware evidence behind it —
+per-cell implied intervals (A), rounding-robust impossible triples (B),
+leave-one-out (C), the sparse minimal correction (D), and the R² / VIF
+variable localizer. Get it with <code>fault_evidence()</code>:</p>
+<div class="sourceCode" id="cb9"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" tabindex="-1"></a>ev <span class="ot">&lt;-</span> <span class="fu">fault_evidence</span>(<span class="fu">localize_psd_fault</span>(R_bad, <span class="at">decimals =</span> <span class="dv">2</span>))</span>
+<span id="cb9-2"><a href="#cb9-2" tabindex="-1"></a><span class="fu">names</span>(ev)</span>
+<span id="cb9-3"><a href="#cb9-3" tabindex="-1"></a><span class="co">#&gt; [1] &quot;sole_culprit_cells&quot; &quot;impossible_triples&quot; &quot;lofo_restoring&quot;    </span></span>
+<span id="cb9-4"><a href="#cb9-4" tabindex="-1"></a><span class="co">#&gt; [4] &quot;sparse_support&quot;     &quot;rsquared&quot;</span></span></code></pre></div>
+<p>The impossible-triple scan (component B) is also exposed on its own;
+it is pure interval arithmetic and needs no solver:</p>
+<div class="sourceCode" id="cb10"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" tabindex="-1"></a><span class="fu">impossible_triples</span>(R_bad, <span class="at">decimals =</span> <span class="dv">2</span>)</span>
+<span id="cb10-2"><a href="#cb10-2" tabindex="-1"></a><span class="co">#&gt; # A tibble: 1 × 4</span></span>
+<span id="cb10-3"><a href="#cb10-3" tabindex="-1"></a><span class="co">#&gt;       i     j     k box_max_det</span></span>
+<span id="cb10-4"><a href="#cb10-4" tabindex="-1"></a><span class="co">#&gt;   &lt;int&gt; &lt;int&gt; &lt;int&gt;       &lt;dbl&gt;</span></span>
+<span id="cb10-5"><a href="#cb10-5" tabindex="-1"></a><span class="co">#&gt; 1     1     2     3       -2.84</span></span></code></pre></div>
+</div>
+</div>
+<div id="benign-causes-come-first" class="section level2">
+<h2>Benign causes come first</h2>
+<p>Non-PSDness is <em>often benign</em>. A composite score plus its
+subscores, or a full set of category dummies, is exactly rank-deficient
+by construction — not a sign of a data problem (van Tilburg &amp; van
+Tilburg 2023; Lorenzo-Seva &amp; Ferrando 2021). For a forensic tool
+this matters, so every impossible result carries a
+<code>structural</code> diagnosis that separates a <strong>benign
+near-boundary</strong> rank-deficiency from a <strong>substantive
+over-the-boundary</strong> violation.</p>
+<p>Here a composite equal to the sum of three subscores is nudged just
+past the rounding boundary. The cellular verdict is <code>diffuse</code>
+(there is no single cell to blame), but the structural read names the
+likely cause:</p>
+<div class="sourceCode" id="cb11"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1" tabindex="-1"></a>Sig <span class="ot">&lt;-</span> <span class="fu">matrix</span>(<span class="fl">0.5</span>, <span class="dv">3</span>, <span class="dv">3</span>); <span class="fu">diag</span>(Sig) <span class="ot">&lt;-</span> <span class="dv">1</span></span>
+<span id="cb11-2"><a href="#cb11-2" tabindex="-1"></a>a <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="dv">1</span>, <span class="dv">1</span>, <span class="dv">1</span>); r <span class="ot">&lt;-</span> <span class="fu">as.numeric</span>(Sig <span class="sc">%*%</span> a) <span class="sc">/</span> <span class="fu">sqrt</span>(<span class="fu">sum</span>(a <span class="sc">*</span> (Sig <span class="sc">%*%</span> a)))</span>
+<span id="cb11-3"><a href="#cb11-3" tabindex="-1"></a>R_comp <span class="ot">&lt;-</span> <span class="fu">rbind</span>(<span class="fu">cbind</span>(Sig, r), <span class="fu">c</span>(r, <span class="dv">1</span>))</span>
+<span id="cb11-4"><a href="#cb11-4" tabindex="-1"></a><span class="cf">for</span> (k <span class="cf">in</span> <span class="dv">1</span><span class="sc">:</span><span class="dv">3</span>) R_comp[k, <span class="dv">4</span>] <span class="ot">&lt;-</span> R_comp[<span class="dv">4</span>, k] <span class="ot">&lt;-</span> r[k] <span class="sc">+</span> <span class="fl">0.02</span>   <span class="co"># nudge past the boundary</span></span>
+<span id="cb11-5"><a href="#cb11-5" tabindex="-1"></a>lf <span class="ot">&lt;-</span> <span class="fu">localize_psd_fault</span>(<span class="fu">round</span>(R_comp, <span class="dv">2</span>), <span class="at">decimals =</span> <span class="dv">2</span>)</span>
+<span id="cb11-6"><a href="#cb11-6" tabindex="-1"></a>lf<span class="sc">$</span>structural<span class="sc">$</span>severity_class</span>
+<span id="cb11-7"><a href="#cb11-7" tabindex="-1"></a><span class="co">#&gt; [1] &quot;near-boundary&quot;</span></span>
+<span id="cb11-8"><a href="#cb11-8" tabindex="-1"></a>lf<span class="sc">$</span>structural<span class="sc">$</span>pattern</span>
+<span id="cb11-9"><a href="#cb11-9" tabindex="-1"></a><span class="co">#&gt; [1] &quot;composite&quot;</span></span></code></pre></div>
+<p>Contrast this with the frustrated triangle, whose severity is far
+beyond rounding:</p>
+<div class="sourceCode" id="cb12"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1" tabindex="-1"></a><span class="fu">localize_psd_fault</span>(R_bad, <span class="at">decimals =</span> <span class="dv">2</span>)<span class="sc">$</span>structural<span class="sc">$</span>severity_class</span>
+<span id="cb12-2"><a href="#cb12-2" tabindex="-1"></a><span class="co">#&gt; [1] &quot;substantive&quot;</span></span></code></pre></div>
+</div>
+<div id="plausibility-even-when-possible" class="section level2">
+<h2>Plausibility, even when possible</h2>
+<p>When a matrix passes the impossibility test it can still sit
+implausibly close to the boundary. For <code>possible</code> matrices
+the result reports a <strong>plausibility gradient</strong>: the
+per-variable reported-point R² and its closest approach to the 100%
+ceiling. The exactly-singular composite matrix (before the nudge) rounds
+to <code>possible</code>, but one variable’s R² exceeds 100% at face
+value:</p>
+<div class="sourceCode" id="cb13"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb13-1"><a href="#cb13-1" tabindex="-1"></a>R_exact <span class="ot">&lt;-</span> <span class="fu">round</span>(<span class="fu">rbind</span>(<span class="fu">cbind</span>(Sig, r), <span class="fu">c</span>(r, <span class="dv">1</span>)), <span class="dv">2</span>)   <span class="co"># composite = sum of subscores</span></span>
+<span id="cb13-2"><a href="#cb13-2" tabindex="-1"></a>lf0 <span class="ot">&lt;-</span> <span class="fu">localize_psd_fault</span>(R_exact, <span class="at">decimals =</span> <span class="dv">2</span>)</span>
+<span id="cb13-3"><a href="#cb13-3" tabindex="-1"></a>lf0<span class="sc">$</span>localization_verdict        <span class="co"># &quot;none&quot;: possible given rounding</span></span>
+<span id="cb13-4"><a href="#cb13-4" tabindex="-1"></a><span class="co">#&gt; [1] &quot;none&quot;</span></span>
+<span id="cb13-5"><a href="#cb13-5" tabindex="-1"></a>lf0<span class="sc">$</span>plausibility<span class="sc">$</span>max_r2         <span class="co"># ... but a variable&#39;s reported-point R^2 exceeds 1</span></span>
+<span id="cb13-6"><a href="#cb13-6" tabindex="-1"></a><span class="co">#&gt; [1] 1.055</span></span></code></pre></div>
+</div>
+<div id="implied-intervals-and-imputation" class="section level2">
+<h2>Implied intervals and imputation</h2>
+<p><code>implied_interval()</code> reports the interval a cell could
+occupy for the matrix to be valid, given the others. Point it at a
+<strong>missing</strong> (<code>NA</code>) entry and it imputes the
+interval that entry must have occupied — a forensic “impute and
+check”:</p>
+<div class="sourceCode" id="cb14"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb14-1"><a href="#cb14-1" tabindex="-1"></a>R_miss <span class="ot">&lt;-</span> <span class="fu">round</span>(<span class="fu">rbind</span>(<span class="fu">cbind</span>(Sig, r), <span class="fu">c</span>(r, <span class="dv">1</span>)), <span class="dv">2</span>)</span>
+<span id="cb14-2"><a href="#cb14-2" tabindex="-1"></a>R_miss[<span class="dv">1</span>, <span class="dv">4</span>] <span class="ot">&lt;-</span> R_miss[<span class="dv">4</span>, <span class="dv">1</span>] <span class="ot">&lt;-</span> <span class="cn">NA</span>        <span class="co"># pretend this correlation was unreported</span></span>
+<span id="cb14-3"><a href="#cb14-3" tabindex="-1"></a><span class="fu">implied_interval</span>(R_miss)</span>
+<span id="cb14-4"><a href="#cb14-4" tabindex="-1"></a><span class="co">#&gt; # A tibble: 1 × 8</span></span>
+<span id="cb14-5"><a href="#cb14-5" tabindex="-1"></a><span class="co">#&gt;       i     j reported    lo    hi required_edit hold   status  </span></span>
+<span id="cb14-6"><a href="#cb14-6" tabindex="-1"></a><span class="co">#&gt;   &lt;int&gt; &lt;int&gt;    &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt;         &lt;dbl&gt; &lt;chr&gt;  &lt;chr&gt;   </span></span>
+<span id="cb14-7"><a href="#cb14-7" tabindex="-1"></a><span class="co">#&gt; 1     1     4       NA 0.284 0.809            NA points feasible</span></span></code></pre></div>
+</div>
+<div id="a-note-on-the-engine" class="section level2">
+<h2>A note on the engine</h2>
+<p>Everything above uses one self-contained numerical engine: a verified
+witness-vector bound and a one-sided Cholesky test (Rump 2006) for the
+rigorous sides, projections onto convex sets (POCS) as the search, and
+interval arithmetic for the triple scan. There is no dependency on an
+external SDP solver. See the package README for the full method
+provenance and references.</p>
+</div>
+
+
+
+<!-- code folding -->
+
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src  = "https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML";
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+
+</body>
+</html>
