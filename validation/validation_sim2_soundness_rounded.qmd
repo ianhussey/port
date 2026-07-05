@@ -1,5 +1,5 @@
 ---
-title: "psdness validation — Sim 2: soundness under rounding"
+title: "port validation — Sim 2: soundness under rounding"
 author: "Ian Hussey"
 date: today
 format:
@@ -27,11 +27,11 @@ options(scipen = 999)
 
 # Introduction
 
-This is the second of three validation simulations for `psdness`, following the ADEMP framework (Morris et al., 2019; Siepe et al., 2024). Sim 1 verified that the tool never certifies an exactly-valid matrix as impossible. Sim 2 verifies the same soundness property under **rounding**, and validates the boundary condition on it: the tool's assumed rounding tolerance (`delta`) must match the rounding rule that actually produced the reported values.
+This is the second of three validation simulations for `port`, following the ADEMP framework (Morris et al., 2019; Siepe et al., 2024). Sim 1 verified that the tool never certifies an exactly-valid matrix as inconsistent. Sim 2 verifies the same soundness property under **rounding**, and validates the boundary condition on it: the tool's assumed rounding tolerance (`delta`) must match the rounding rule that actually produced the reported values.
 
 ## Project description
 
-A reported correlation matrix is almost always rounded. The package builds a box of half-width `delta` around the reported entries and asks whether any PSD matrix lies inside. The forensic soundness requirement is that rounding a genuine correlation matrix must never yield `"impossible"`.
+A reported correlation matrix is almost always rounded. The package builds a box of half-width `delta` around the reported entries and asks whether any PSD matrix lies inside. The forensic soundness requirement is that rounding a genuine correlation matrix must never yield `"inconsistent"`.
 
 ## Prior related work
 
@@ -39,12 +39,12 @@ As in Sim 1, the mathematics is classical; what is validated is the implementati
 
 ## Aims
 
-1. Verify the **false-impossibility rate is 0** when a valid matrix is rounded to nearest with the matching symmetric `delta = 0.5·10^(-d)` (the theorem below).
-2. Show that an **asymmetric rounding rule with a mismatched (too-small) `delta`** can make the tool report `"impossible"` — correctly for the box it was given, but misleadingly relative to the truth — and that a **matched `delta`** restores the zero-false-impossibility property.
+1. Verify the **false-inconsistency rate is 0** when a valid matrix is rounded to nearest with the matching symmetric `delta = 0.5·10^(-d)` (the theorem below).
+2. Show that an **asymmetric rounding rule with a mismatched (too-small) `delta`** can make the tool report `"inconsistent"` — correctly for the box it was given, but misleadingly relative to the truth — and that a **matched `delta`** restores the zero-false-inconsistency property.
 
 ### Theorem (the pass condition)
 
-For round-to-nearest with `delta = 0.5·10^(-d)`, every entry moves by at most `delta`, so the original PSD matrix `R` lies inside the box around the reported `R̃`. The box therefore always contains a PSD matrix and the tool must not return `"impossible"`. Any such verdict is a bug and fails loudly. For truncation / floor / ceiling the error can reach `10^(-d)`, so with the nearest-rule `delta` the true `R` may fall *outside* the box; supplying the matched `delta = 10^(-d)` puts `R` back inside and restores soundness.
+For round-to-nearest with `delta = 0.5·10^(-d)`, every entry moves by at most `delta`, so the original PSD matrix `R` lies inside the box around the reported `R̃`. The box therefore always contains a PSD matrix and the tool must not return `"inconsistent"`. Any such verdict is a bug and fails loudly. For truncation / floor / ceiling the error can reach `10^(-d)`, so with the nearest-rule `delta` the true `R` may fall *outside* the box; supplying the matched `delta = 10^(-d)` puts `R` back inside and restores soundness.
 
 ## Data-Generating Process
 
@@ -64,17 +64,17 @@ Fully factorial over the crossed factors, with 7 `(method, match)` combinations,
 
 ## Estimands and Targets
 
-The **target is the true feasibility status**, which is fixed by the theorem: the *matched* box always contains the original PSD `R`, so the truth is **feasible** in every replication. The performance measure is the empirical `"impossible"` rate; its target is 0 under matched delta, and a mismatched delta is expected to inflate it (a correct-but-misleading verdict about a mis-specified box).
+The **target is the true feasibility status**, which is fixed by the theorem: the *matched* box always contains the original PSD `R`, so the truth is **feasible** in every replication. The performance measure is the empirical `"inconsistent"` rate; its target is 0 under matched delta, and a mismatched delta is expected to inflate it (a correct-but-misleading verdict about a mis-specified box).
 
 ## Methods and extracted quantities
 
-`check_corr_psd(R̃, delta = delta_used)`. Extracted: `verdict`, `tier`. As a cross-check the independent oracle records the box status **at the tool's own delta**; where the tool says `"impossible"` under a mismatched delta, the oracle should confirm that box is genuinely infeasible — i.e. the tool is sound about the box it was handed, and the harm is a delta-specification error, not a tool bug.
+`check_corr_psd(R̃, delta = delta_used)`. Extracted: `verdict`, `tier`. As a cross-check the independent oracle records the box status **at the tool's own delta**; where the tool says `"inconsistent"` under a mismatched delta, the oracle should confirm that box is genuinely infeasible — i.e. the tool is sound about the box it was handed, and the harm is a delta-specification error, not a tool bug.
 
 ## Performance and Uncertainty
 
-- **Primary — false-impossibility rate** `P(verdict == "impossible")`, target 0 (against the matched-box truth), split by `rounding_method`, `delta_match`, generator, `p`, `d`. Wilson 95% intervals (the estimate hugs 0 in the sound conditions).
-- **Secondary — completeness**: possible vs undecided by generator/p/decimals.
-- **Hard assertion**: any `"impossible"` in a **matched-delta** condition is a soundness bug (fail loudly, log seed + matrix).
+- **Primary — false-inconsistency rate** `P(verdict == "inconsistent")`, target 0 (against the matched-box truth), split by `rounding_method`, `delta_match`, generator, `p`, `d`. Wilson 95% intervals (the estimate hugs 0 in the sound conditions).
+- **Secondary — completeness**: consistent vs undecided by generator/p/decimals.
+- **Hard assertion**: any `"inconsistent"` in a **matched-delta** condition is a soundness bug (fail loudly, log seed + matrix).
 
 `K = 1000` baseline (`K = 10000` for a publishable zero-rate claim; `SIM_QUICK=1` for development).
 
@@ -94,7 +94,7 @@ library(scales)
 library(knitr)
 library(kableExtra)
 
-library(psdness)
+library(port)
 source("R/sim_helpers.R")
 
 plan(multisession)
@@ -102,7 +102,29 @@ plan(multisession)
 
 ## Functions
 
-Shared with the other sims via `R/sim_helpers.R`: `generate_data()`, `contaminate_data()` (rounds off-diagonals only, mirrors, keeps the diagonal at 1), `analyse_check()`, and the independent `box_is_feasible()` oracle.
+Shared with the other sims via `R/sim_helpers.R`: `generate_data()`, `contaminate_data()` (rounds off-diagonals only, mirrors, keeps the diagonal at 1), `analyse_check()`, and the independent `box_is_feasible()` oracle. The per-step simulation functions are defined here and called by name in the run below.
+
+```{r}
+# generate a valid base matrix (with generator-appropriate defaults)
+gen_base <- function(generator, p, seed, eta, loading_sd) {
+  generate_data(generator, p, seed,
+                eta = if (is.na(eta)) 1 else eta,
+                loading_sd = if (is.na(loading_sd)) 0.35 else loading_sd)
+}
+
+# contaminate: round the off-diagonals under the chosen rule
+contaminate_round <- function(R, decimals, rounding_method) {
+  contaminate_data(R, decimals, rounding_method)$R_tilde
+}
+
+# run the checker at the tool's (possibly mismatched) delta
+check_delta <- function(R_tilde, delta) analyse_check(R_tilde, delta = delta)
+
+# independent oracle status at the tool's own delta
+oracle_delta <- function(R_tilde, delta, R) {
+  tibble::tibble(oracle_status = box_is_feasible(R_tilde, delta, witness = R)$status)
+}
+```
 
 ## Define experiment
 
@@ -158,32 +180,26 @@ if(file.exists("simulation2.rds")){
 } else {
   set.seed(42)
   
-  fo <- furrr_options(seed = TRUE, packages = c("psdness", "clusterGeneration"))
+  fo <- furrr_options(seed = TRUE, packages = c("port", "clusterGeneration"))
   
   # Step 1: generate the base matrix (list column, reused via the shared seed).
   base <- base_grid |>
     mutate(R = future_pmap(
       .l = list(generator = generator, p = p, seed = seed, eta = eta, loading_sd = loading_sd),
-      .f = function(generator, p, seed, eta, loading_sd)
-        generate_data(generator, p, seed,
-                      eta = if (is.na(eta)) 1 else eta,
-                      loading_sd = if (is.na(loading_sd)) 0.35 else loading_sd),
-      .options = fo, .progress = TRUE))
-  
+      .f = gen_base, .options = fo, .progress = TRUE))
+
   simulation <- experiment_parameters_grid |>
     left_join(select(base, gen_label, p, iteration, R), by = c("gen_label", "p", "iteration")) |>
     # Step 2: contaminate (round off-diagonals under the chosen rule)
     mutate(R_tilde = future_pmap(
       list(R = R, decimals = decimals, rounding_method = rounding_method),
-      \(R, decimals, rounding_method) contaminate_data(R, decimals, rounding_method)$R_tilde,
-      .options = fo, .progress = TRUE)) |>
+      .f = contaminate_round, .options = fo, .progress = TRUE)) |>
     # Step 3: analyse with the tool's delta
     mutate(check = future_pmap(list(R_tilde = R_tilde, delta = delta_used),
-                               \(R_tilde, delta) analyse_check(R_tilde, delta = delta), .options = fo, .progress = TRUE)) |>
+                               .f = check_delta, .options = fo, .progress = TRUE)) |>
     # Step 4: independent oracle at the tool's own delta (sound-about-its-box check)
     mutate(oracle = future_pmap(list(R_tilde = R_tilde, delta = delta_used, R = R),
-                                \(R_tilde, delta, R) tibble::tibble(oracle_status = box_is_feasible(R_tilde, delta, witness = R)$status),
-                                .options = fo)) |>
+                                .f = oracle_delta, .options = fo)) |>
     select(-R, -R_tilde)
   
   write_rds(simulation, "simulation2.rds", compress = "gz")
@@ -192,13 +208,13 @@ if(file.exists("simulation2.rds")){
 
 # Results
 
-## Soundness diagnostics (hard failure on any matched-delta false-impossible)
+## Soundness diagnostics (hard failure on any matched-delta false-inconsistent)
 
 ```{r}
 checked <- simulation |> unnest(check) |> unnest(oracle)
 
 matched_violations <- checked |>
-  filter(delta_match == "matched", verdict == "impossible")
+  filter(delta_match == "matched", verdict == "inconsistent")
 
 if (nrow(matched_violations) > 0) {
   matched_violations |>
@@ -206,75 +222,75 @@ if (nrow(matched_violations) > 0) {
     kable(caption = "SOUNDNESS VIOLATIONS under matched delta") |>
     kable_styling(full_width = FALSE)
   stop("SOUNDNESS VIOLATION: a valid matrix rounded with a MATCHED delta was ",
-       "certified impossible. Offending seeds listed above.")
+       "certified inconsistent. Offending seeds listed above.")
 } else {
-  cat("PASS: 0 false-impossible verdicts across",
+  cat("PASS: 0 false-inconsistent verdicts across",
       sum(checked$delta_match == "matched"), "matched-delta (sound) conditions.\n")
 }
 ```
 
-The unmatched-delta impossibles are expected. This chunk confirms that where the tool *does* say impossible under a mismatched delta, the oracle agrees the box (at that delta) is genuinely infeasible — i.e. the tool is sound about the box it was given:
+The unmatched-delta inconsistents are expected. This chunk confirms that where the tool *does* say inconsistent under a mismatched delta, the oracle agrees the box (at that delta) is genuinely infeasible — i.e. the tool is sound about the box it was given:
 
 ```{r}
 checked |>
-  filter(delta_match == "unmatched", verdict == "impossible") |>
+  filter(delta_match == "unmatched", verdict == "inconsistent") |>
   count(oracle_confirms_infeasible = oracle_status == "infeasible") |>
-  kable(caption = "Unmatched-delta impossibles: does the oracle confirm the (mis-specified) box is infeasible?") |>
+  kable(caption = "Unmatched-delta inconsistents: does the oracle confirm the (mis-specified) box is infeasible?") |>
   kable_styling(full_width = FALSE)
 ```
 
-## Primary: false-impossibility rate by rounding rule and delta match
+## Primary: false-inconsistency rate by rounding rule and delta match
 
 ```{r}
 sim2_summary <- checked |>
   group_by(rounding_method, delta_match, generator = gen_label) |>
   summarise(K = n(),
-            n_impossible = sum(verdict == "impossible"),
-            false_impossible_rate = mean(verdict == "impossible"),
-            prop_possible = mean(verdict == "possible"),
+            n_inconsistent = sum(verdict == "inconsistent"),
+            false_inconsistent_rate = mean(verdict == "inconsistent"),
+            prop_consistent = mean(verdict == "consistent"),
             prop_undecided = mean(verdict == "undecided"),
             .groups = "drop") |>
   rowwise() |>
-  mutate(wilson_lo = wilson_ci(n_impossible, K)["lower"],
-         wilson_hi = wilson_ci(n_impossible, K)["upper"]) |>
+  mutate(wilson_lo = wilson_ci(n_inconsistent, K)["lower"],
+         wilson_hi = wilson_ci(n_inconsistent, K)["upper"]) |>
   ungroup()
 ```
 
 ```{r}
 sim2_summary |>
   group_by(rounding_method, delta_match) |>
-  summarise(n_impossible = sum(n_impossible), K = sum(K),
-            false_impossible_rate = n_impossible / K, .groups = "drop") |>
+  summarise(n_inconsistent = sum(n_inconsistent), K = sum(K),
+            false_inconsistent_rate = n_inconsistent / K, .groups = "drop") |>
   rowwise() |>
-  mutate(ci = paste0("[", scales::number(wilson_ci(n_impossible, K)["lower"], accuracy = 0.0001),
-                     ", ", scales::number(wilson_ci(n_impossible, K)["upper"], accuracy = 0.0001), "]")) |>
+  mutate(ci = paste0("[", scales::number(wilson_ci(n_inconsistent, K)["lower"], accuracy = 0.0001),
+                     ", ", scales::number(wilson_ci(n_inconsistent, K)["upper"], accuracy = 0.0001), "]")) |>
   ungroup() |>
-  mutate(rate = scales::number(false_impossible_rate, accuracy = 0.0001)) |>
-  select(rounding_method, delta_match, false_impossible_rate = rate, wilson_ci = ci, n_impossible, K) |>
-  kable(caption = "False-impossibility rate by rounding rule x delta match (target 0; unmatched asymmetric expected > 0)") |>
+  mutate(rate = scales::number(false_inconsistent_rate, accuracy = 0.0001)) |>
+  select(rounding_method, delta_match, false_inconsistent_rate = rate, wilson_ci = ci, n_inconsistent, K) |>
+  kable(caption = "False-inconsistency rate by rounding rule x delta match (target 0; unmatched asymmetric expected > 0)") |>
   kable_styling(full_width = FALSE)
 ```
 
 ```{r}
 sim2_summary |>
   group_by(rounding_method, delta_match) |>
-  summarise(false_impossible_rate = sum(n_impossible) / sum(K), .groups = "drop") |>
-  ggplot(aes(x = rounding_method, y = false_impossible_rate, fill = delta_match)) +
+  summarise(false_inconsistent_rate = sum(n_inconsistent) / sum(K), .groups = "drop") |>
+  ggplot(aes(x = rounding_method, y = false_inconsistent_rate, fill = delta_match)) +
   geom_col(position = position_dodge(width = 0.7), width = 0.6) +
   geom_hline(yintercept = 0, linewidth = 0.3) +
-  scale_y_continuous(name = "False-impossibility rate", labels = number_format(accuracy = 0.001)) +
+  scale_y_continuous(name = "False-inconsistency rate", labels = number_format(accuracy = 0.001)) +
   labs(x = "Rounding rule", fill = "Tool delta",
        title = "Mismatched delta on an asymmetric rule can fire; matched delta restores soundness") +
   theme_linedraw() + theme(panel.grid.minor = element_blank())
 ```
 
-## Secondary: completeness (possible vs undecided)
+## Secondary: completeness (consistent vs undecided)
 
 ```{r}
 checked |>
   filter(delta_match == "matched") |>
   group_by(gen_label, decimals) |>
-  summarise(`% possible` = scales::percent(mean(verdict == "possible"), accuracy = 0.1),
+  summarise(`% consistent` = scales::percent(mean(verdict == "consistent"), accuracy = 0.1),
             `% undecided` = scales::percent(mean(verdict == "undecided"), accuracy = 0.1),
             .groups = "drop") |>
   kable(caption = "Completeness under matched delta, by generator and decimals") |>
@@ -285,9 +301,9 @@ checked |>
 
 ## Performance of the method across conditions
 
-Under nearest rounding with the matching symmetric `delta` — and under any matched-delta condition — the false-impossibility rate is exactly 0, as the theorem requires; the diagnostics chunk would have halted the render otherwise. This confirms that the package's `delta` assumption, when correct, guarantees soundness under rounding.
+Under nearest rounding with the matching symmetric `delta` — and under any matched-delta condition — the false-inconsistency rate is exactly 0, as the theorem requires; the diagnostics chunk would have halted the render otherwise. This confirms that the package's `delta` assumption, when correct, guarantees soundness under rounding.
 
-Under an **asymmetric** rule (truncate/floor/ceiling) with the **nearest-rule delta**, the tool can report `"impossible"` — most visibly for the near-singular `onion(eta=0.1)` generator, where the box is already tight. These are not tool bugs: the second diagnostics table shows the oracle agrees that the box *at the mis-specified delta* is genuinely infeasible. The verdict is correct about the box it was handed; the error is that the box was too small for the rounding rule. Supplying the matched `delta = 10^(-d)` returns the rate to 0. The practical lesson is that `check_corr_psd()` must be told a `delta` consistent with how the reported numbers were produced.
+Under an **asymmetric** rule (truncate/floor/ceiling) with the **nearest-rule delta**, the tool can report `"inconsistent"` — most visibly for the near-singular `onion(eta=0.1)` generator, where the box is already tight. These are not tool bugs: the second diagnostics table shows the oracle agrees that the box *at the mis-specified delta* is genuinely infeasible. The verdict is correct about the box it was handed; the error is that the box was too small for the rounding rule. Supplying the matched `delta = 10^(-d)` returns the rate to 0. The practical lesson is that `check_corr_psd()` must be told a `delta` consistent with how the reported numbers were produced.
 
 ## Conclusions with regard to the aims
 

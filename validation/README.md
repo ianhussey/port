@@ -1,7 +1,7 @@
-# psdness validation simulations
+# port validation simulations
 
 Three ADEMP-structured Monte Carlo simulations that validate the operating
-characteristics of the `psdness` package (`check_corr_psd()` /
+characteristics of the `port` package (`check_corr_psd()` /
 `localize_psd_fault()`). They follow the template in
 `understanding-statistics-through-monte-carlo-simulations` (Morris et al. 2019;
 Siepe et al. 2024): each `.qmd` has the full ADEMP introduction, a
@@ -12,12 +12,12 @@ alongside every estimate.
 
 | File | Property | Pass condition |
 |---|---|---|
-| `validation_sim1_soundness_exact.qmd` | **Soundness on exact valid matrices.** The tool never certifies a genuinely valid (PSD) matrix as impossible. | False-impossibility rate **= 0** (Wilson-bounded). A hard diagnostics chunk halts the render on any violation. |
-| `validation_sim2_soundness_rounded.qmd` | **Soundness under rounding**, and the delta-matching boundary condition. Rounding a valid matrix to nearest with the matching symmetric `delta` never yields impossible; an asymmetric rule with a mismatched (too-small) `delta` can — correctly for the box it was given — and a matched `delta` restores soundness. | False-impossibility rate **= 0** under any *matched*-delta condition (hard assertion). Unmatched asymmetric rules may fire; the oracle confirms those boxes are genuinely infeasible. |
-| `validation_sim3_power.qmd` | **Power + localization + severity.** Detection power on genuinely infeasible boxes, culprit localization, severity calibration, and a false-positive guard. | Power → 1 as perturbation magnitude grows on oracle-infeasible cases; impossibility rate ≈ 0 on oracle-feasible cases; localization recovers the planted culprit; `severity_max` increases monotonically with magnitude. |
-| `validation_sim4_disattenuation.qmd` | **Reliability disattenuation** (`check_disattenuated_psd()`): soundness with correct reliabilities, power to detect over-correction, and critical-reliability accuracy. | Disattenuating by the *true* reliabilities is never impossible (hard assertion); power → 1 as the reliability under-report gap grows on oracle-infeasible cases, with impossibility rate ≈ 0 on oracle-feasible cases; the closed form `rho* = max(1 − lambda_min, max\|r\|)` matches an independent bisection oracle to tolerance. |
+| `validation_sim1_soundness_exact.qmd` | **Soundness on exact valid matrices.** The tool never certifies a genuinely valid (PSD) matrix as inconsistent. | False-inconsistency rate **= 0** (Wilson-bounded). A hard diagnostics chunk halts the render on any violation. |
+| `validation_sim2_soundness_rounded.qmd` | **Soundness under rounding**, and the delta-matching boundary condition. Rounding a valid matrix to nearest with the matching symmetric `delta` never yields inconsistent; an asymmetric rule with a mismatched (too-small) `delta` can — correctly for the box it was given — and a matched `delta` restores soundness. | False-inconsistency rate **= 0** under any *matched*-delta condition (hard assertion). Unmatched asymmetric rules may fire; the oracle confirms those boxes are genuinely infeasible. |
+| `validation_sim3_power.qmd` | **Power + localization + severity.** Detection power on genuinely infeasible boxes, culprit localization, severity calibration, and a false-positive guard. | Power → 1 as perturbation magnitude grows on oracle-infeasible cases; inconsistency rate ≈ 0 on oracle-feasible cases; localization recovers the planted culprit; `severity_max` increases monotonically with magnitude. |
+| `validation_sim4_disattenuation.qmd` | **Reliability disattenuation** (`check_disattenuated_psd()`): soundness with correct reliabilities, power to detect over-correction, and critical-reliability accuracy. | Disattenuating by the *true* reliabilities is never inconsistent (hard assertion); power → 1 as the reliability under-report gap grows on oracle-infeasible cases, with inconsistency rate ≈ 0 on oracle-feasible cases; the closed form `rho* = max(1 − lambda_min, max\|r\|)` matches an independent bisection oracle to tolerance. |
 
-Sims 1 and 2 validate the **soundness / zero-false-impossibility** payload; Sim 3
+Sims 1 and 2 validate the **soundness / zero-false-inconsistency** payload; Sim 3
 validates **power, localization, and severity**; Sim 4 validates the
 **disattenuation** layer (soundness, power, and the critical-reliability threshold).
 
@@ -77,7 +77,7 @@ quarto render validation_sim3_power.qmd
 ```
 
 - `K = 1000` per condition is the baseline written into each file; a publishable
-  zero-false-impossibility claim needs `K = 10000` (stated in each "Number of
+  zero-false-inconsistency claim needs `K = 10000` (stated in each "Number of
   repetitions" section).
 - Set the environment variable `SIM_QUICK=1` to render with a small `K` for a
   fast development pass, e.g. `SIM_QUICK=1 quarto render validation_sim1_soundness_exact.qmd`.

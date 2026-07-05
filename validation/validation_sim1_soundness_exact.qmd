@@ -1,5 +1,5 @@
 ---
-title: "psdness validation — Sim 1: soundness on exact valid matrices"
+title: "port validation — Sim 1: soundness on exact valid matrices"
 author: "Ian Hussey"
 date: today
 format:
@@ -27,22 +27,22 @@ options(scipen = 999)
 
 # Introduction
 
-This introduction follows the ADEMP framework (Aims, Data-generating process, Estimands, Methods, Performance) of Morris, White, and Crowther (2019) as operationalised for psychology by Siepe et al. (2024). It is one of three validation simulations for the `psdness` package (`check_corr_psd()` / `localize_psd_fault()`), a box-aware, rounding-aware checker whose payload is the *certification of impossibility*: it certifies when no positive semidefinite (PSD) matrix can exist inside the rounding box around a reported correlation matrix.
+This introduction follows the ADEMP framework (Aims, Data-generating process, Estimands, Methods, Performance) of Morris, White, and Crowther (2019) as operationalised for psychology by Siepe et al. (2024). It is one of three validation simulations for the `port` package (`check_corr_psd()` / `localize_psd_fault()`), a box-aware, rounding-aware checker whose payload is the *certification of inconsistency*: it certifies when no positive semidefinite (PSD) matrix can exist inside the rounding box around a reported correlation matrix.
 
 ## Project description
 
-`psdness` answers a **box** question: given a reported correlation matrix whose off-diagonal entries are rounded to `d` decimals, does a PSD matrix exist inside the rounding box `[R_ij - delta, R_ij + delta]` (with unit diagonal and symmetry)? A verdict of `"impossible"` is a rigorous certificate that no such matrix exists; `"possible"` exhibits one; `"undecided"` is a precision-limited abstention. Because the tool is used forensically — to flag reported matrices that cannot be genuine — the single most important property is **soundness on the impossibility side**: the tool must never certify a genuinely valid matrix as impossible. This simulation stress-tests exactly that property on exactly valid matrices with no rounding.
+`port` answers a **box** question: given a reported correlation matrix whose off-diagonal entries are rounded to `d` decimals, does a PSD matrix exist inside the rounding box `[R_ij - delta, R_ij + delta]` (with unit diagonal and symmetry)? A verdict of `"inconsistent"` is a rigorous certificate that no such matrix exists; `"consistent"` exhibits one; `"undecided"` is a precision-limited abstention. Because the tool is used forensically — to flag reported matrices that cannot be genuine — the single most important property is **soundness on the inconsistency side**: the tool must never certify a genuinely valid matrix as inconsistent. This simulation stress-tests exactly that property on exactly valid matrices with no rounding.
 
 ## Prior related work
 
-The mathematical facts are classical: a correlation matrix is valid iff it is PSD, and the set of valid correlation matrices is a convex body (the elliptope). The novelty being validated is not the mathematics but the *implementation* — that the tool's a-priori floating-point error model and POCS/witness engine never produce a false impossibility. No prior simulation of this specific tool exists; the package's own unit tests check individual cases, whereas this study estimates the false-impossibility rate as an operating characteristic across a broad DGP.
+The mathematical facts are classical: a correlation matrix is valid iff it is PSD, and the set of valid correlation matrices is a convex body (the elliptope). The novelty being validated is not the mathematics but the *implementation* — that the tool's a-priori floating-point error model and POCS/witness engine never produce a false inconsistency. No prior simulation of this specific tool exists; the package's own unit tests check individual cases, whereas this study estimates the false-inconsistency rate as an operating characteristic across a broad DGP.
 
 ## Aims
 
-The statistical task is **binary classification with a one-sided soundness guarantee**: for each generated matrix the tool returns a verdict, and we ask how often it returns `"impossible"`.
+The statistical task is **binary classification with a one-sided soundness guarantee**: for each generated matrix the tool returns a verdict, and we ask how often it returns `"inconsistent"`.
 
-1. Estimate the **false-impossibility rate** on exactly valid, unrounded matrices. The target value is **0**: any `"impossible"` verdict is a soundness bug, not sampling noise.
-2. Characterise the **possible-vs-undecided split** (completeness) across generators and dimensions, in particular how the near-singular boundary raises `"undecided"`.
+1. Estimate the **false-inconsistency rate** on exactly valid, unrounded matrices. The target value is **0**: any `"inconsistent"` verdict is a soundness bug, not sampling noise.
+2. Characterise the **consistent-vs-undecided split** (completeness) across generators and dimensions, in particular how the near-singular boundary raises `"undecided"`.
 
 ## Data-Generating Process
 
@@ -66,30 +66,30 @@ Fully factorial (Siepe et al., 2024): 4 generators × 6 dimensions = 24 conditio
 
 ## Estimands and Targets
 
-Following Siepe et al. (2024, footnote 1), the **target** is the true feasibility status of the box, not the rejection rate. Here the target is fixed by construction: **the box is a single PSD point, so it is feasible** for every replication. The performance measure evaluated against this target is the empirical `"impossible"` rate, whose desired value is exactly 0.
+Following Siepe et al. (2024, footnote 1), the **target** is the true feasibility status of the box, not the rejection rate. Here the target is fixed by construction: **the box is a single PSD point, so it is feasible** for every replication. The performance measure evaluated against this target is the empirical `"inconsistent"` rate, whose desired value is exactly 0.
 
 ## Methods and extracted quantities
 
-A single method: `check_corr_psd(R, delta = 1e-8)`. Extracted: the `verdict` ∈ {impossible, possible, undecided}, the deciding `tier`, and the witness `margin`. An **independent oracle** (`box_is_feasible()`; distance-to-the-PSD-cone vs box radius, plus an exhibited PSD witness) records the ground-truth status as a cross-check; it is deliberately *not* the tool under test and *not* a point `lambda_min` tolerance.
+A single method: `check_corr_psd(R, delta = 1e-8)`. Extracted: the `verdict` ∈ {inconsistent, consistent, undecided}, the deciding `tier`, and the witness `margin`. An **independent oracle** (`box_is_feasible()`; distance-to-the-PSD-cone vs box radius, plus an exhibited PSD witness) records the ground-truth status as a cross-check; it is deliberately *not* the tool under test and *not* a point `lambda_min` tolerance.
 
 ## Performance and Uncertainty
 
 ### Performance measures
 
-- **Primary — false-impossibility rate** `P(verdict == "impossible")`, target 0. Any offender is logged (seed + matrix) in a diagnostics chunk that fails loudly.
-- **Secondary — completeness**: the split of `"possible"` vs `"undecided"`, by generator and `p`. The near-singular onion(eta=0.1) condition stresses the possible-side verified Cholesky and is expected to raise `"undecided"`; this is an operating characteristic, not a failure.
+- **Primary — false-inconsistency rate** `P(verdict == "inconsistent")`, target 0. Any offender is logged (seed + matrix) in a diagnostics chunk that fails loudly.
+- **Secondary — completeness**: the split of `"consistent"` vs `"undecided"`, by generator and `p`. The near-singular onion(eta=0.1) condition stresses the consistent-side verified Cholesky and is expected to raise `"undecided"`; this is an operating characteristic, not a failure.
 
 ### Monte Carlo uncertainty
 
-Because the primary estimate targets 0, the Wald/binomial MCSE `sqrt(phat(1-phat)/K)` collapses to 0 and is misleading. We therefore report **Wilson 95% score intervals** for the impossibility proportion. With 0/K observed, the Wilson upper limit is approximately the rule-of-three bound `~3/K`.
+Because the primary estimate targets 0, the Wald/binomial MCSE `sqrt(phat(1-phat)/K)` collapses to 0 and is misleading. We therefore report **Wilson 95% score intervals** for the inconsistency proportion. With 0/K observed, the Wilson upper limit is approximately the rule-of-three bound `~3/K`.
 
 ### Number of simulation repetitions
 
-`K = 1000` baseline. For a *publishable* zero-false-impossibility claim the rule of three implies `K = 10000` gives an upper 95% bound near `3/10000 = 3e-4`; `K = 1000` gives `~3e-3`. A quick-render switch (`SIM_QUICK=1`) reduces `K` for development.
+`K = 1000` baseline. For a *publishable* zero-false-inconsistency claim the rule of three implies `K = 10000` gives an upper 95% bound near `3/10000 = 3e-4`; `K = 1000` gives `~3e-3`. A quick-render switch (`SIM_QUICK=1`) reduces `K` for development.
 
 ### Non-convergence and missing values
 
-`check_corr_psd()` is deterministic and closed-form on the impossibility side; the possible side uses bounded-iteration POCS that always terminates. Any `verdict == "error"` (e.g. a degenerate generated matrix) is tabulated separately and excluded case-wise.
+`check_corr_psd()` is deterministic and closed-form on the inconsistency side; the consistent side uses bounded-iteration POCS that always terminates. Any `verdict == "error"` (e.g. a degenerate generated matrix) is tabulated separately and excluded case-wise.
 
 # Methods
 
@@ -107,7 +107,7 @@ library(scales)
 library(knitr)
 library(kableExtra)
 
-library(psdness)                 # the package under test (install first)
+library(port)                 # the package under test (install first)
 source("R/sim_helpers.R")        # generators + independent oracle
 
 # `furrr_options(seed = TRUE)` advances an L'Ecuyer-CMRG stream for parallel-safe
@@ -117,7 +117,24 @@ plan(multisession)
 
 ## Functions
 
-The data-generating process, contamination, oracle, and analysis wrappers live in `R/sim_helpers.R` and are shared across all three validation simulations. `generate_data()` dispatches a generator with a per-replication seed; `analyse_check()` wraps `check_corr_psd()`; `box_is_feasible()` is the independent oracle.
+The data-generating process, contamination, oracle, and analysis wrappers live in `R/sim_helpers.R` and are shared across all four validation simulations. `generate_data()` dispatches a generator with a per-replication seed; `analyse_check()` wraps `check_corr_psd()`; `box_is_feasible()` is the independent oracle. Following the template, the per-step simulation functions are defined here and called by name in the run below.
+
+```{r}
+# generate a valid base matrix (with generator-appropriate defaults)
+gen_base <- function(generator, p, seed, eta, loading_sd) {
+  generate_data(generator, p, seed,
+                eta = if (is.na(eta)) 1 else eta,
+                loading_sd = if (is.na(loading_sd)) 0.35 else loading_sd)
+}
+
+# run the checker with a tiny delta (the box collapses to the reported point)
+check_exact <- function(R) analyse_check(R, delta = 1e-8)
+
+# independent oracle status at the same tiny delta
+oracle_exact <- function(R) {
+  tibble::tibble(oracle_status = box_is_feasible(R, 1e-8, witness = R)$status)
+}
+```
 
 ## Define experiment
 
@@ -153,26 +170,19 @@ if(file.exists("simulation1.rds")){
 } else {
   set.seed(42)
   
-  fo <- furrr_options(seed = TRUE, packages = c("psdness", "clusterGeneration"))
+  fo <- furrr_options(seed = TRUE, packages = c("port", "clusterGeneration"))
   
   simulation <- experiment_parameters_grid |>
     # generate a valid base matrix
     mutate(R = future_pmap(
       .l = list(generator = generator, p = p, seed = seed, eta = eta, loading_sd = loading_sd),
-      .f = function(generator, p, seed, eta, loading_sd)
-        generate_data(generator, p, seed,
-                      eta = if (is.na(eta)) 1 else eta,
-                      loading_sd = if (is.na(loading_sd)) 0.35 else loading_sd),
-      .options = fo, .progress = TRUE)) |>
+      .f = gen_base, .options = fo, .progress = TRUE)) |>
     # off-diagonal distribution (auditing generator plausibility)
     mutate(offdiag = future_pmap(list(R = R), offdiag_summary, .options = fo)) |>
     # run the tool with a tiny delta (box = the point)
-    mutate(check = future_pmap(list(R = R), \(R) analyse_check(R, delta = 1e-8),
-                               .options = fo, .progress = TRUE)) |>
+    mutate(check = future_pmap(list(R = R), check_exact, .options = fo, .progress = TRUE)) |>
     # independent oracle status (ground-truth cross-check)
-    mutate(oracle = future_pmap(list(R = R),
-                                \(R) tibble::tibble(oracle_status = box_is_feasible(R, 1e-8, witness = R)$status),
-                                .options = fo))
+    mutate(oracle = future_pmap(list(R = R), oracle_exact, .options = fo))
   
   write_rds(simulation, "simulation1.rds", compress = "gz")
 }
@@ -180,27 +190,27 @@ if(file.exists("simulation1.rds")){
 
 # Results
 
-## Soundness diagnostics (hard failure on any false-impossible)
+## Soundness diagnostics (hard failure on any false-inconsistent)
 
 ```{r}
 checked <- simulation |> unnest(check)
 
-violations <- checked |> filter(verdict == "impossible")
+violations <- checked |> filter(verdict == "inconsistent")
 
 if (nrow(violations) > 0) {
   violations |>
     select(gen_label, p, iteration, seed, verdict, tier, margin) |>
-    kable(caption = "SOUNDNESS VIOLATIONS (valid matrices certified impossible)") |>
+    kable(caption = "SOUNDNESS VIOLATIONS (valid matrices certified inconsistent)") |>
     kable_styling(full_width = FALSE)
   stop("SOUNDNESS VIOLATION: check_corr_psd() certified a valid matrix as ",
-       "impossible. Offending seeds are listed above.")
+       "inconsistent. Offending seeds are listed above.")
 } else {
-  cat("PASS: 0 false-impossible verdicts across", nrow(checked),
+  cat("PASS: 0 false-inconsistent verdicts across", nrow(checked),
       "exactly-valid matrices.\n")
 }
 ```
 
-## Primary: false-impossibility rate with Wilson intervals
+## Primary: false-inconsistency rate with Wilson intervals
 
 ```{r}
 sim1_summary <- checked |>
@@ -208,39 +218,39 @@ sim1_summary <- checked |>
   group_by(gen_label, p) |>
   summarise(
     K                     = n(),
-    n_impossible          = sum(verdict == "impossible"),
-    false_impossible_rate = mean(verdict == "impossible"),
-    prop_possible         = mean(verdict == "possible"),
+    n_inconsistent          = sum(verdict == "inconsistent"),
+    false_inconsistent_rate = mean(verdict == "inconsistent"),
+    prop_consistent         = mean(verdict == "consistent"),
     prop_undecided        = mean(verdict == "undecided"),
     n_error               = sum(verdict == "error"),
     oracle_infeasible     = sum(oracle_status == "infeasible"),
     .groups = "drop") |>
   rowwise() |>
-  mutate(wilson_lo = wilson_ci(n_impossible, K)["lower"],
-         wilson_hi = wilson_ci(n_impossible, K)["upper"]) |>
+  mutate(wilson_lo = wilson_ci(n_inconsistent, K)["lower"],
+         wilson_hi = wilson_ci(n_inconsistent, K)["upper"]) |>
   ungroup()
 ```
 
 ```{r}
 sim1_summary |>
-  mutate(fi = paste0(scales::number(false_impossible_rate, accuracy = 0.0001),
+  mutate(fi = paste0(scales::number(false_inconsistent_rate, accuracy = 0.0001),
                      " [", scales::number(wilson_lo, accuracy = 0.0001),
                      ", ", scales::number(wilson_hi, accuracy = 0.0001), "]")) |>
   select(gen_label, p, fi) |>
   pivot_wider(names_from = p, values_from = fi) |>
-  kable(caption = "False-impossibility rate [Wilson 95% CI] by generator and p (target = 0)") |>
+  kable(caption = "False-inconsistency rate [Wilson 95% CI] by generator and p (target = 0)") |>
   kable_styling(full_width = FALSE) |>
   add_header_above(c(" " = 1, "Dimension p" = 6))
 ```
 
-## Secondary: completeness (possible vs undecided)
+## Secondary: completeness (consistent vs undecided)
 
 ```{r}
 sim1_summary |>
-  mutate(`% possible`  = scales::percent(prop_possible, accuracy = 0.1),
+  mutate(`% consistent`  = scales::percent(prop_consistent, accuracy = 0.1),
          `% undecided` = scales::percent(prop_undecided, accuracy = 0.1)) |>
-  select(gen_label, p, `% possible`, `% undecided`) |>
-  kable(caption = "Completeness: possible vs undecided by generator and p") |>
+  select(gen_label, p, `% consistent`, `% undecided`) |>
+  kable(caption = "Completeness: consistent vs undecided by generator and p") |>
   kable_styling(full_width = FALSE)
 ```
 
@@ -272,13 +282,13 @@ simulation |>
 
 ## Performance of the method across conditions
 
-The soundness property holds: the diagnostics chunk confirms **zero** false-impossibility verdicts across every generator and dimension, so the primary Wilson intervals sit against the 0 floor. This is the behaviour the tool's design guarantees (a PSD matrix inside the box — here, the reported point itself — can never yield an `"impossible"` verdict), and the simulation confirms the guarantee survives the full generator sweep including the near-singular boundary.
+The soundness property holds: the diagnostics chunk confirms **zero** false-inconsistency verdicts across every generator and dimension, so the primary Wilson intervals sit against the 0 floor. This is the behaviour the tool's design guarantees (a PSD matrix inside the box — here, the reported point itself — can never yield an `"inconsistent"` verdict), and the simulation confirms the guarantee survives the full generator sweep including the near-singular boundary.
 
-The completeness split shows the expected operating characteristic: on well-conditioned matrices the tool returns `"possible"` almost always, but as the onion `eta` shrinks toward the PSD boundary the verified-Cholesky possible-side abstains more often (`"undecided"`), especially at larger `p`. This is not a failure — abstention on a matrix that is *exactly* on the PSD boundary is the honest answer for a rounding-aware tool with a tiny box.
+The completeness split shows the expected operating characteristic: on well-conditioned matrices the tool returns `"consistent"` almost always, but as the onion `eta` shrinks toward the PSD boundary the verified-Cholesky consistent-side abstains more often (`"undecided"`), especially at larger `p`. This is not a failure — abstention on a matrix that is *exactly* on the PSD boundary is the honest answer for a rounding-aware tool with a tiny box.
 
 ## Conclusions with regard to the aims
 
-Both aims are met: the false-impossibility rate is 0 (Aim 1), and the possible/undecided completeness is characterised, with abstention concentrated at the near-singular boundary (Aim 2).
+Both aims are met: the false-inconsistency rate is 0 (Aim 1), and the consistent/undecided completeness is characterised, with abstention concentrated at the near-singular boundary (Aim 2).
 
 ## Limitations and intended use
 

@@ -1,5 +1,5 @@
 ---
-title: "psdness validation — Sim 4: reliability disattenuation"
+title: "port validation — Sim 4: reliability disattenuation"
 author: "Ian Hussey"
 date: today
 format:
@@ -27,11 +27,11 @@ options(scipen = 999)
 
 # Introduction
 
-The fourth validation simulation for `psdness`, following the ADEMP framework (Morris et al., 2019; Siepe et al., 2024). Sims 1–3 validated the base checker (`check_corr_psd()` / `localize_psd_fault()`). Sim 4 validates the disattenuation layer (`check_disattenuated_psd()`): whether the reliability-corrected *construct* matrix is impossible, and the critical-reliability threshold below which it becomes so.
+The fourth validation simulation for `port`, following the ADEMP framework (Morris et al., 2019; Siepe et al., 2024). Sims 1–3 validated the base checker (`check_corr_psd()` / `localize_psd_fault()`). Sim 4 validates the disattenuation layer (`check_disattenuated_psd()`): whether the reliability-corrected *construct* matrix is inconsistent, and the critical-reliability threshold below which it becomes so.
 
 ## Project description
 
-Reported correlations are often corrected for measurement (un)reliability by Spearman's disattenuation, `D_ij = R_ij / sqrt(rho_i · rho_j)`. Because reliabilities are at most 1, this *inflates* correlations, so a perfectly valid observed matrix can become an impossible construct matrix under the reliabilities the authors themselves report. The tool flags that, and reports the critical reliability below which the correction cannot be valid. This is a distinct decision procedure from the base checker and needs its own validation.
+Reported correlations are often corrected for measurement (un)reliability by Spearman's disattenuation, `D_ij = R_ij / sqrt(rho_i · rho_j)`. Because reliabilities are at most 1, this *inflates* correlations, so a perfectly valid observed matrix can become an inconsistent construct matrix under the reliabilities the authors themselves report. The tool flags that, and reports the critical reliability below which the correction cannot be valid. This is a distinct decision procedure from the base checker and needs its own validation.
 
 ## Prior related work
 
@@ -39,9 +39,9 @@ The base tool's operating characteristics are established in Sims 1–3. Disatte
 
 ## Aims
 
-1. **Soundness (hard assertion).** Disattenuating a genuinely attenuated matrix by its *correct* reliabilities must never be flagged `impossible`.
+1. **Soundness (hard assertion).** Disattenuating a genuinely attenuated matrix by its *correct* reliabilities must never be flagged `inconsistent`.
 2. **Power to detect over-correction.** When reported reliabilities are lower than the truth, the disattenuated matrix can become genuinely infeasible; the tool should detect it.
-3. **Critical-reliability accuracy.** The reported closed form `rho* = max(1 − lambda_min(R), max|R_ij|)` should match an independent computation of the reliability at which the disattenuated matrix first becomes infeasible; and the tool's *box-sound* `rho_impossible_box` (the certified rounding-aware boundary) must sit at or below that value, with impossibility genuinely holding just below it.
+3. **Critical-reliability accuracy.** The reported closed form `rho* = max(1 − lambda_min(R), max|R_ij|)` should match an independent computation of the reliability at which the disattenuated matrix first becomes infeasible; and the tool's *box-sound* `rho_inconsistent_box` (the certified rounding-aware boundary) must sit at or below that value, with inconsistency genuinely holding just below it.
 
 ## Data-Generating Process
 
@@ -70,16 +70,16 @@ The **target is the true feasibility status of the disattenuated box**, from the
 
 ### Theorem (soundness pass condition)
 
-With nearest rounding and matched deltas, the true `R_ij` lies in `[R̃_ij ± delta_R]` and the true `rho_i` in `[rhõ_i ± delta_rho]`, so by sound interval division the true `C_ij = R_ij / sqrt(rho_i rho_j)` lies in the disattenuated interval, and `|C_ij| ≤ 1` survives the clip. The disattenuated box therefore contains the PSD matrix `C` and the tool **must not** return `impossible`. Any such verdict is a bug and fails loudly. (`implausible` may still fire on a genuinely high construct correlation — that is correct, so the assertion is on `impossible` only.)
+With nearest rounding and matched deltas, the true `R_ij` lies in `[R̃_ij ± delta_R]` and the true `rho_i` in `[rhõ_i ± delta_rho]`, so by sound interval division the true `C_ij = R_ij / sqrt(rho_i rho_j)` lies in the disattenuated interval, and `|C_ij| ≤ 1` survives the clip. The disattenuated box therefore contains the PSD matrix `C` and the tool **must not** return `inconsistent`. Any such verdict is a bug and fails loudly. (`consistent but implausible` may still fire on a genuinely high construct correlation — that is correct, so the assertion is on `inconsistent` only.)
 
 ## Methods and extracted quantities
 
-`check_disattenuated_psd()` for the verdict (`impossible` / `implausible` / `possible` / `undecided`) and, in the threshold arm, `$thresholds$rho_impossible`. The oracle and the independent critical-reliability bisection (`critical_rho_oracle()`, which bisects the disattenuated matrix's smallest eigenvalue and never uses the `1 − lambda_min` formula) supply ground truth.
+`check_disattenuated_psd()` for the verdict (`inconsistent` / `consistent but implausible` / `consistent` / `undecided`) and, in the threshold arm, `$thresholds$rho_inconsistent`. The oracle and the independent critical-reliability bisection (`critical_rho_oracle()`, which bisects the disattenuated matrix's smallest eigenvalue and never uses the `1 − lambda_min` formula) supply ground truth.
 
 ## Performance and Uncertainty
 
-- **Soundness — false-impossibility rate** (target 0, Wilson intervals; hard assertion halts the render on any violation).
-- **Power** = `P(impossible | oracle infeasible)`, binomial MCSE, by gap × p × regime; a false-positive guard on oracle-feasible cases.
+- **Soundness — false-inconsistency rate** (target 0, Wilson intervals; hard assertion halts the render on any violation).
+- **Power** = `P(inconsistent | oracle infeasible)`, binomial MCSE, by gap × p × regime; a false-positive guard on oracle-feasible cases.
 - **Threshold accuracy** = `|tool rho* − oracle rho*|` (target ≈ bisection tolerance).
 
 `K = 1000` baseline (`SIM_QUICK=1` reduces it).
@@ -100,7 +100,7 @@ library(knitr)
 library(kableExtra)
 library(readr)
 
-library(psdness)
+library(port)
 source("R/sim_helpers.R")
 
 plan(multisession)
@@ -148,18 +148,18 @@ run_threshold <- function(generator, p, seed, eta, loading_sd, regime,
   b <- make_base(generator, p, seed, eta, loading_sd, regime)
   Rt <- round_offdiag(attenuate(b$C, b$rho), decimals, "nearest")
   thr <- check_disattenuated_psd(Rt, reliability = NULL, decimals = decimals)$thresholds
-  tool <- thr$rho_impossible
-  box  <- thr$rho_impossible_box
+  tool <- thr$rho_inconsistent
+  box  <- thr$rho_inconsistent_box
   orc <- critical_rho_oracle(Rt)$rho_star
-  # The box-sound boundary is a CERTIFIED impossibility threshold, so allowing
+  # The box-sound boundary is a CERTIFIED inconsistency threshold, so allowing
   # for the rounding of the correlations it must sit at or below the point value.
   box_le_point <- is.finite(box) && box <= tool + 1e-6
   # And the certified claim must hold: just below the box boundary the tool must
-  # return "impossible" (only checked where the boundary is non-trivial).
+  # return "inconsistent" (only checked where the boundary is non-trivial).
   below_ok <- NA
   if (is.finite(box) && box > 0.06) {
     below_ok <- check_disattenuated_psd(Rt, reliability = box - 0.02,
-                                        decimals = decimals)$verdict == "impossible"
+                                        decimals = decimals)$verdict == "inconsistent"
   }
   tibble::tibble(tool_rho = tool, oracle_rho = orc, abs_diff = abs(tool - orc),
                  rho_box = box, box_le_point = box_le_point, below_ok = below_ok)
@@ -198,31 +198,31 @@ if(file.exists("simulation4.rds")){
   sound <- sim4$sound; power <- sim4$power; threshold <- sim4$threshold
 } else {
   set.seed(42)
-  fo <- furrr_options(seed = TRUE, packages = c("psdness", "clusterGeneration"))
+  fo <- furrr_options(seed = TRUE, packages = c("port", "clusterGeneration"))
 
   # Arm 1: soundness
   sound <- base_grid |>
     mutate(res = future_pmap(
-      list(generator = generator, p = p, seed = seed, eta = eta,
-           loading_sd = loading_sd, regime = regime),
-      run_sound, .options = fo, .progress = TRUE)) |>
+      .l = list(generator = generator, p = p, seed = seed, eta = eta,
+                loading_sd = loading_sd, regime = regime),
+      .f = run_sound, .options = fo, .progress = TRUE)) |>
     unnest(res)
 
   # Arm 2: power (add the under-report gap)
   power <- base_grid |>
     cross_join(tibble(gap = c(0, 0.05, 0.10, 0.15, 0.20, 0.30))) |>
     mutate(res = future_pmap(
-      list(generator = generator, p = p, seed = seed, eta = eta,
-           loading_sd = loading_sd, regime = regime, gap = gap),
-      run_power, .options = fo, .progress = TRUE)) |>
+      .l = list(generator = generator, p = p, seed = seed, eta = eta,
+                loading_sd = loading_sd, regime = regime, gap = gap),
+      .f = run_power, .options = fo, .progress = TRUE)) |>
     unnest(res)
 
   # Arm 3: threshold accuracy
   threshold <- base_grid |>
     mutate(res = future_pmap(
-      list(generator = generator, p = p, seed = seed, eta = eta,
-           loading_sd = loading_sd, regime = regime),
-      run_threshold, .options = fo, .progress = TRUE)) |>
+      .l = list(generator = generator, p = p, seed = seed, eta = eta,
+                loading_sd = loading_sd, regime = regime),
+      .f = run_threshold, .options = fo, .progress = TRUE)) |>
     unnest(res)
 
   sim4 <- list(sound = sound, power = power, threshold = threshold)
@@ -232,17 +232,17 @@ if(file.exists("simulation4.rds")){
 
 # Results
 
-## Arm 1 — soundness (hard failure on any false-impossible)
+## Arm 1 — soundness (hard failure on any false-inconsistent)
 
 ```{r}
-violations <- sound |> filter(verdict == "impossible")
+violations <- sound |> filter(verdict == "inconsistent")
 if (nrow(violations) > 0) {
   violations |> select(gen_label, p, regime, iteration, seed, verdict) |>
-    kable(caption = "SOUNDNESS VIOLATIONS (correct-reliability disattenuation flagged impossible)") |>
+    kable(caption = "SOUNDNESS VIOLATIONS (correct-reliability disattenuation flagged inconsistent)") |>
     kable_styling(full_width = FALSE)
-  stop("SOUNDNESS VIOLATION: disattenuating by the true reliabilities was certified impossible.")
+  stop("SOUNDNESS VIOLATION: disattenuating by the true reliabilities was certified inconsistent.")
 } else {
-  cat("PASS: 0 false-impossible verdicts across", nrow(sound),
+  cat("PASS: 0 false-inconsistent verdicts across", nrow(sound),
       "correct-reliability disattenuations.\n")
 }
 ```
@@ -251,12 +251,12 @@ if (nrow(violations) > 0) {
 sound |>
   group_by(regime) |>
   summarise(n = n(),
-            `% possible` = scales::percent(mean(verdict == "possible"), 0.1),
-            `% implausible` = scales::percent(mean(verdict == "implausible"), 0.1),
-            `% impossible` = scales::percent(mean(verdict == "impossible"), 0.1),
+            `% consistent` = scales::percent(mean(verdict == "consistent"), 0.1),
+            `% consistent but implausible` = scales::percent(mean(verdict == "consistent but implausible"), 0.1),
+            `% inconsistent` = scales::percent(mean(verdict == "inconsistent"), 0.1),
             oracle_feasible = scales::percent(mean(oracle == "feasible"), 0.1),
             .groups = "drop") |>
-  kable(caption = "Soundness: verdict split by reliability regime (implausible reflects genuinely high construct correlations)") |>
+  kable(caption = "Soundness: verdict split by reliability regime (consistent but implausible reflects genuinely high construct correlations)") |>
   kable_styling(full_width = FALSE)
 ```
 
@@ -266,7 +266,7 @@ sound |>
 power_summary <- power |>
   filter(oracle == "infeasible") |>
   group_by(gap, p, regime) |>
-  summarise(n = n(), power = mean(verdict == "impossible"),
+  summarise(n = n(), power = mean(verdict == "inconsistent"),
             power_mcse = sqrt(power * (1 - power) / n), .groups = "drop")
 ```
 
@@ -276,7 +276,7 @@ power |>
   summarise(oracle_infeasible = sum(oracle == "infeasible"),
             oracle_feasible = sum(oracle == "feasible"),
             oracle_uncertain = sum(oracle == "uncertain"),
-            power = mean(verdict[oracle == "infeasible"] == "impossible"),
+            power = mean(verdict[oracle == "infeasible"] == "inconsistent"),
             .groups = "drop") |>
   mutate(power = scales::number(power, 0.001)) |>
   kable(caption = "Detection power by reliability under-report gap (power on oracle-infeasible cases)") |>
@@ -297,17 +297,17 @@ power_summary |>
 ```
 
 ```{r}
-# false-positive guard: impossibility rate on oracle-FEASIBLE over-corrections
+# false-positive guard: inconsistency rate on oracle-FEASIBLE over-corrections
 power |>
   filter(oracle == "feasible") |>
-  summarise(n = n(), n_impossible = sum(verdict == "impossible"),
-            false_impossible_rate = mean(verdict == "impossible")) |>
+  summarise(n = n(), n_inconsistent = sum(verdict == "inconsistent"),
+            false_inconsistent_rate = mean(verdict == "inconsistent")) |>
   rowwise() |>
-  mutate(wilson = paste0("[", scales::number(wilson_ci(n_impossible, n)["lower"], 0.0001),
-                         ", ", scales::number(wilson_ci(n_impossible, n)["upper"], 0.0001), "]")) |>
+  mutate(wilson = paste0("[", scales::number(wilson_ci(n_inconsistent, n)["lower"], 0.0001),
+                         ", ", scales::number(wilson_ci(n_inconsistent, n)["upper"], 0.0001), "]")) |>
   ungroup() |>
-  mutate(false_impossible_rate = scales::number(false_impossible_rate, 0.0001)) |>
-  kable(caption = "False-positive guard: impossibility rate on oracle-FEASIBLE over-corrections (target 0)") |>
+  mutate(false_inconsistent_rate = scales::number(false_inconsistent_rate, 0.0001)) |>
+  kable(caption = "False-positive guard: inconsistency rate on oracle-FEASIBLE over-corrections (target 0)") |>
   kable_styling(full_width = FALSE)
 ```
 
@@ -336,11 +336,11 @@ ggplot(threshold, aes(x = oracle_rho, y = tool_rho)) +
 
 ### Box-sound critical reliability (hard assertions)
 
-The tool also reports a **certified** critical reliability `rho_impossible_box`:
-the disattenuation is provably impossible for any common reliability below it,
+The tool also reports a **certified** critical reliability `rho_inconsistent_box`:
+the disattenuation is provably inconsistent for any common reliability below it,
 *allowing for the rounding of the correlations*. Two properties must hold — the
 certified boundary sits at or below the point closed form (rounding only adds
-slack), and just below it the verdict is genuinely `impossible`:
+slack), and just below it the verdict is genuinely `inconsistent`:
 
 ```{r}
 box_checks <- threshold |>
@@ -349,20 +349,20 @@ box_checks <- threshold |>
             n_box_le_point_na = sum(is.na(box_le_point)),
             median_gap = median(tool_rho - rho_box, na.rm = TRUE),
             n_below_checked = sum(!is.na(below_ok)),
-            n_below_impossible = sum(below_ok, na.rm = TRUE))
+            n_below_inconsistent = sum(below_ok, na.rm = TRUE))
 
 if (with(box_checks, n_box_le_point + n_box_le_point_na) < box_checks$n) {
   threshold |> filter(!box_le_point) |>
     kable(caption = "VIOLATION: box-sound rho* exceeds the point closed form") |>
     kable_styling(full_width = FALSE)
-  stop("Box-sound rho_impossible_box exceeded the point rho_impossible.")
+  stop("Box-sound rho_inconsistent_box exceeded the point rho_inconsistent.")
 }
-if (with(box_checks, n_below_impossible) < box_checks$n_below_checked) {
-  stop("Verdict just below the box-sound boundary was not 'impossible'.")
+if (with(box_checks, n_below_inconsistent) < box_checks$n_below_checked) {
+  stop("Verdict just below the box-sound boundary was not 'inconsistent'.")
 }
 box_checks |>
   mutate(median_gap = signif(median_gap, 3)) |>
-  kable(caption = "Box-sound rho*: certified <= point closed form, and impossibility holds just below it (hard-asserted)") |>
+  kable(caption = "Box-sound rho*: certified <= point closed form, and inconsistency holds just below it (hard-asserted)") |>
   kable_styling(full_width = FALSE)
 ```
 
@@ -370,11 +370,11 @@ box_checks |>
 
 ## Performance across conditions
 
-**Soundness holds:** disattenuating a genuinely attenuated matrix by its correct reliabilities is never flagged impossible, as the theorem requires. The verdict split shows `implausible` firing in the low-reliability regime — correctly, because genuine constructs measured with poor reliability can have disattenuated correlations near 1; this is a plausibility signal, not a soundness failure.
+**Soundness holds:** disattenuating a genuinely attenuated matrix by its correct reliabilities is never flagged inconsistent, as the theorem requires. The verdict split shows `consistent but implausible` firing in the low-reliability regime — correctly, because genuine constructs measured with poor reliability can have disattenuated correlations near 1; this is a plausibility signal, not a soundness failure.
 
 **Power is clean:** as the reliability under-report gap grows, cases move from feasible to oracle-infeasible, and on the infeasible cases the tool detects essentially all of them, while the false-positive guard on oracle-feasible over-corrections stays at (Wilson-bounded) 0. Detection of over-correction is therefore not bought with false alarms.
 
-**The threshold is exact:** the closed form `rho* = max(1 - lambda_min(R), max|R_ij|)` matches the independent eigenvalue-bisection oracle to bisection tolerance, confirming the interpretable critical-reliability number the tool reports. The **box-sound** `rho_impossible_box` sits at or below the point value (rounding only adds slack) and its certified-impossibility claim holds just below the boundary — both hard-asserted, so the render halts on any violation.
+**The threshold is exact:** the closed form `rho* = max(1 - lambda_min(R), max|R_ij|)` matches the independent eigenvalue-bisection oracle to bisection tolerance, confirming the interpretable critical-reliability number the tool reports. The **box-sound** `rho_inconsistent_box` sits at or below the point value (rounding only adds slack) and its certified-inconsistency claim holds just below the boundary — both hard-asserted, so the render halts on any violation.
 
 ## Conclusions with regard to the aims
 
@@ -382,10 +382,10 @@ All three aims are met: correct-reliability soundness (Aim 1), over-correction p
 
 ## Limitations and intended use
 
-- The `implausible` level is a threshold on a computed value with no probabilistic ground truth; it is validated deterministically in the package's unit tests, not here.
+- The `consistent but implausible` level is a threshold on a computed value with no probabilistic ground truth; it is validated deterministically in the package's unit tests, not here.
 - The oracle's infeasibility certificate is conservative (a near-boundary `uncertain` band is excluded and reported), so power is estimated on certifiably-infeasible over-corrections.
 - Reliabilities are rounded to nearest with matched decimals; a mismatched-decimals arm (the Sim 2 analogue) is out of scope here.
-- `K = 1000`; the false-positive guard and the zero-false-impossible claim benefit from larger `K`.
+- `K = 1000`; the false-positive guard and the zero-false-inconsistent claim benefit from larger `K`.
 
 # References
 

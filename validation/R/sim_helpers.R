@@ -1,5 +1,5 @@
 # =============================================================================
-# Shared helpers for the psdness validation simulations.
+# Shared helpers for the port validation simulations.
 #
 # Contents:
 #   1. Matrix generators (each returns a p x p correlation matrix, unit diagonal)
@@ -330,8 +330,8 @@ critical_rho_oracle <- function(R, tol = 1e-6, max_it = 60L) {
 
 analyse_check <- function(R, decimals = NULL, delta = NULL) {
   res <- tryCatch(
-    if (!is.null(delta)) psdness::check_corr_psd(R, delta = delta)
-    else psdness::check_corr_psd(R, decimals = decimals),
+    if (!is.null(delta)) port::check_corr_psd(R, delta = delta)
+    else port::check_corr_psd(R, decimals = decimals),
     error = function(e) NULL)
   if (is.null(res)) {
     return(tibble::tibble(verdict = "error", tier = NA_character_, margin = NA_real_))
@@ -344,7 +344,7 @@ analyse_check <- function(R, decimals = NULL, delta = NULL) {
 # implicated cells/variable, whether the known culprit was recovered, and the
 # severity. `culprit_cell` / `culprit_var` encode the planted fault (or NULL).
 analyse_localize <- function(R, decimals, culprit_cell = NULL, culprit_var = NULL) {
-  lf <- tryCatch(psdness::localize_psd_fault(R, decimals = decimals),
+  lf <- tryCatch(port::localize_psd_fault(R, decimals = decimals),
                  error = function(e) NULL)
   if (is.null(lf)) {
     return(tibble::tibble(localization_verdict = "error", implicated = NA_character_,
@@ -382,7 +382,7 @@ analyse_localize <- function(R, decimals, culprit_cell = NULL, culprit_var = NUL
 # Wrapper for check_disattenuated_psd(): returns the disattenuation verdict.
 analyse_disattenuated <- function(R, reliability, decimals, reliability_decimals,
                                   max_plausible_r = 1) {
-  res <- tryCatch(psdness::check_disattenuated_psd(
+  res <- tryCatch(port::check_disattenuated_psd(
     R, reliability = reliability, decimals = decimals,
     reliability_decimals = reliability_decimals, max_plausible_r = max_plausible_r),
     error = function(e) NULL)

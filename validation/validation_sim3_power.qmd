@@ -1,5 +1,5 @@
 ---
-title: "psdness validation — Sim 3: power to detect genuine errors"
+title: "port validation — Sim 3: power to detect genuine errors"
 author: "Ian Hussey"
 date: today
 format:
@@ -27,11 +27,11 @@ options(scipen = 999)
 
 # Introduction
 
-The third and final validation simulation for `psdness`, following the ADEMP framework (Morris et al., 2019; Siepe et al., 2024). Sims 1–2 established the one-sided soundness guarantee (the tool never falsely certifies a valid matrix impossible). Sim 3 estimates the complementary property: **detection power** — how often the tool certifies `"impossible"` when the rounding box is *genuinely* infeasible — together with **localization accuracy** and **severity calibration**.
+The third and final validation simulation for `port`, following the ADEMP framework (Morris et al., 2019; Siepe et al., 2024). Sims 1–2 established the one-sided soundness guarantee (the tool never falsely certifies a valid matrix inconsistent). Sim 3 estimates the complementary property: **detection power** — how often the tool certifies `"inconsistent"` when the rounding box is *genuinely* infeasible — together with **localization accuracy** and **severity calibration**.
 
 ## Project description
 
-A soundness guarantee is only useful if the tool also detects real errors. Here we plant known errors into valid matrices (transcription slips, sign flips, corrupted variables, undirected jitter), round them, and ask whether the tool flags the ones that are truly impossible, whether it fingers the right culprit, and whether its severity metric tracks the size of the error.
+A soundness guarantee is only useful if the tool also detects real errors. Here we plant known errors into valid matrices (transcription slips, sign flips, corrupted variables, undirected jitter), round them, and ask whether the tool flags the ones that are truly inconsistent, whether it fingers the right culprit, and whether its severity metric tracks the size of the error.
 
 ## Prior related work
 
@@ -39,10 +39,10 @@ As before, no prior simulation of this tool exists. The design mirrors a power s
 
 ## Aims
 
-1. Estimate **detection power** `P(verdict == "impossible" | box truly infeasible)` as a function of perturbation type, magnitude, `p`, and decimals.
-2. (Secondary) **Localization accuracy**: given a correctly-flagged impossibility with a known culprit, does `localize_psd_fault()` implicate the right cell/variable, and what is the `localization_verdict` distribution?
+1. Estimate **detection power** `P(verdict == "inconsistent" | box truly infeasible)` as a function of perturbation type, magnitude, `p`, and decimals.
+2. (Secondary) **Localization accuracy**: given a correctly-flagged inconsistency with a known culprit, does `localize_psd_fault()` implicate the right cell/variable, and what is the `localization_verdict` distribution?
 3. (Secondary) **Severity calibration**: does the excess-beyond-box severity increase monotonically with perturbation magnitude?
-4. Confirm the **false-positive guard**: on oracle-*feasible* perturbations the impossibility rate stays ~0, so power is not bought with false alarms.
+4. Confirm the **false-positive guard**: on oracle-*feasible* perturbations the inconsistency rate stays ~0, so power is not bought with false alarms.
 
 ## Data-Generating Process
 
@@ -60,7 +60,7 @@ Near-boundary bases raise the base rate of true infeasibility efficiently, but m
 
 ### Factor combination and number of conditions
 
-Fully factorial over the crossed factors, each replicated `K` times. Localization and severity (secondary) are computed on a documented subset (types with a known culprit, `p ≤ 10`, cases the tool flagged impossible) to keep the heavier `localize_psd_fault()` tractable.
+Fully factorial over the crossed factors, each replicated `K` times. Localization and severity (secondary) are computed on a documented subset (types with a known culprit, `p ≤ 10`, cases the tool flagged inconsistent) to keep the heavier `localize_psd_fault()` tractable.
 
 ## Estimands and Targets
 
@@ -68,14 +68,16 @@ The **target is the true box-feasibility status**, supplied by the independent o
 
 ## Methods and extracted quantities
 
-`check_corr_psd(R̃, delta)` for the verdict and deciding `tier`; `localize_psd_fault(R̃)` for the `localization_verdict`, the implicated cell/variable, and `severity_max`. **Pipeline tiers as methods:** impossibility is certified only by the cheap `precheck`/`witness` tiers; the POCS possible-side and the escalation tier refine only the possible/undecided split, so detection power is *tier-invariant* by construction. We therefore report power once and, separately, which tier was decisive (the "how often does the cheap tier suffice / when is escalation needed" picture).
+`check_corr_psd(R̃, delta)` for the verdict and deciding `tier`; `localize_psd_fault(R̃)` for the `localization_verdict`, the implicated cell/variable, and `severity_max`. **Pipeline tiers as methods:** inconsistency is certified only by the cheap `precheck`/`witness` tiers; the POCS consistent-side and the escalation tier refine only the consistent/undecided split, so detection power is *tier-invariant* by construction. We therefore report power once and, separately, which tier was decisive (the "how often does the cheap tier suffice / when is escalation needed" picture).
+
+The study runs as **two passes over the shared design**, reported below as separate simulations with their own runs and results: **Sim 3a** (detection power, false-positive guard, tier usage) uses the fast `check_corr_psd()` over the full grid; **Sim 3b** (localization accuracy, severity calibration) applies the heavier `localize_psd_fault()` to the known-culprit subset. Each pass is cached to disk (`simulation3_main.rds`, `simulation3_localization.rds`) so re-renders skip re-running it.
 
 ## Performance and Uncertainty
 
 - **Primary — detection power** on oracle-infeasible cases, with binomial MCSE `sqrt(p̂(1-p̂)/n)`, by type × magnitude × p × decimals. Power curves with ±1 MCSE lineranges.
-- **Secondary 1 — localization accuracy**: `P(correct culprit | correctly flagged impossible)` for `single_cell` and `variable_column`; plus the `localization_verdict` class distribution.
+- **Secondary 1 — localization accuracy**: `P(correct culprit | correctly flagged inconsistent)` for `single_cell` and `variable_column`; plus the `localization_verdict` class distribution.
 - **Secondary 2 — severity calibration**: `severity_max` vs magnitude.
-- **False-positive guard**: impossibility rate on oracle-feasible perturbations, with Wilson intervals (should hug 0).
+- **False-positive guard**: inconsistency rate on oracle-feasible perturbations, with Wilson intervals (should hug 0).
 
 `K = 1000` baseline (`SIM_QUICK=1` reduces it for development).
 
@@ -95,7 +97,7 @@ library(scales)
 library(knitr)
 library(kableExtra)
 
-library(psdness)
+library(port)
 source("R/sim_helpers.R")
 
 plan(multisession)
@@ -103,9 +105,10 @@ plan(multisession)
 
 ## Functions
 
-Shared via `R/sim_helpers.R`. The condition runner below regenerates the base matrix from its deterministic seed (so the same base is reused across magnitudes/types) and calls `generate_data()` → `contaminate_data()` → `analyse_check()` → the `box_is_feasible()` oracle, returning a small row (no large matrix columns are retained).
+Shared via `R/sim_helpers.R`. Both simulation runners below regenerate the base matrix from its deterministic seed (so the same base is reused across magnitudes/types) and call `generate_data()` → `contaminate_data()` → the tool → the `box_is_feasible()` oracle, returning a small row (no large matrix columns are retained). `run_condition()` drives Sim 3a (power); `run_localization()` drives Sim 3b (localization/severity) on the known-culprit subset.
 
 ```{r}
+# Sim 3a: verdict + oracle status for one perturbed, rounded matrix.
 run_condition <- function(generator, p, seed, eta, loading_sd,
                           decimals, type, magnitude, i, j, var, jitter_seed) {
   R <- generate_data(generator, p, seed,
@@ -122,6 +125,32 @@ run_condition <- function(generator, p, seed, eta, loading_sd,
   orc <- box_is_feasible(ct$R_tilde, delta, witness = R)
   tibble::tibble(verdict = chk$verdict, tier = chk$tier,
                  oracle_status = orc$status, oracle_dist = orc$dist, oracle_radius = orc$radius)
+}
+
+# Sim 3b: localization + severity, only for correctly-flagged, oracle-infeasible
+# cases with a known culprit (single_cell / variable_column). `flagged = FALSE`
+# rows are excluded from the localization summaries.
+run_localization <- function(generator, p, seed, eta, loading_sd,
+                             decimals, type, magnitude, i, j, var, jitter_seed) {
+  R <- generate_data(generator, p, seed,
+                     eta = if (is.na(eta)) 1 else eta,
+                     loading_sd = if (is.na(loading_sd)) 0.35 else loading_sd)
+  pert <- if (type == "single_cell")
+    list(type = "single_cell", magnitude = magnitude, i = i, j = j)
+  else list(type = "variable_column", magnitude = magnitude, var = var)
+  ct <- contaminate_data(R, decimals, "nearest", perturbation = pert)
+  delta <- 0.5 * 10^(-decimals)
+  if (analyse_check(ct$R_tilde, delta = delta)$verdict != "inconsistent" ||
+      box_is_feasible(ct$R_tilde, delta, witness = R)$status != "infeasible") {
+    return(tibble::tibble(localization_verdict = NA_character_, implicated = NA_character_,
+                          hit_cell = NA, hit_variable = NA, severity_max = NA_real_,
+                          flagged = FALSE))
+  }
+  out <- analyse_localize(ct$R_tilde, decimals = decimals,
+                          culprit_cell = if (type == "single_cell") c(i, j) else NULL,
+                          culprit_var  = if (type == "variable_column") var else NULL)
+  out$flagged <- TRUE
+  out
 }
 ```
 
@@ -158,33 +187,34 @@ experiment_parameters_grid <- expand_grid(
          jitter_seed = as.integer((seed + 7L) %% .Machine$integer.max))
 ```
 
-## Run simulation
+# Simulation 3a — detection power
+
+## Run the simulation
 
 ```{r}
-if(file.exists("simulation3.rds")){
-  simulation <- read_rds("simulation3.rds")
+fo <- furrr_options(seed = TRUE, packages = c("port", "clusterGeneration"))
+
+if(file.exists("simulation3_main.rds")){
+  simulation_main <- read_rds("simulation3_main.rds")
 } else {
   set.seed(42)
-  fo <- furrr_options(seed = TRUE, packages = c("psdness", "clusterGeneration"))
-  
-  simulation <- experiment_parameters_grid |>
+
+  simulation_main <- experiment_parameters_grid |>
     mutate(res = future_pmap(
       .l = list(generator = generator, p = p, seed = seed, eta = eta, loading_sd = loading_sd,
                 decimals = decimals, type = type, magnitude = magnitude,
                 i = i, j = j, var = var, jitter_seed = jitter_seed),
       .f = run_condition, .options = fo, .progress = TRUE)) |>
     unnest(res)
-  
-  write_rds(simulation, "simulation3.rds", compress = "gz")
+
+  write_rds(simulation_main, "simulation3_main.rds", compress = "gz")
 }
 ```
-
-# Results
 
 ## Oracle status by perturbation magnitude
 
 ```{r}
-simulation |>
+simulation_main |>
   filter(type != "sign_flip") |>
   group_by(type, magnitude) |>
   summarise(`% feasible` = scales::percent(mean(oracle_status == "feasible"), 0.1),
@@ -195,14 +225,14 @@ simulation |>
   kable_styling(full_width = FALSE)
 ```
 
-## Primary: detection power on oracle-infeasible cases
+## Detection power on oracle-infeasible cases
 
 ```{r}
-power_summary <- simulation |>
+power_summary <- simulation_main |>
   filter(oracle_status == "infeasible", type != "sign_flip") |>
   group_by(type, magnitude, p, decimals) |>
   summarise(n = n(),
-            power = mean(verdict == "impossible"),
+            power = mean(verdict == "inconsistent"),
             power_mcse = sqrt(power * (1 - power) / n),
             .groups = "drop")
 ```
@@ -216,7 +246,7 @@ power_summary |>
   geom_line() + geom_point() +
   facet_wrap(~ paste0("p = ", p)) +
   scale_x_continuous(name = "Perturbation magnitude m") +
-  scale_y_continuous(name = "Detection power (P impossible | oracle-infeasible)",
+  scale_y_continuous(name = "Detection power (P inconsistent | oracle-infeasible)",
                      limits = c(0, 1)) +
   labs(colour = "Perturbation", title = "Detection power vs magnitude (decimals = 2), +/-1 MCSE") +
   theme_linedraw() + theme(panel.grid.minor = element_blank())
@@ -234,98 +264,89 @@ power_summary |>
 
 ```{r}
 # sign_flip has no magnitude axis; report its power on oracle-infeasible cases.
-simulation |>
+simulation_main |>
   filter(type == "sign_flip", oracle_status == "infeasible") |>
   group_by(gen_label, p) |>
-  summarise(n = n(), power = mean(verdict == "impossible"), .groups = "drop") |>
+  summarise(n = n(), power = mean(verdict == "inconsistent"), .groups = "drop") |>
   mutate(power = scales::number(power, accuracy = 0.001)) |>
   pivot_wider(names_from = p, values_from = power, names_prefix = "p=") |>
   kable(caption = "sign_flip detection power on oracle-infeasible cases") |>
   kable_styling(full_width = FALSE)
 ```
 
-## False-positive guard: impossibility rate on oracle-feasible perturbations
+## False-positive guard: inconsistency rate on oracle-feasible perturbations
 
 ```{r}
-simulation |>
+simulation_main |>
   filter(oracle_status == "feasible") |>
   group_by(type) |>
-  summarise(n = n(), n_impossible = sum(verdict == "impossible"),
-            false_impossible_rate = mean(verdict == "impossible"), .groups = "drop") |>
+  summarise(n = n(), n_inconsistent = sum(verdict == "inconsistent"),
+            false_inconsistent_rate = mean(verdict == "inconsistent"), .groups = "drop") |>
   rowwise() |>
-  mutate(wilson = paste0("[", scales::number(wilson_ci(n_impossible, n)["lower"], 0.0001),
-                         ", ", scales::number(wilson_ci(n_impossible, n)["upper"], 0.0001), "]")) |>
+  mutate(wilson = paste0("[", scales::number(wilson_ci(n_inconsistent, n)["lower"], 0.0001),
+                         ", ", scales::number(wilson_ci(n_inconsistent, n)["upper"], 0.0001), "]")) |>
   ungroup() |>
-  mutate(false_impossible_rate = scales::number(false_impossible_rate, 0.0001)) |>
-  kable(caption = "False-positive guard: impossibility rate on oracle-FEASIBLE perturbations (target 0)") |>
+  mutate(false_inconsistent_rate = scales::number(false_inconsistent_rate, 0.0001)) |>
+  kable(caption = "False-positive guard: inconsistency rate on oracle-FEASIBLE perturbations (target 0)") |>
   kable_styling(full_width = FALSE)
 ```
 
 ## Tier usage: which tier was decisive
 
 ```{r}
-simulation |>
+simulation_main |>
   group_by(verdict, tier) |>
   summarise(n = n(), .groups = "drop") |>
   group_by(verdict) |>
   mutate(`% within verdict` = scales::percent(n / sum(n), 0.1)) |>
   ungroup() |>
-  kable(caption = "Deciding tier by verdict (impossibility is certified only by precheck/witness; POCS/escalation refine possible vs undecided)") |>
+  kable(caption = "Deciding tier by verdict (inconsistency is certified only by precheck/witness; POCS/escalation refine consistent vs undecided)") |>
   kable_styling(full_width = FALSE)
 ```
 
-## Secondary 1 — localization accuracy (known-culprit subset, p <= 10)
+# Simulation 3b — localization and severity
+
+## Run the simulation
 
 ```{r}
 loc_grid <- experiment_parameters_grid |>
   filter(type %in% c("single_cell", "variable_column"), p <= 10)
 
-set.seed(43)
-localization <- loc_grid |>
-  mutate(loc = future_pmap(
-    .l = list(generator = generator, p = p, seed = seed, eta = eta, loading_sd = loading_sd,
-              decimals = decimals, type = type, magnitude = magnitude,
-              i = i, j = j, var = var, jitter_seed = jitter_seed),
-    .f = function(generator, p, seed, eta, loading_sd, decimals, type, magnitude,
-                  i, j, var, jitter_seed) {
-      R <- generate_data(generator, p, seed,
-                         eta = if (is.na(eta)) 1 else eta,
-                         loading_sd = if (is.na(loading_sd)) 0.35 else loading_sd)
-      pert <- if (type == "single_cell")
-        list(type = "single_cell", magnitude = magnitude, i = i, j = j)
-      else list(type = "variable_column", magnitude = magnitude, var = var)
-      ct <- contaminate_data(R, decimals, "nearest", perturbation = pert)
-      delta <- 0.5 * 10^(-decimals)
-      # only meaningful on correctly-flagged, oracle-infeasible cases
-      if (analyse_check(ct$R_tilde, delta = delta)$verdict != "impossible" ||
-          box_is_feasible(ct$R_tilde, delta, witness = R)$status != "infeasible") {
-        return(tibble::tibble(localization_verdict = NA_character_, implicated = NA_character_,
-                              hit_cell = NA, hit_variable = NA, severity_max = NA_real_,
-                              flagged = FALSE))
-      }
-      out <- analyse_localize(ct$R_tilde, decimals = decimals,
-                              culprit_cell = if (type == "single_cell") c(i, j) else NULL,
-                              culprit_var  = if (type == "variable_column") var else NULL)
-      out$flagged <- TRUE
-      out
-    }, .options = fo, .progress = TRUE)) |>
-  unnest(loc)
+# The localization run is effectively Sim 3b: a second, independent pass that
+# runs the heavier localize_psd_fault() over the known-culprit subset. It is
+# cached separately from the main power run.
+if(file.exists("simulation3_localization.rds")){
+  simulation_localization <- read_rds("simulation3_localization.rds")
+} else {
+  set.seed(43)
+  simulation_localization <- loc_grid |>
+    mutate(loc = future_pmap(
+      .l = list(generator = generator, p = p, seed = seed, eta = eta, loading_sd = loading_sd,
+                decimals = decimals, type = type, magnitude = magnitude,
+                i = i, j = j, var = var, jitter_seed = jitter_seed),
+      .f = run_localization, .options = fo, .progress = TRUE)) |>
+    unnest(loc)
+
+  write_rds(simulation_localization, "simulation3_localization.rds", compress = "gz")
+}
 ```
 
+## Localization accuracy (known-culprit subset, p <= 10)
+
 ```{r}
-localization |>
+simulation_localization |>
   filter(flagged) |>
   group_by(type) |>
   summarise(n = n(),
             `hit cell/var rate` = scales::percent(
               mean(coalesce(hit_cell, hit_variable), na.rm = TRUE), 0.1),
             .groups = "drop") |>
-  kable(caption = "Localization accuracy: recovered the planted culprit | correctly flagged impossible") |>
+  kable(caption = "Localization accuracy: recovered the planted culprit | correctly flagged inconsistent") |>
   kable_styling(full_width = FALSE)
 ```
 
 ```{r}
-localization |>
+simulation_localization |>
   filter(flagged) |>
   count(type, localization_verdict) |>
   group_by(type) |>
@@ -335,10 +356,10 @@ localization |>
   kable_styling(full_width = FALSE)
 ```
 
-## Secondary 2 — severity calibration
+## Severity calibration
 
 ```{r}
-sev_summary <- localization |>
+sev_summary <- simulation_localization |>
   filter(flagged, type == "single_cell") |>
   group_by(magnitude) |>
   summarise(n = n(), severity = mean(severity_max, na.rm = TRUE),
@@ -360,9 +381,9 @@ ggplot(sev_summary, aes(x = magnitude, y = severity)) +
 
 ## Performance of the method across conditions
 
-Detection power rises from ~0 at magnitudes rounding can absorb to ~1 once the perturbation pushes the box clear of the PSD cone — and on the oracle-infeasible cases the tool detects essentially all of them at large magnitude. Crucially, the false-positive guard shows the impossibility rate stays at (Wilson-bounded) 0 on oracle-*feasible* perturbations, so this power is not bought with false alarms: the same soundness verified in Sims 1–2 holds under adversarial perturbation.
+Detection power rises from ~0 at magnitudes rounding can absorb to ~1 once the perturbation pushes the box clear of the PSD cone — and on the oracle-infeasible cases the tool detects essentially all of them at large magnitude. Crucially, the false-positive guard shows the inconsistency rate stays at (Wilson-bounded) 0 on oracle-*feasible* perturbations, so this power is not bought with false alarms: the same soundness verified in Sims 1–2 holds under adversarial perturbation.
 
-Power is tier-invariant by construction — the tier-usage table shows impossibility is always certified by the cheap `precheck`/`witness` tiers, with POCS/escalation only ever deciding the possible/undecided split. The cheap tier therefore suffices for the forensic payload; escalation buys completeness, not detection.
+Power is tier-invariant by construction — the tier-usage table shows inconsistency is always certified by the cheap `precheck`/`witness` tiers, with POCS/escalation only ever deciding the consistent/undecided split. The cheap tier therefore suffices for the forensic payload; escalation buys completeness, not detection.
 
 Localization recovers the planted culprit on the large majority of correctly-flagged cases, with the `localization_verdict` concentrating on `cell` for single-cell faults and `variable` for column faults, and `severity_max` increasing monotonically with perturbation magnitude — so the severity metric is a usable ordinal signal of how far beyond rounding the reported values sit.
 
