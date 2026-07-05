@@ -228,6 +228,103 @@ box_is_feasible <- function(R_reported, delta, witness = NULL,
 }
 
 # -----------------------------------------------------------------------------
+# 3b. Disattenuation DGP + heterogeneous-box oracle (Sim 4)
+# -----------------------------------------------------------------------------
+
+# Attenuate a construct matrix by per-variable reliabilities (the inverse of the
+# package's disattenuate): R_ij = C_ij * sqrt(rho_i * rho_j), diagonal 1. The
+# result is ALWAYS a valid correlation matrix -- attenuation shrinks correlations
+# toward the PSD interior -- so the "observed" matrix is valid by construction.
+attenuate <- function(C, reliability) {
+  p <- nrow(C)
+  rel <- if (length(reliability) == 1L) rep(reliability, p) else reliability
+  s <- sqrt(rel)
+  R <- outer(s, s) * C
+  diag(R) <- 1
+  R
+}
+
+# Draw per-variable reliabilities from a regime (low includes the poor-measure
+# range the tool is meant to catch).
+gen_reliability <- function(p, regime = c("low", "moderate", "high")) {
+  regime <- match.arg(regime)
+  rng <- switch(regime, low = c(0.30, 0.60), moderate = c(0.60, 0.85),
+                high = c(0.85, 0.98))
+  stats::runif(p, rng[1], rng[2])
+}
+
+# Independent construction of the disattenuated box (per-cell interval division
+# of the correlation box by the reliability box). Written from scratch so the
+# oracle does not depend on the package internals.
+disatten_box <- function(R, reliability, delta_R, delta_rel, eps = 1e-6) {
+  p <- nrow(R)
+  rel <- if (length(reliability) == 1L) rep(reliability, p) else reliability
+  rel_lo <- pmax(rel - delta_rel, eps); rel_hi <- pmin(rel + delta_rel, 1)
+  s_lo <- 1 / sqrt(rel_hi); s_hi <- 1 / sqrt(rel_lo)
+  lo <- matrix(0, p, p); hi <- matrix(0, p, p)
+  for (i in seq_len(p - 1L)) for (j in (i + 1L):p) {
+    rlo <- R[i, j] - delta_R; rhi <- R[i, j] + delta_R
+    pr <- c(s_lo[i]*s_lo[j]*rlo, s_lo[i]*s_lo[j]*rhi,
+            s_hi[i]*s_hi[j]*rlo, s_hi[i]*s_hi[j]*rhi)
+    lo[i, j] <- lo[j, i] <- max(min(pr), -1)
+    hi[i, j] <- hi[j, i] <- min(max(pr), 1)
+  }
+  diag(lo) <- 1; diag(hi) <- 1
+  list(lo = lo, hi = hi)
+}
+
+# Heterogeneous-box feasibility oracle: does a PSD matrix exist in the box
+# [lo, hi]? Same certificates as box_is_feasible(), generalised to per-cell
+# radii: infeasible if the box centre's distance to the PSD cone exceeds the box
+# radius sqrt(sum of squared per-cell radii); feasible via an exhibited PSD
+# witness (a known construct matrix, or the nearest-correlation matrix).
+box_is_feasible_hetero <- function(lo, hi, witness = NULL, margin = 1e-6,
+                                   try_nearcorr = TRUE) {
+  off <- upper.tri(lo) | lower.tri(lo)
+  center <- (lo + hi) / 2; diag(center) <- 1
+  r <- (hi - lo) / 2
+  box_radius <- sqrt(sum((r[off])^2))
+  dist <- dist_to_psd(center)
+  if (dist > box_radius + margin) {
+    return(list(status = "infeasible", dist = dist, radius = box_radius))
+  }
+  in_box_h <- function(X) {
+    if (any(abs(diag(X) - 1) > 1e-8)) return(FALSE)
+    all(X[off] >= lo[off] - 1e-9 & X[off] <= hi[off] + 1e-9)
+  }
+  if (!is.null(witness) && in_box_h(witness) && is_psd(witness)) {
+    return(list(status = "feasible", cert = "known_psd", dist = dist, radius = box_radius))
+  }
+  if (try_nearcorr) {
+    W <- oracle_nearcorr(center)
+    if (in_box_h(W) && is_psd(W)) {
+      return(list(status = "feasible", cert = "nearcorr", dist = dist, radius = box_radius))
+    }
+  }
+  list(status = "uncertain", dist = dist, radius = box_radius)
+}
+
+# Independent critical common-reliability oracle: bisect rho for the point
+# disattenuated matrix's feasibility (min eigenvalue >= 0), combined with the
+# range bound max|R_ij|. Validates the package's closed form rho* = 1 - lambda_min
+# WITHOUT using that formula.
+critical_rho_oracle <- function(R, tol = 1e-6, max_it = 60L) {
+  rho_range <- max(abs(R[upper.tri(R)]))
+  feas_psd <- function(rho) {
+    D <- R / rho; diag(D) <- 1
+    min(eigen(D, symmetric = TRUE, only.values = TRUE)$values) >= 0
+  }
+  if (!feas_psd(1)) return(list(rho_star = NA_real_, rho_psd = NA_real_, rho_range = rho_range))
+  lo <- 1e-4; hi <- 1
+  for (it in seq_len(max_it)) {
+    if (hi - lo < tol) break
+    m <- (lo + hi) / 2
+    if (feas_psd(m)) hi <- m else lo <- m
+  }
+  list(rho_star = max(hi, rho_range), rho_psd = hi, rho_range = rho_range)
+}
+
+# -----------------------------------------------------------------------------
 # 4. analyse() wrappers around the package under test
 # -----------------------------------------------------------------------------
 
@@ -280,6 +377,17 @@ analyse_localize <- function(R, decimals, culprit_cell = NULL, culprit_var = NUL
                  implicated = imp_str,
                  hit_cell = hit_cell, hit_variable = hit_variable,
                  severity_max = lf$severity$severity_max %||% NA_real_)
+}
+
+# Wrapper for check_disattenuated_psd(): returns the disattenuation verdict.
+analyse_disattenuated <- function(R, reliability, decimals, reliability_decimals,
+                                  max_plausible_r = 1) {
+  res <- tryCatch(psdness::check_disattenuated_psd(
+    R, reliability = reliability, decimals = decimals,
+    reliability_decimals = reliability_decimals, max_plausible_r = max_plausible_r),
+    error = function(e) NULL)
+  if (is.null(res)) return(tibble::tibble(verdict = "error"))
+  tibble::tibble(verdict = res$verdict)
 }
 
 # -----------------------------------------------------------------------------

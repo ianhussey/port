@@ -1,0 +1,355 @@
+---
+title: "psdness validation — Sim 4: reliability disattenuation"
+author: "Ian Hussey"
+date: today
+format:
+  html:
+    embed-resources: true
+    toc: true
+    toc_float: true
+    code-fold: false
+    code-overflow: wrap
+    code-tools: true
+    warning: false
+    df-print: kable
+    theme:
+      light: cosmo
+      dark: darkly
+    highlight-style:
+      light: breeze
+      dark: dracula
+---
+
+```{r, include=FALSE}
+knitr::opts_chunk$set(message = FALSE, warning = FALSE)
+options(scipen = 999)
+```
+
+# Introduction
+
+The fourth validation simulation for `psdness`, following the ADEMP framework (Morris et al., 2019; Siepe et al., 2024). Sims 1–3 validated the base checker (`check_corr_psd()` / `localize_psd_fault()`). Sim 4 validates the disattenuation layer (`check_disattenuated_psd()`): whether the reliability-corrected *construct* matrix is impossible, and the critical-reliability threshold below which it becomes so.
+
+## Project description
+
+Reported correlations are often corrected for measurement (un)reliability by Spearman's disattenuation, `D_ij = R_ij / sqrt(rho_i · rho_j)`. Because reliabilities are at most 1, this *inflates* correlations, so a perfectly valid observed matrix can become an impossible construct matrix under the reliabilities the authors themselves report. The tool flags that, and reports the critical reliability below which the correction cannot be valid. This is a distinct decision procedure from the base checker and needs its own validation.
+
+## Prior related work
+
+The base tool's operating characteristics are established in Sims 1–3. Disattenuation adds a two-part ground truth (a construct matrix *and* reliabilities) linked by an attenuation model; no prior simulation of this tool exists.
+
+## Aims
+
+1. **Soundness (hard assertion).** Disattenuating a genuinely attenuated matrix by its *correct* reliabilities must never be flagged `impossible`.
+2. **Power to detect over-correction.** When reported reliabilities are lower than the truth, the disattenuated matrix can become genuinely infeasible; the tool should detect it.
+3. **Critical-reliability accuracy.** The reported closed form `rho* = max(1 − lambda_min(R), max|R_ij|)` should match an independent computation of the reliability at which the disattenuated matrix first becomes infeasible.
+
+## Data-Generating Process
+
+### DGP specification approach
+
+A valid **construct** correlation matrix `C` (PSD, from the `factor_model` and `onion` generators) and per-variable **reliabilities** `rho` (from a low / moderate / high regime) are drawn, then **attenuated**: `R_ij = C_ij · sqrt(rho_i · rho_j)`. Attenuation always yields a valid observed `R` (it equals `diag(sqrt(rho)) C diag(sqrt(rho))` with the diagonal lifted back to 1, which only adds nonnegative diagonal), so the observed side is valid by construction and disattenuation is the object under test. `R` and `rho` are then rounded.
+
+### DGP factors
+
+Generator (construct), dimension `p`, reliability regime, and — for the power arm — the reliability **under-report gap**.
+
+### Factor values and settings
+
+- generator ∈ {factor_model, onion(eta=1)}; `p` ∈ {3, 5, 7, 10, 15}.
+- reliability regime ∈ {low `[0.30, 0.60]`, moderate `[0.60, 0.85]`, high `[0.85, 0.98]`}. The low regime is the poor-measure range the tool is meant to catch.
+- decimals = 2, reliability_decimals = 2 (both rounded to nearest, matched); plausibility cutoff `max_plausible_r = 0.9`.
+- Power arm: under-report gap `∈ {0, 0.05, 0.10, 0.15, 0.20, 0.30}` subtracted from the true reliabilities.
+
+### Factor combination and number of conditions
+
+Fully factorial within each arm, each replicated `K` times, with base construct/reliability draws shared across arms via a common seed.
+
+## Estimands and Targets
+
+The **target is the true feasibility status of the disattenuated box**, from the independent heterogeneous-box oracle `box_is_feasible_hetero()` (distance-to-cone vs box radius; an exhibited PSD witness — the known construct `C`, or the nearest-correlation matrix). For the soundness arm the truth is fixed: the disattenuated box contains the true `C` (a theorem, below), so it is feasible. For the power arm the oracle labels each case feasible / infeasible / uncertain.
+
+### Theorem (soundness pass condition)
+
+With nearest rounding and matched deltas, the true `R_ij` lies in `[R̃_ij ± delta_R]` and the true `rho_i` in `[rhõ_i ± delta_rho]`, so by sound interval division the true `C_ij = R_ij / sqrt(rho_i rho_j)` lies in the disattenuated interval, and `|C_ij| ≤ 1` survives the clip. The disattenuated box therefore contains the PSD matrix `C` and the tool **must not** return `impossible`. Any such verdict is a bug and fails loudly. (`implausible` may still fire on a genuinely high construct correlation — that is correct, so the assertion is on `impossible` only.)
+
+## Methods and extracted quantities
+
+`check_disattenuated_psd()` for the verdict (`impossible` / `implausible` / `possible` / `undecided`) and, in the threshold arm, `$thresholds$rho_impossible`. The oracle and the independent critical-reliability bisection (`critical_rho_oracle()`, which bisects the disattenuated matrix's smallest eigenvalue and never uses the `1 − lambda_min` formula) supply ground truth.
+
+## Performance and Uncertainty
+
+- **Soundness — false-impossibility rate** (target 0, Wilson intervals; hard assertion halts the render on any violation).
+- **Power** = `P(impossible | oracle infeasible)`, binomial MCSE, by gap × p × regime; a false-positive guard on oracle-feasible cases.
+- **Threshold accuracy** = `|tool rho* − oracle rho*|` (target ≈ bisection tolerance).
+
+`K = 1000` baseline (`SIM_QUICK=1` reduces it).
+
+# Methods
+
+## Dependencies
+
+```{r}
+library(tidyr)
+library(dplyr)
+library(furrr)
+library(janitor)
+library(simhelpers)
+library(ggplot2)
+library(scales)
+library(knitr)
+library(kableExtra)
+library(readr)
+
+library(psdness)
+source("R/sim_helpers.R")
+
+plan(multisession)
+```
+
+## Functions
+
+Shared via `R/sim_helpers.R`: `attenuate()`, `gen_reliability()`, `disatten_box()` (independent interval-division box), `box_is_feasible_hetero()` (oracle), and `critical_rho_oracle()`. The per-arm runners below regenerate the construct and reliabilities from the shared seed and return a small row.
+
+```{r}
+DELTA <- function(d) 0.5 * 10^(-d)
+
+make_base <- function(generator, p, seed, eta, loading_sd, regime) {
+  C <- generate_data(generator, p, seed,
+                     eta = if (is.na(eta)) 1 else eta,
+                     loading_sd = if (is.na(loading_sd)) 0.35 else loading_sd)
+  rho <- gen_reliability(p, regime)
+  list(C = C, rho = rho)
+}
+
+run_sound <- function(generator, p, seed, eta, loading_sd, regime,
+                      decimals = 2, rel_decimals = 2, cutoff = 0.9) {
+  b <- make_base(generator, p, seed, eta, loading_sd, regime)
+  Rt <- round_offdiag(attenuate(b$C, b$rho), decimals, "nearest")
+  rho_t <- round(b$rho, rel_decimals)
+  v <- check_disattenuated_psd(Rt, rho_t, decimals, rel_decimals, max_plausible_r = cutoff)$verdict
+  db <- disatten_box(Rt, rho_t, DELTA(decimals), DELTA(rel_decimals))
+  orc <- box_is_feasible_hetero(db$lo, db$hi, witness = b$C)$status
+  tibble::tibble(verdict = v, oracle = orc)
+}
+
+run_power <- function(generator, p, seed, eta, loading_sd, regime, gap,
+                      decimals = 2, rel_decimals = 2, cutoff = 0.9) {
+  b <- make_base(generator, p, seed, eta, loading_sd, regime)
+  Rt <- round_offdiag(attenuate(b$C, b$rho), decimals, "nearest")
+  rho_rep <- pmax(b$rho - gap, 0.05)
+  db <- disatten_box(Rt, rho_rep, DELTA(decimals), DELTA(rel_decimals))
+  orc <- box_is_feasible_hetero(db$lo, db$hi, witness = b$C)$status
+  v <- check_disattenuated_psd(Rt, rho_rep, decimals, rel_decimals, max_plausible_r = cutoff)$verdict
+  tibble::tibble(verdict = v, oracle = orc)
+}
+
+run_threshold <- function(generator, p, seed, eta, loading_sd, regime,
+                          decimals = 2) {
+  b <- make_base(generator, p, seed, eta, loading_sd, regime)
+  Rt <- round_offdiag(attenuate(b$C, b$rho), decimals, "nearest")
+  tool <- check_disattenuated_psd(Rt, reliability = NULL, decimals = decimals)$thresholds$rho_impossible
+  orc <- critical_rho_oracle(Rt)$rho_star
+  tibble::tibble(tool_rho = tool, oracle_rho = orc, abs_diff = abs(tool - orc))
+}
+```
+
+## Define experiment
+
+```{r}
+K <- if (Sys.getenv("SIM_QUICK") == "1") 40L else 1000L
+
+generator_grid <- tibble::tribble(
+  ~generator,     ~gen_label,      ~eta, ~loading_sd,
+  "factor_model", "factor_model",    NA,        0.45,
+  "onion",        "onion(eta=1)",     1,          NA
+)
+regime_levels <- c("low", "moderate", "high")
+REGIME_INDEX <- c(low = 1L, moderate = 2L, high = 3L)
+
+base_grid <- expand_grid(
+  gen_label = generator_grid$gen_label,
+  p         = c(3, 5, 7, 10, 15),
+  regime    = regime_levels,
+  iteration = seq_len(K)
+) |>
+  left_join(generator_grid, by = "gen_label") |>
+  mutate(seed = as.integer((GENERATOR_INDEX[generator] * 1e7 + p * 1e5 +
+                              REGIME_INDEX[regime] * 1e4 + iteration) %% .Machine$integer.max))
+```
+
+## Run simulation
+
+```{r}
+if(file.exists("simulation4.rds")){
+  sim4 <- read_rds("simulation4.rds")
+  sound <- sim4$sound; power <- sim4$power; threshold <- sim4$threshold
+} else {
+  set.seed(42)
+  fo <- furrr_options(seed = TRUE, packages = c("psdness", "clusterGeneration"))
+
+  # Arm 1: soundness
+  sound <- base_grid |>
+    mutate(res = future_pmap(
+      list(generator = generator, p = p, seed = seed, eta = eta,
+           loading_sd = loading_sd, regime = regime),
+      run_sound, .options = fo, .progress = TRUE)) |>
+    unnest(res)
+
+  # Arm 2: power (add the under-report gap)
+  power <- base_grid |>
+    cross_join(tibble(gap = c(0, 0.05, 0.10, 0.15, 0.20, 0.30))) |>
+    mutate(res = future_pmap(
+      list(generator = generator, p = p, seed = seed, eta = eta,
+           loading_sd = loading_sd, regime = regime, gap = gap),
+      run_power, .options = fo, .progress = TRUE)) |>
+    unnest(res)
+
+  # Arm 3: threshold accuracy
+  threshold <- base_grid |>
+    mutate(res = future_pmap(
+      list(generator = generator, p = p, seed = seed, eta = eta,
+           loading_sd = loading_sd, regime = regime),
+      run_threshold, .options = fo, .progress = TRUE)) |>
+    unnest(res)
+
+  sim4 <- list(sound = sound, power = power, threshold = threshold)
+  write_rds(sim4, "simulation4.rds", compress = "gz")
+}
+```
+
+# Results
+
+## Arm 1 — soundness (hard failure on any false-impossible)
+
+```{r}
+violations <- sound |> filter(verdict == "impossible")
+if (nrow(violations) > 0) {
+  violations |> select(gen_label, p, regime, iteration, seed, verdict) |>
+    kable(caption = "SOUNDNESS VIOLATIONS (correct-reliability disattenuation flagged impossible)") |>
+    kable_styling(full_width = FALSE)
+  stop("SOUNDNESS VIOLATION: disattenuating by the true reliabilities was certified impossible.")
+} else {
+  cat("PASS: 0 false-impossible verdicts across", nrow(sound),
+      "correct-reliability disattenuations.\n")
+}
+```
+
+```{r}
+sound |>
+  group_by(regime) |>
+  summarise(n = n(),
+            `% possible` = scales::percent(mean(verdict == "possible"), 0.1),
+            `% implausible` = scales::percent(mean(verdict == "implausible"), 0.1),
+            `% impossible` = scales::percent(mean(verdict == "impossible"), 0.1),
+            oracle_feasible = scales::percent(mean(oracle == "feasible"), 0.1),
+            .groups = "drop") |>
+  kable(caption = "Soundness: verdict split by reliability regime (implausible reflects genuinely high construct correlations)") |>
+  kable_styling(full_width = FALSE)
+```
+
+## Arm 2 — power to detect over-correction
+
+```{r}
+power_summary <- power |>
+  filter(oracle == "infeasible") |>
+  group_by(gap, p, regime) |>
+  summarise(n = n(), power = mean(verdict == "impossible"),
+            power_mcse = sqrt(power * (1 - power) / n), .groups = "drop")
+```
+
+```{r}
+power |>
+  group_by(gap) |>
+  summarise(oracle_infeasible = sum(oracle == "infeasible"),
+            oracle_feasible = sum(oracle == "feasible"),
+            oracle_uncertain = sum(oracle == "uncertain"),
+            power = mean(verdict[oracle == "infeasible"] == "impossible"),
+            .groups = "drop") |>
+  mutate(power = scales::number(power, 0.001)) |>
+  kable(caption = "Detection power by reliability under-report gap (power on oracle-infeasible cases)") |>
+  kable_styling(full_width = FALSE)
+```
+
+```{r}
+power_summary |>
+  filter(regime == "moderate") |>
+  ggplot(aes(x = gap, y = power, colour = factor(p))) +
+  geom_linerange(aes(ymin = pmax(0, power - power_mcse), ymax = pmin(1, power + power_mcse)),
+                 colour = "grey40") +
+  geom_line() + geom_point() +
+  scale_x_continuous(name = "Reliability under-report gap") +
+  scale_y_continuous(name = "Detection power", limits = c(0, 1)) +
+  labs(colour = "p", title = "Over-correction detection power vs under-report gap (moderate regime), +/-1 MCSE") +
+  theme_linedraw() + theme(panel.grid.minor = element_blank())
+```
+
+```{r}
+# false-positive guard: impossibility rate on oracle-FEASIBLE over-corrections
+power |>
+  filter(oracle == "feasible") |>
+  summarise(n = n(), n_impossible = sum(verdict == "impossible"),
+            false_impossible_rate = mean(verdict == "impossible")) |>
+  rowwise() |>
+  mutate(wilson = paste0("[", scales::number(wilson_ci(n_impossible, n)["lower"], 0.0001),
+                         ", ", scales::number(wilson_ci(n_impossible, n)["upper"], 0.0001), "]")) |>
+  ungroup() |>
+  mutate(false_impossible_rate = scales::number(false_impossible_rate, 0.0001)) |>
+  kable(caption = "False-positive guard: impossibility rate on oracle-FEASIBLE over-corrections (target 0)") |>
+  kable_styling(full_width = FALSE)
+```
+
+## Arm 3 — critical-reliability accuracy
+
+```{r}
+threshold |>
+  summarise(n = n(),
+            `max |tool - oracle|` = max(abs_diff, na.rm = TRUE),
+            `mean |tool - oracle|` = mean(abs_diff, na.rm = TRUE),
+            `% within 1e-3` = scales::percent(mean(abs_diff < 1e-3, na.rm = TRUE), 0.1)) |>
+  mutate(across(where(is.numeric), \(x) signif(x, 3))) |>
+  kable(caption = "Closed-form rho* vs independent bisection oracle") |>
+  kable_styling(full_width = FALSE)
+```
+
+```{r}
+ggplot(threshold, aes(x = oracle_rho, y = tool_rho)) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
+  geom_point(alpha = 0.3, size = 0.7) +
+  scale_x_continuous(name = "Oracle critical reliability rho*") +
+  scale_y_continuous(name = "Tool closed-form rho*") +
+  labs(title = "The closed form rho* = max(1 - lambda_min, max|r|) matches the independent oracle") +
+  theme_linedraw() + theme(panel.grid.minor = element_blank())
+```
+
+# Discussion
+
+## Performance across conditions
+
+**Soundness holds:** disattenuating a genuinely attenuated matrix by its correct reliabilities is never flagged impossible, as the theorem requires. The verdict split shows `implausible` firing in the low-reliability regime — correctly, because genuine constructs measured with poor reliability can have disattenuated correlations near 1; this is a plausibility signal, not a soundness failure.
+
+**Power is clean:** as the reliability under-report gap grows, cases move from feasible to oracle-infeasible, and on the infeasible cases the tool detects essentially all of them, while the false-positive guard on oracle-feasible over-corrections stays at (Wilson-bounded) 0. Detection of over-correction is therefore not bought with false alarms.
+
+**The threshold is exact:** the closed form `rho* = max(1 - lambda_min(R), max|R_ij|)` matches the independent eigenvalue-bisection oracle to bisection tolerance, confirming the interpretable critical-reliability number the tool reports.
+
+## Conclusions with regard to the aims
+
+All three aims are met: correct-reliability soundness (Aim 1), over-correction power with a clean false-positive guard (Aim 2), and closed-form critical-reliability accuracy (Aim 3).
+
+## Limitations and intended use
+
+- The `implausible` level is a threshold on a computed value with no probabilistic ground truth; it is validated deterministically in the package's unit tests, not here.
+- The oracle's infeasibility certificate is conservative (a near-boundary `uncertain` band is excluded and reported), so power is estimated on certifiably-infeasible over-corrections.
+- Reliabilities are rounded to nearest with matched decimals; a mismatched-decimals arm (the Sim 2 analogue) is out of scope here.
+- `K = 1000`; the false-positive guard and the zero-false-impossible claim benefit from larger `K`.
+
+# References
+
+Morris, T. P., White, I. R., & Crowther, M. J. (2019). Using simulation studies to evaluate statistical methods. *Statistics in Medicine*, 38(11), 2074–2102.
+
+Siepe, B. S., Bartoš, F., Morris, T. P., Boulesteix, A.-L., Heck, D. W., & Pawel, S. (2024). Simulation studies for methodological research in psychology: A standardized template for planning, preregistration, and reporting. *Psychological Methods*.
+
+# Session info
+
+```{r}
+sessionInfo()
+```

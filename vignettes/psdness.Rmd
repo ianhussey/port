@@ -204,6 +204,50 @@ R_miss[1, 4] <- R_miss[4, 1] <- NA        # pretend this correlation was unrepor
 implied_interval(R_miss)
 ```
 
+## Disattenuated correlations
+
+Reported correlations are often corrected for measurement (un)reliability —
+Spearman's disattenuation, `D_ij = R_ij / sqrt(rho_i · rho_j)`. Because
+reliabilities are ≤ 1 this *inflates* every correlation, so a valid observed
+matrix can become an **impossible** construct matrix under the reliabilities the
+authors themselves report. `check_disattenuated_psd()` checks that, taking the
+rounding of both the correlations and the reliabilities into account.
+
+With a low reliability, the correction easily pushes correlations past 1:
+
+```{r}
+R_obs <- matrix(c(1, 0.60, 0.55, 0.60, 1, 0.50, 0.55, 0.50, 1), 3, 3)
+check_disattenuated_psd(R_obs, reliability = 0.34, decimals = 2, max_plausible_r = 0.9)
+```
+
+`max_plausible_r` adds a third verdict level between `possible` and `impossible`:
+a corrected correlation above the cutoff (but ≤ 1) is `implausible` rather than
+outright impossible — two supposedly distinct constructs correlating at 0.97 is a
+red flag, not a mathematical contradiction:
+
+```{r}
+check_disattenuated_psd(R_obs, reliability = 0.62, decimals = 2, max_plausible_r = 0.9)
+```
+
+The impossibility can also bind on positive semidefiniteness rather than on any
+single correlation exceeding 1 — the subtler failure only this tool catches.
+
+When reliabilities are **not** reported, pass `reliability = NULL` to get the
+*critical reliability*: how reliable the measures would have had to be for the
+disattenuation to be valid. An optional `plausible_floor` turns that into a
+reachability statement against what the measures could realistically attain:
+
+```{r}
+check_disattenuated_psd(R_obs, reliability = NULL, decimals = 2,
+                        max_plausible_r = 0.9, plausible_floor = 0.3)
+```
+
+The critical reliability is governed by the observed matrix's smallest
+eigenvalue: `rho*_psd = 1 − lambda_min(R)`, with a second constraint
+`rho*_range = max|R_ij|` (below which a corrected correlation exceeds 1). The
+impossibility side reuses the same witness/Rump engine as `check_corr_psd()`, so
+it carries the same floating-point guarantee.
+
 ## A note on the engine
 
 Everything above uses one self-contained numerical engine: a verified

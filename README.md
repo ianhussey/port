@@ -243,6 +243,22 @@ correlation structure is impossible because of *unmeasured population* variables
 or the "add a variable and it becomes impossible" construction — which concern
 populations and hypotheses rather than a specific reported matrix.
 
+## Disattenuated correlations
+
+Correlations corrected for measurement (un)reliability —
+`D_ij = R_ij / sqrt(rho_i·rho_j)` — are *inflated*, so a valid observed matrix can
+become an impossible construct matrix under the reliabilities the authors report.
+`check_disattenuated_psd()` decides whether the disattenuated matrix is
+**impossible** (no PSD matrix fits, or a corrected correlation exceeds 1),
+**implausible** (a corrected correlation exceeds a `max_plausible_r` cutoff, e.g.
+0.9, but stays ≤ 1), or **possible**, taking the rounding of both the correlations
+and the reliabilities into account. When reliabilities are unreported it returns
+the **critical reliability** `rho* = max(1 − lambda_min(R), max|R_ij|)` — how
+reliable the measures must have been — with an optional plausibility floor for a
+reachability statement. The impossibility side reuses the same witness/Rump engine,
+so it carries the same floating-point guarantee. See the vignette for worked
+examples.
+
 ## API
 
 | function | purpose |
@@ -255,6 +271,8 @@ populations and hypotheses rather than a specific reported matrix.
 | `impossible_triples(R, decimals = 2, ...)` | standalone component B (rounding-robust impossible triples) → tibble |
 | `implied_interval(R, cells, ...)` | interval a cell could occupy; imputes a missing (`NA`) entry → tibble |
 | `localize_psd_fault_batch(mats, ...)` | localize over a list of matrices → tibble |
+| `disattenuate(R, reliability)` | Spearman reliability disattenuation `D_ij = R_ij/sqrt(rho_i·rho_j)` |
+| `check_disattenuated_psd(R, reliability, ..., max_plausible_r)` | is the disattenuated matrix impossible / implausible / possible, rounding-aware; or the critical reliability when unreported |
 
 ## Provenance of the methods
 
