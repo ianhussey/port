@@ -115,61 +115,69 @@ check_corr_psd <- function(R, decimals = 2, delta = NULL, tau = NULL) {
     stop("`tau` must be a single non-negative finite number.", call. = FALSE)
   }
 
-  # Tier 1: precheck (out-of-range reported entry).
-  pc <- .precheck_range(R, delta)
-  if (!is.null(pc)) {
-    return(.new_corr_psd_check(
-      verdict = "impossible", tier = "precheck", delta = delta, p = p,
-      detail = pc,
-      note = sprintf(
-        "Reported entry R[%d,%d] = %s is out of range: |%s| - delta = %.4g > 1.",
-        pc$i, pc$j, format(pc$value), format(pc$value), abs(pc$value) - delta)))
-  }
+  # The tiered logic lives in build(); we attach R to the result at a single
+  # exit point so downstream tools (e.g. localize_psd_fault()) can recover it.
+  build <- function() {
+    # Tier 1: precheck (out-of-range reported entry).
+    pc <- .precheck_range(R, delta)
+    if (!is.null(pc)) {
+      return(.new_corr_psd_check(
+        verdict = "impossible", tier = "precheck", delta = delta, p = p,
+        detail = pc,
+        note = sprintf(
+          "Reported entry R[%d,%d] = %s is out of range: |%s| - delta = %.4g > 1.",
+          pc$i, pc$j, format(pc$value), format(pc$value), abs(pc$value) - delta)))
+    }
 
-  # Tier 2: witness-vector bound (primary impossibility path).
-  w <- .witness_search(R, delta)
-  if (!is.null(w) && w$B_upper < 0) {
-    return(.new_corr_psd_check(
-      verdict = "impossible", tier = "witness", delta = delta, p = p,
-      witness = w$v, margin = w$M_hat, b_upper = w$B_upper))
-  }
+    # Tier 2: witness-vector bound (primary impossibility path).
+    w <- .witness_search(R, delta)
+    if (!is.null(w) && w$B_upper < 0) {
+      return(.new_corr_psd_check(
+        verdict = "impossible", tier = "witness", delta = delta, p = p,
+        witness = w$v, margin = w$M_hat, b_upper = w$B_upper))
+    }
 
-  b_upper <- if (is.null(w)) NA_real_ else w$B_upper
-  margin  <- if (is.null(w)) NA_real_ else w$M_hat
+    b_upper <- if (is.null(w)) NA_real_ else w$B_upper
+    margin  <- if (is.null(w)) NA_real_ else w$M_hat
 
-  # Possibility: try to exhibit and verify an in-box PSD matrix.
-  cons <- .construct_possible(R, delta)
-  if (!is.null(cons)) {
-    return(.new_corr_psd_check(
-      verdict = "possible", tier = "witness", delta = delta, p = p,
+    # Possibility: try to exhibit and verify an in-box PSD matrix.
+    cons <- .construct_possible(R, delta)
+    if (!is.null(cons)) {
+      return(.new_corr_psd_check(
+        verdict = "possible", tier = "witness", delta = delta, p = p,
+        margin = margin, b_upper = b_upper,
+        certified_matrix = cons$X, note = cons$how))
+    }
+
+    # No construction certified. If the witness margin is comfortably positive we
+    # report "possible" (not shown impossible); otherwise we are in the ambiguous
+    # zone and escalate.
+    if (!is.na(b_upper) && b_upper > tau) {
+      return(.new_corr_psd_check(
+        verdict = "possible", tier = "witness", delta = delta, p = p,
+        margin = margin, b_upper = b_upper,
+        note = paste("not shown impossible (witness margin above tau);",
+                     "no in-box PSD matrix was certified")))
+    }
+
+    # Ambiguous zone: escalate to the self-contained POCS possibility search.
+    pocs <- .pocs_possible(R, delta)
+    if (!is.null(pocs)) {
+      return(.new_corr_psd_check(
+        verdict = "possible", tier = "pocs", delta = delta, p = p,
+        margin = margin, b_upper = b_upper,
+        certified_matrix = pocs$X, note = pocs$how))
+    }
+
+    .new_corr_psd_check(
+      verdict = "undecided", tier = "pocs", delta = delta, p = p,
       margin = margin, b_upper = b_upper,
-      certified_matrix = cons$X, note = cons$how))
+      note = paste("witness margin within the precision-limited zone [0, tau]",
+                   "and no in-box PSD matrix could be constructed or found by",
+                   "alternating projections"))
   }
 
-  # No construction certified. If the witness margin is comfortably positive we
-  # report "possible" (not shown impossible); otherwise we are in the ambiguous
-  # zone and escalate.
-  if (!is.na(b_upper) && b_upper > tau) {
-    return(.new_corr_psd_check(
-      verdict = "possible", tier = "witness", delta = delta, p = p,
-      margin = margin, b_upper = b_upper,
-      note = paste("not shown impossible (witness margin above tau);",
-                   "no in-box PSD matrix was certified")))
-  }
-
-  # Ambiguous zone: escalate to the self-contained POCS possibility search.
-  pocs <- .pocs_possible(R, delta)
-  if (!is.null(pocs)) {
-    return(.new_corr_psd_check(
-      verdict = "possible", tier = "pocs", delta = delta, p = p,
-      margin = margin, b_upper = b_upper,
-      certified_matrix = pocs$X, note = pocs$how))
-  }
-
-  .new_corr_psd_check(
-    verdict = "undecided", tier = "pocs", delta = delta, p = p,
-    margin = margin, b_upper = b_upper,
-    note = paste("witness margin within the precision-limited zone [0, tau]",
-                 "and no in-box PSD matrix could be constructed or found by",
-                 "alternating projections"))
+  res <- build()
+  attr(res, "R") <- R
+  res
 }

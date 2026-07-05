@@ -159,6 +159,51 @@ check_corr_psd_batch(mats, decimals = 2)
 The batch helper logs how often the POCS escalation tier fired — it is expected
 to be rare, since the cheap rigorous tiers settle most cases.
 
+## Fault localization
+
+When a matrix is impossible-given-rounding, `localize_psd_fault()` supports
+semi-automated inference about **where** the non-PSDness comes from and **how
+severe** it is. Non-PSD is a *global* property, so a unique culprit is generally
+under-identified — the tool reports an honest localization class and never
+manufactures a single culprit when the evidence only supports a set.
+
+Everything is box-aware: every feasibility/interval computation respects the
+rounding box, never the reported point values. Four independent, box-aware
+components feed a deterministic ruleset:
+
+- **A. per-cell interval / sole culprit** — for each cell, the interval it could
+  take given the others within rounding; a nonempty interval marks a sole-culprit
+  candidate with a `required_edit` beyond rounding.
+- **B. impossible triples** — triples whose 3×3 box-max determinant is provably
+  negative, via a sound interval bound on `det = (1−b²)(1−c²) − (a−bc)²`. Pure
+  arithmetic; exposed on its own as `impossible_triples()`.
+- **C. leave-one-out** — variables whose removal restores feasibility.
+- **D. sparse correction / severity** — the smallest set of cells whose joint
+  correction restores feasibility, plus severity measures.
+
+The verdict is one of `cell`, `cell_tentative`, `triad`, `variable`, `joint`,
+`diffuse`, or `none`.
+
+```r
+R <- matrix(c(1, 0.9, 0.9, 0.9, 1, -0.9, 0.9, -0.9, 1), 3, 3)
+localize_psd_fault(R, decimals = 2)
+#> <psd_fault>
+#>   Impossible given rounding (delta = 0.005).
+#>   Verdict: TRIAD - Attributable to an inconsistent triangle (three cells)
+#>     cells: (1,2), (1,3), (2,3)
+#>     Not separable: any one of the three edits would resolve the violation.
+#>   Severity: largest single edit needed 0.395 (egregious ...; delta = 0.005);
+#>             total mass (Frobenius) 0.684; best achievable lambda_min -0.79.
+```
+
+**Same engine, no solver.** The localizer reuses the base package's primitives
+throughout — POCS as a *search* (finding feasible points, bisecting for
+intervals and severities) and the witness bound + Rump verification as the
+*certificates*. Impossibility sub-claims (an empty per-cell interval; "removal
+still impossible"; an impossible triple) are sound; feasibility sub-claims
+exhibit a Rump-verified witnessing matrix. Pass `verify = FALSE` to skip the
+certification and run search-based only. No CVXR or other optimizer is required.
+
 ## API
 
 | function | purpose |
@@ -166,7 +211,10 @@ to be rare, since the cheap rigorous tiers settle most cases.
 | `check_corr_psd(R, decimals = 2, delta = NULL, tau = NULL)` | main entry point; returns a `corr_psd_check` |
 | `certificate(x)` | extract the witness vector and margin |
 | `check_corr_psd_batch(mats, ...)` | screen a list of matrices → tibble |
-| `print(x)` | human-readable summary, with the certificate arithmetic when impossible |
+| `localize_psd_fault(x, verify = TRUE, sparse_k = 3, ...)` | localize the fault in an impossible matrix; returns a `psd_fault` |
+| `fault_evidence(x)` | the raw A–D evidence behind a `psd_fault` |
+| `impossible_triples(R, decimals = 2, ...)` | standalone component B (rounding-robust impossible triples) → tibble |
+| `localize_psd_fault_batch(mats, ...)` | localize over a list of matrices → tibble |
 
 ## References
 
