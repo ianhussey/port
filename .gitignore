@@ -2,3 +2,6 @@
 /Meta/
 doc/
 Meta/
+
+*.DS_store
+*.Rhistory
