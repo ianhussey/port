@@ -118,7 +118,8 @@ disattenuate <- function(R, reliability) {
   structure(list(...), class = "disattenuation_check")
 }
 
-# Common-rho point thresholds (the interpretable narrative numbers).
+# Common-rho point thresholds (the interpretable narrative numbers, computed at
+# the exact reported values; the box-sound counterpart is .rho_impossible_box).
 .rho_thresholds <- function(R, cutoff) {
   lam_min <- min(eigen(R, symmetric = TRUE, only.values = TRUE)$values)
   max_r <- max(abs(R[upper.tri(R)]))
@@ -129,6 +130,34 @@ disattenuate <- function(R, reliability) {
        # which constraint sets each boundary
        impossible_binds = if ((1 - lam_min) >= max_r) "PSD" else "range",
        plausible_binds = if (cutoff < 1 && (max_r / cutoff) > (1 - lam_min)) "range" else "PSD")
+}
+
+# Box-sound critical reliability: the largest common rho at which the
+# disattenuated BOX (correlations rounded to delta_R; reliabilities treated as
+# exact, since rho is the variable being solved for) is still certifiably
+# impossible via the rigorous box witness. The claim "the disattenuation is
+# impossible for any common reliability <= rho*_box" is therefore sound even
+# allowing for rounding of the reported correlations -- unlike the point closed
+# form, which ignores the rounding box. Located by bisection (the certified-
+# impossible region is an interval (0, rho*]).
+# Returns 0 when no reliability >= floor_rho is certifiably impossible
+# ("vacuous"), and NA when the observed box is itself impossible at rho = 1.
+.rho_impossible_box <- function(R, delta_R, observed_impossible,
+                                floor_rho = 0.01, tol = 1e-4, max_it = 30L) {
+  if (isTRUE(observed_impossible)) return(NA_real_)
+  cert_imp <- function(rho) {
+    iv <- .disattenuated_intervals(R, rho, delta_R, delta_rel = 0)
+    if (any(iv$min_abs[upper.tri(iv$min_abs)] > 1)) return(TRUE)   # range precheck
+    isTRUE(.box_impossible(iv$lo, iv$hi, iv$off)$impossible)
+  }
+  if (!cert_imp(floor_rho)) return(0)
+  lo <- floor_rho; hi <- 1
+  for (it in seq_len(max_it)) {
+    if (hi - lo < tol) break
+    m <- (lo + hi) / 2
+    if (cert_imp(m)) lo <- m else hi <- m
+  }
+  lo
 }
 
 #' Check whether a disattenuated correlation matrix can be valid
@@ -186,6 +215,8 @@ check_disattenuated_psd <- function(R, reliability = NULL, decimals = 2,
 
   observed <- check_corr_psd(R, decimals = decimals)$verdict
   thr <- .rho_thresholds(R, cutoff)
+  thr$rho_impossible_box <- .rho_impossible_box(
+    R, delta_R, observed_impossible = identical(observed, "impossible"))
 
   common <- list(observed_verdict = observed, thresholds = thr,
                  max_plausible_r = cutoff, decimals = decimals,
@@ -202,7 +233,15 @@ check_disattenuated_psd <- function(R, reliability = NULL, decimals = 2,
   iv <- .disattenuated_intervals(R, rel, delta_R, delta_rel)
   fwd <- .disatten_forward(iv, cutoff)
   reported_rho <- if (length(reliability) == 1L) reliability else NA_real_
-  headroom <- if (!is.na(reported_rho)) reported_rho - thr$rho_impossible else NA_real_
+  # headroom is measured against the box-sound boundary (falls back to the point
+  # closed form only when the box bisection is unavailable)
+  rho_anchor <- if (is.finite(thr$rho_impossible_box %||% NA_real_) &&
+                    (thr$rho_impossible_box %||% 0) > 0) {
+    thr$rho_impossible_box
+  } else {
+    thr$rho_impossible
+  }
+  headroom <- if (!is.na(reported_rho)) reported_rho - rho_anchor else NA_real_
   max_disattenuated <- max(abs(iv$center[upper.tri(iv$center)]))
 
   do.call(.new_disattenuation_check,

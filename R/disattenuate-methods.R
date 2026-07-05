@@ -21,12 +21,20 @@ print.disattenuation_check <- function(x, digits = 2, ...) {
     if (identical(which_bind, "PSD")) "loses positive semidefiniteness"
     else "produces a corrected correlation above 1"
   }
+  # Box-sound boundary when available; the point closed form as reference.
+  rho_box <- thr$rho_impossible_box
+  rho_hdl <- if (is.finite(rho_box %||% NA_real_) && (rho_box %||% 0) > 0) rho_box
+             else thr$rho_impossible
+  box_txt <- if (identical(rho_hdl, rho_box)) {
+    sprintf(" (rounding-aware; boundary at exact reported values: %.*f)",
+            digits, thr$rho_impossible)
+  } else ""
 
   # ---- critical mode (reliabilities not reported) -------------------------
   if (identical(x$mode, "critical")) {
     cat(sprintf(paste0("  Critical reliability: the disattenuated matrix is valid ",
-                       "only for reliability >= %.*f (it %s below that).\n"),
-                digits, thr$rho_impossible, bind_txt(thr$impossible_binds)))
+                       "only for reliability >= %.*f%s (it %s below that).\n"),
+                digits, rho_hdl, box_txt, bind_txt(thr$impossible_binds)))
     if (cut < 1) {
       cat(sprintf(paste0("  It is also *plausible* (all corrected |r| <= %.2f) ",
                          "only for reliability >= %.*f.\n"),
@@ -34,17 +42,17 @@ print.disattenuation_check <- function(x, digits = 2, ...) {
     }
     fl <- x$plausible_floor
     if (!is.null(fl)) {
-      if (fl < thr$rho_impossible) {
+      if (fl < rho_hdl) {
         cat(sprintf(paste0("  Taking %.*f as the lowest reliability these measures ",
           "plausibly attain, the whole range [%.*f, %.*f) yields an IMPOSSIBLE ",
           "construct matrix: unless every measure was unusually reliable ",
           "(>= %.*f), the disattenuation cannot be valid.\n"),
-          digits, fl, digits, fl, digits, thr$rho_impossible, digits, thr$rho_impossible))
+          digits, fl, digits, fl, digits, rho_hdl, digits, rho_hdl))
       } else {
         cat(sprintf(paste0("  Even the lowest reliability these measures plausibly ",
           "attain (%.*f) clears the %.*f threshold, so no reachable reliability ",
           "makes the disattenuated matrix impossible.\n"),
-          digits, fl, digits, thr$rho_impossible))
+          digits, fl, digits, rho_hdl))
       }
     }
     cat(sprintf("  (lambda_min(observed) = %.*f; max|r| = %.*f.)\n",
@@ -77,8 +85,8 @@ print.disattenuation_check <- function(x, digits = 2, ...) {
   }
 
   # thresholds + headroom (common-reliability model)
-  cat(sprintf(paste0("    Valid only if reliability >= %.*f (it %s below that)"),
-              digits, thr$rho_impossible, bind_txt(thr$impossible_binds)))
+  cat(sprintf(paste0("    Valid only if reliability >= %.*f%s (it %s below that)"),
+              digits, rho_hdl, box_txt, bind_txt(thr$impossible_binds)))
   if (cut < 1) {
     cat(sprintf("; valid AND plausible only if >= %.*f", digits, thr$rho_plausible))
   }

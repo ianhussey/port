@@ -15,6 +15,54 @@
 # POCS is only ever a search; the certificates are witness + Rump.
 # -----------------------------------------------------------------------------
 
+# Build the reported-value box for the general front door: per-cell decimals or
+# delta (scalar or p x p matrix), a rounding rule, and NA cells freed to [-1,1].
+# Interval per reported value r at width w = 10^(-d):
+#   nearest : [r - w/2, r + w/2]        (error of round-half at most w/2)
+#   floor   : [r, r + w]
+#   ceiling : [r - w, r]
+#   truncate: toward zero -- r >= 0 gives [r, r + w]; r < 0 gives [r - w, r];
+#             r == 0 gives [-w, w] (either sign truncates to zero).
+# Open interval ends are closed (a sound superset). Returns raw (unclipped) and
+# clipped bounds, the NA mask, per-cell emptiness (raw interval entirely outside
+# [-1, 1]), and the maximum half-width (used for tau and reporting).
+.reported_box <- function(R, decimals, delta, rounding) {
+  p <- nrow(R)
+  off <- upper.tri(R) | lower.tri(R)
+  na_mask <- is.na(R) & off
+
+  if (!is.null(delta)) {
+    dmat <- if (is.matrix(delta)) delta else matrix(delta, p, p)
+    lo_raw <- R - dmat
+    hi_raw <- R + dmat
+  } else {
+    dec <- if (is.matrix(decimals)) decimals else matrix(decimals, p, p)
+    w <- 10^(-dec)
+    if (identical(rounding, "nearest")) {
+      lo_raw <- R - w / 2; hi_raw <- R + w / 2
+    } else if (identical(rounding, "floor")) {
+      lo_raw <- R; hi_raw <- R + w
+    } else if (identical(rounding, "ceiling")) {
+      lo_raw <- R - w; hi_raw <- R
+    } else {  # truncate (toward zero)
+      lo_raw <- ifelse(R > 0, R, R - w)
+      hi_raw <- ifelse(R < 0, R, R + w)
+    }
+  }
+  lo_raw[na_mask] <- -1
+  hi_raw[na_mask] <- 1
+
+  empty <- off & !na_mask & (lo_raw > 1 | hi_raw < -1)
+  lo <- pmax(lo_raw, -1); hi <- pmin(hi_raw, 1)
+  diag(lo) <- 1; diag(hi) <- 1
+  # reporting half-width: over the REPORTED cells (freed NA cells excluded)
+  reported <- off & !na_mask
+  half_max <- if (any(reported)) max((hi_raw - lo_raw)[reported]) / 2 else 1
+
+  list(lo = lo, hi = hi, lo_raw = lo_raw, hi_raw = hi_raw, off = off,
+       na_mask = na_mask, empty = empty, half_max = half_max)
+}
+
 # Off-diagonal bounds for the uniform rounding box around R.
 .box_bounds <- function(R, delta) {
   p <- nrow(R)
@@ -79,11 +127,36 @@
   list(v = v, M_hat = M_hat, E = E, B_upper = M_hat + E)
 }
 
+# Fixed-point polish for the heterogeneous box (see .polish_witness in
+# witness.R): X(v) picks the box-optimal entry per pair, the next direction is
+# its bottom eigenvector. Sound by construction (every iterate is evaluated
+# through the rigorous box bound).
+.polish_witness_box <- function(lo, hi, off, v, max_iter = 8L) {
+  best <- .witness_box_bound(lo, hi, off, v)
+  p <- nrow(lo)
+  for (k in seq_len(max_iter)) {
+    vv <- outer(v, v)
+    X <- ifelse(vv >= 0, hi, lo)
+    X[!off] <- 0
+    diag(X) <- 1
+    v_new <- eigen(X, symmetric = TRUE)$vectors[, p]
+    wb <- .witness_box_bound(lo, hi, off, v_new)
+    if (wb$B_upper < best$B_upper - 1e-15) {
+      best <- wb
+      v <- v_new
+    } else {
+      break
+    }
+  }
+  best
+}
+
 # Decide whether a heterogeneous box is impossible (no in-box PSD matrix), using
 # a search over sound witness directions. Returns list(impossible, witness,
 # b_upper, margin). Directions: bottom eigenvectors of the box midpoint, all
-# coordinate pairs, and (small p) 3x3 submatrix eigenvectors -- the same family
-# that powers the base checker, all evaluated with the rigorous box bound.
+# coordinate pairs, (small p) 3x3 submatrix eigenvectors, and the p regression-
+# residual directions of the midpoint -- the same family that powers the base
+# checker, all evaluated with the rigorous box bound, then polished.
 .box_impossible <- function(lo, hi, off, triples_max_p = 12L) {
   p <- nrow(lo)
   mid <- matrix(0, p, p)
@@ -107,12 +180,20 @@
       cands[[length(cands) + 1L]] <- vv
     }
   }
+  for (i in seq_len(p)) {
+    d <- .rsquared_direction(mid, i)
+    if (!is.null(d)) cands[[length(cands) + 1L]] <- d$v
+  }
 
   best <- NULL
   for (v in cands) {
     if (all(v == 0)) next
     wb <- .witness_box_bound(lo, hi, off, v)
     if (is.null(best) || wb$B_upper < best$B_upper) best <- wb
+  }
+  if (!is.null(best)) {
+    pol <- .polish_witness_box(lo, hi, off, best$v)
+    if (pol$B_upper < best$B_upper) best <- pol
   }
   list(impossible = !is.null(best) && best$B_upper < 0,
        witness = if (is.null(best)) NULL else best$v,

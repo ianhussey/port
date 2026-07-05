@@ -41,7 +41,7 @@ The base tool's operating characteristics are established in Sims 1–3. Disatte
 
 1. **Soundness (hard assertion).** Disattenuating a genuinely attenuated matrix by its *correct* reliabilities must never be flagged `impossible`.
 2. **Power to detect over-correction.** When reported reliabilities are lower than the truth, the disattenuated matrix can become genuinely infeasible; the tool should detect it.
-3. **Critical-reliability accuracy.** The reported closed form `rho* = max(1 − lambda_min(R), max|R_ij|)` should match an independent computation of the reliability at which the disattenuated matrix first becomes infeasible.
+3. **Critical-reliability accuracy.** The reported closed form `rho* = max(1 − lambda_min(R), max|R_ij|)` should match an independent computation of the reliability at which the disattenuated matrix first becomes infeasible; and the tool's *box-sound* `rho_impossible_box` (the certified rounding-aware boundary) must sit at or below that value, with impossibility genuinely holding just below it.
 
 ## Data-Generating Process
 
@@ -147,9 +147,22 @@ run_threshold <- function(generator, p, seed, eta, loading_sd, regime,
                           decimals = 2) {
   b <- make_base(generator, p, seed, eta, loading_sd, regime)
   Rt <- round_offdiag(attenuate(b$C, b$rho), decimals, "nearest")
-  tool <- check_disattenuated_psd(Rt, reliability = NULL, decimals = decimals)$thresholds$rho_impossible
+  thr <- check_disattenuated_psd(Rt, reliability = NULL, decimals = decimals)$thresholds
+  tool <- thr$rho_impossible
+  box  <- thr$rho_impossible_box
   orc <- critical_rho_oracle(Rt)$rho_star
-  tibble::tibble(tool_rho = tool, oracle_rho = orc, abs_diff = abs(tool - orc))
+  # The box-sound boundary is a CERTIFIED impossibility threshold, so allowing
+  # for the rounding of the correlations it must sit at or below the point value.
+  box_le_point <- is.finite(box) && box <= tool + 1e-6
+  # And the certified claim must hold: just below the box boundary the tool must
+  # return "impossible" (only checked where the boundary is non-trivial).
+  below_ok <- NA
+  if (is.finite(box) && box > 0.06) {
+    below_ok <- check_disattenuated_psd(Rt, reliability = box - 0.02,
+                                        decimals = decimals)$verdict == "impossible"
+  }
+  tibble::tibble(tool_rho = tool, oracle_rho = orc, abs_diff = abs(tool - orc),
+                 rho_box = box, box_le_point = box_le_point, below_ok = below_ok)
 }
 ```
 
@@ -321,6 +334,38 @@ ggplot(threshold, aes(x = oracle_rho, y = tool_rho)) +
   theme_linedraw() + theme(panel.grid.minor = element_blank())
 ```
 
+### Box-sound critical reliability (hard assertions)
+
+The tool also reports a **certified** critical reliability `rho_impossible_box`:
+the disattenuation is provably impossible for any common reliability below it,
+*allowing for the rounding of the correlations*. Two properties must hold — the
+certified boundary sits at or below the point closed form (rounding only adds
+slack), and just below it the verdict is genuinely `impossible`:
+
+```{r}
+box_checks <- threshold |>
+  summarise(n = n(),
+            n_box_le_point = sum(box_le_point, na.rm = TRUE),
+            n_box_le_point_na = sum(is.na(box_le_point)),
+            median_gap = median(tool_rho - rho_box, na.rm = TRUE),
+            n_below_checked = sum(!is.na(below_ok)),
+            n_below_impossible = sum(below_ok, na.rm = TRUE))
+
+if (with(box_checks, n_box_le_point + n_box_le_point_na) < box_checks$n) {
+  threshold |> filter(!box_le_point) |>
+    kable(caption = "VIOLATION: box-sound rho* exceeds the point closed form") |>
+    kable_styling(full_width = FALSE)
+  stop("Box-sound rho_impossible_box exceeded the point rho_impossible.")
+}
+if (with(box_checks, n_below_impossible) < box_checks$n_below_checked) {
+  stop("Verdict just below the box-sound boundary was not 'impossible'.")
+}
+box_checks |>
+  mutate(median_gap = signif(median_gap, 3)) |>
+  kable(caption = "Box-sound rho*: certified <= point closed form, and impossibility holds just below it (hard-asserted)") |>
+  kable_styling(full_width = FALSE)
+```
+
 # Discussion
 
 ## Performance across conditions
@@ -329,7 +374,7 @@ ggplot(threshold, aes(x = oracle_rho, y = tool_rho)) +
 
 **Power is clean:** as the reliability under-report gap grows, cases move from feasible to oracle-infeasible, and on the infeasible cases the tool detects essentially all of them, while the false-positive guard on oracle-feasible over-corrections stays at (Wilson-bounded) 0. Detection of over-correction is therefore not bought with false alarms.
 
-**The threshold is exact:** the closed form `rho* = max(1 - lambda_min(R), max|R_ij|)` matches the independent eigenvalue-bisection oracle to bisection tolerance, confirming the interpretable critical-reliability number the tool reports.
+**The threshold is exact:** the closed form `rho* = max(1 - lambda_min(R), max|R_ij|)` matches the independent eigenvalue-bisection oracle to bisection tolerance, confirming the interpretable critical-reliability number the tool reports. The **box-sound** `rho_impossible_box` sits at or below the point value (rounding only adds slack) and its certified-impossibility claim holds just below the boundary — both hard-asserted, so the render halts on any violation.
 
 ## Conclusions with regard to the aims
 

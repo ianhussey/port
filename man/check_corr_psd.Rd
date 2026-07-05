@@ -4,30 +4,47 @@
 \alias{check_corr_psd}
 \title{Decide whether a rounded correlation matrix can be positive semidefinite}
 \usage{
-check_corr_psd(R, decimals = 2, delta = NULL, tau = NULL)
+check_corr_psd(
+  R,
+  decimals = 2,
+  delta = NULL,
+  tau = NULL,
+  rounding = c("nearest", "truncate", "floor", "ceiling")
+)
 }
 \arguments{
 \item{R}{A symmetric numeric \verb{p x p} matrix with unit diagonal (the reported
 correlation matrix). Small asymmetries are symmetrized with a warning;
-large ones error. \code{p >= 2} is required.}
+large ones error. \code{p >= 2} is required. Off-diagonal \code{NA} entries
+(symmetric) are allowed and are freed to \verb{[-1, 1]}: verdicts then hold for
+\emph{every} possible value of the missing cells (an \code{impossible} is the
+stronger claim "impossible whatever the unreported values were").}
 
-\item{decimals}{Number of decimal places the off-diagonals were rounded to.
-Used to derive \code{delta = 0.5 * 10^(-decimals)} when \code{delta} is \code{NULL}.}
+\item{decimals}{Decimal places the off-diagonals were rounded to: a single
+integer, or a \verb{p x p} symmetric matrix for mixed-precision tables.}
 
-\item{delta}{Optional absolute half-width of the rounding box. Overrides
-\code{decimals} when supplied.}
+\item{delta}{Optional absolute half-width(s) of the rounding box: a scalar or
+a \verb{p x p} symmetric matrix. Overrides \code{decimals}; requires
+\code{rounding = "nearest"}.}
 
 \item{tau}{Non-negative width of the precision-limited ambiguous zone. When
 the witness upper bound lies in \verb{[0, tau]} and no in-box PSD matrix is
 certified by the cheap constructions, the result escalates to the
 self-contained alternating-projection search, and is reported \code{undecided}
-if that too fails. Defaults to \code{10 * delta}.}
+if that too fails. Defaults to \verb{10 *} the (maximum) box half-width.}
+
+\item{rounding}{The rule that produced the reported values: \code{"nearest"}
+(default; symmetric box of half-width \code{0.5 * 10^(-decimals)}),
+\code{"truncate"} (toward zero), \code{"floor"}, or \code{"ceiling"} (asymmetric boxes of
+width \code{10^(-decimals)}). Using the rule that actually generated the values
+is a soundness requirement: a mismatched symmetric box can exclude the true
+value and mislabel a valid matrix.}
 }
 \value{
 An object of class \code{corr_psd_check} (a list) with elements
-\code{verdict}, \code{tier}, \code{witness}, \code{margin}, \code{b_upper}, \code{delta}, \code{p},
-\code{certified_matrix}, \code{detail} and \code{note}. See \code{\link[=certificate]{certificate()}} and the print
-method.
+\code{verdict}, \code{tier}, \code{certified}, \code{witness}, \code{margin}, \code{b_upper}, \code{delta}
+(maximum half-width), \code{p}, \code{rounding}, \code{certified_matrix}, \code{detail} and
+\code{note}. See \code{\link[=certificate]{certificate()}} and the print method.
 }
 \description{
 Given a reported correlation matrix \code{R} whose off-diagonal entries are
@@ -46,32 +63,40 @@ evaluation of this quantity is bounded by a rigorous a-priori floating-point
 error model (Higham 2002, Ch. 3), so the impossibility verdict does not
 depend on any solver tolerance.
 }
-\section{Verdicts and tiers}{
+\section{Verdicts, tiers and certification}{
 
 \describe{
 \item{\code{impossible}}{No PSD matrix exists in the rounding box. Reached at
 tier \code{precheck} (a reported entry is out of range even at its nearest box
 edge) or \code{witness} (a test vector \code{v} gives a rigorously-negative upper
-bound \code{B_upper < 0}).}
-\item{\code{possible}}{No impossibility certificate was found. When
-\code{certified_matrix} is non-\code{NULL}, an explicit in-box matrix was verified
-PSD (Rump 2006), a strong possibility certificate; otherwise the verdict
-means only "not shown impossible".}
+bound \code{B_upper < 0}). Always certified.}
+\item{\code{possible}}{\code{certified = TRUE} when an explicit in-box matrix was
+verified PSD (Rump 2006) -- a rigorous existence certificate.
+\code{certified = FALSE} marks a \emph{presumed} possible: the witness margin is
+comfortably positive but no in-box PSD matrix was exhibited, so the
+verdict means only "not shown impossible".}
 \item{\code{undecided}}{The witness margin sits in the precision-limited
 ambiguous zone \verb{[0, tau]} and no in-box PSD matrix could be certified,
 including by the alternating-projection escalation.}
 }
 }
 
-\section{Rigor guarantee}{
+\section{Rigor guarantee (and what it does not prove)}{
 
 If \code{verdict == "impossible"}, then no PSD matrix exists in the rounding box,
 subject to the stated floating-point error model (IEEE double precision,
 round-to-nearest, unit roundoff \code{u = .Machine$double.eps / 2}, with Higham
 \code{gamma_n} backward/forward error bounds applied conservatively). The verdict
-does not rely on solver tolerances. The complementary guarantee also holds:
-because the bound is a sound over-estimate, a rounding box that contains any
-PSD matrix can never be reported \code{impossible}.
+does not rely on solver tolerances. Equivalently: the reported values cannot
+be the \strong{complete-data, single-sample Pearson} correlation matrix of any
+dataset, up to the stated rounding. The inference from there to a reporting
+error requires ruling out legitimate generators of non-PSD reported matrices
+-- pairwise deletion (per-cell n), polychoric/tetrachoric estimation,
+meta-analytically assembled cells, or upstream disattenuation; large
+severities (see \code{\link[=localize_psd_fault]{localize_psd_fault()}}) are hard to explain by any of these.
+The complementary guarantee also holds: because the bound is a sound
+over-estimate, a rounding box that contains any PSD matrix can never be
+reported \code{impossible}.
 }
 
 \examples{

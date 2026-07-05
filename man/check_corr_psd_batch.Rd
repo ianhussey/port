@@ -27,7 +27,8 @@ re-raises the error.}
 }
 \value{
 A \link[tibble:tibble]{tibble} with one row per input matrix and columns
-\code{id}, \code{verdict}, \code{tier}, \code{margin}, \code{b_upper}, \code{delta}, \code{p}, and \code{message}.
+\code{id}, \code{verdict}, \code{tier}, \code{certified}, \code{margin}, \code{b_upper}, \code{delta}, \code{p},
+and \code{message}.
 }
 \description{
 Run \code{\link[=check_corr_psd]{check_corr_psd()}} over a list of matrices and collect the verdicts in a

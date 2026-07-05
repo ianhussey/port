@@ -79,6 +79,29 @@
        value = as.numeric(vals[k]))
 }
 
+# Improve a witness direction by a fixed-point "polish": given v, form the most
+# PSD-favourable in-box matrix along v, X(v) = R + delta * sign(v v') off the
+# diagonal, and take the bottom eigenvector of X(v) as the next direction. Every
+# iterate is evaluated through the rigorous bound, so polishing can only tighten
+# the certificate, never weaken its soundness.
+.polish_witness <- function(R, delta, v, max_iter = 8L) {
+  best <- .witness_bound(R, v, delta)
+  p <- nrow(R)
+  for (k in seq_len(max_iter)) {
+    X <- R + delta * sign(outer(v, v))
+    diag(X) <- 1
+    v_new <- eigen(X, symmetric = TRUE)$vectors[, p]
+    wb <- .witness_bound(R, v_new, delta)
+    if (wb$B_upper < best$B_upper - 1e-15) {
+      best <- wb
+      v <- v_new
+    } else {
+      break
+    }
+  }
+  best
+}
+
 # Search a family of sound test directions and return the one giving the most
 # negative (most impossibility-favourable) B_upper. Every direction yields a
 # valid certificate, so combining several only increases detection power.
@@ -88,7 +111,10 @@
 #   2. all coordinate pairs v = (e_i - sign(R_ij) e_j)/sqrt(2), which reproduce
 #      the pairwise range condition and subsume the precheck;
 #   3. for small p, the smallest eigenvector of every 3x3 principal submatrix
-#      (connects to the exact 3x3 determinant condition).
+#      (connects to the exact 3x3 determinant condition);
+#   4. the p regression-residual directions v = (M_{-i}^{-1} c_i ; -1), for which
+#      v'Rv = (1 - R^2_i): the van Tilburg R^2 > 1 criterion as witness seeds.
+# The best candidate is then polished by the fixed-point iteration above.
 .witness_search <- function(R, delta, triples_max_p = 12L) {
   p <- nrow(R)
   cands <- vector("list", 0L)
@@ -120,11 +146,20 @@
     }
   }
 
+  for (i in seq_len(p)) {
+    d <- .rsquared_direction(R, i)
+    if (!is.null(d)) cands[[length(cands) + 1L]] <- d$v
+  }
+
   best <- NULL
   for (v in cands) {
     if (all(v == 0)) next
     wb <- .witness_bound(R, v, delta)
     if (is.null(best) || wb$B_upper < best$B_upper) best <- wb
+  }
+  if (!is.null(best)) {
+    pol <- .polish_witness(R, delta, best$v)
+    if (pol$B_upper < best$B_upper) best <- pol
   }
   best
 }

@@ -82,6 +82,32 @@ print.psd_fault <- function(x, digits = 3, ...) {
   cat(sprintf(";\n            total mass (Frobenius) %.*g; best achievable lambda_min %.*g.\n",
               digits, s$severity_frob, digits, s$best_lambda_min))
 
+  # Excusable-imprecision headline: verdict + severity in precision units.
+  w <- s$excusable_delta
+  if (is.finite(w) && w > d) {
+    d_ok <- .excusable_decimals(w)
+    cat(sprintf("  Excusable only by mis-reporting beyond +-%.*g per entry", digits, w))
+    if (is.finite(d_ok) && d_ok >= 1) {
+      cat(sprintf(" -- i.e. only if the values were really rounded to %d decimal place%s or fewer.\n",
+                  d_ok, if (d_ok == 1) "" else "s"))
+    } else if (is.finite(d_ok) && d_ok < 1) {
+      cat(" -- no conventional rounding precision could excuse it.\n")
+    } else {
+      cat(".\n")
+    }
+  }
+
+  # Benign-generator caution (before any inference of a reporting error).
+  cat("  Caution: rule out legitimate generators of non-PSD reported matrices\n",
+      "  first -- pairwise deletion (per-cell n), polychoric/tetrachoric\n",
+      "  estimation, meta-analytically assembled cells, upstream disattenuation.\n",
+      sep = "")
+  if (!is.null(x$structural) &&
+      identical(x$structural$severity_class, "substantive")) {
+    cat(sprintf("  (The required correction here is ~%sx the rounding step, which those\n  rarely produce.)\n",
+                signif(x$structural$severity_ratio, 2)))
+  }
+
   # Notes (verdict corroboration + R^2 attribution).
   drop <- if (!is.null(x$structural)) .structural_note(x$structural) else character(0)
   extra <- setdiff(x$notes, drop)

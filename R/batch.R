@@ -19,7 +19,8 @@
 #' @param quiet If `TRUE`, suppress the escalation-frequency message.
 #'
 #' @return A [tibble][tibble::tibble] with one row per input matrix and columns
-#'   `id`, `verdict`, `tier`, `margin`, `b_upper`, `delta`, `p`, and `message`.
+#'   `id`, `verdict`, `tier`, `certified`, `margin`, `b_upper`, `delta`, `p`,
+#'   and `message`.
 #'
 #' @examples
 #' good <- diag(3)
@@ -41,6 +42,7 @@ check_corr_psd_batch <- function(mats, decimals = 2, delta = NULL, tau = NULL,
 
   verdict <- character(n)
   tier    <- character(n)
+  certified <- rep(NA, n)
   margin  <- rep(NA_real_, n)
   b_upper <- rep(NA_real_, n)
   del     <- rep(NA_real_, n)
@@ -60,11 +62,12 @@ check_corr_psd_batch <- function(mats, decimals = 2, delta = NULL, tau = NULL,
     }
     verdict[i] <- res$verdict
     tier[i]    <- res$tier
+    certified[i] <- res$certified
     margin[i]  <- res$margin
     b_upper[i] <- res$b_upper
     del[i]     <- res$delta
     pp[i]      <- res$p
-    msg[i]     <- res$note %||% NA_character_
+    msg[i]     <- paste(res$note %||% NA_character_, collapse = " ")
   }
 
   n_pocs <- sum(tier == "pocs", na.rm = TRUE)
@@ -77,6 +80,7 @@ check_corr_psd_batch <- function(mats, decimals = 2, delta = NULL, tau = NULL,
     id = ids,
     verdict = verdict,
     tier = tier,
+    certified = certified,
     margin = margin,
     b_upper = b_upper,
     delta = del,

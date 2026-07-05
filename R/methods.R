@@ -6,17 +6,23 @@
 print.corr_psd_check <- function(x, digits = 4, ...) {
   head <- switch(x$verdict,
     impossible = "IMPOSSIBLE  (no PSD matrix fits the rounding box)",
-    possible   = "POSSIBLE    (not shown impossible)",
+    possible   = if (isTRUE(x$certified))
+                   "POSSIBLE    (certified: in-box PSD matrix exhibited)"
+                 else "POSSIBLE    (presumed: not shown impossible)",
     undecided  = "UNDECIDED   (ambiguous at this precision)",
     x$verdict)
   cat("<corr_psd_check>\n")
   cat(sprintf("  verdict : %s\n", head))
   cat(sprintf("  tier    : %s\n", x$tier))
-  cat(sprintf("  p       : %d      delta : %g\n", x$p, x$delta))
+  cat(sprintf("  p       : %d      delta : %g", x$p, x$delta))
+  if (!identical(x$rounding %||% "nearest", "nearest")) {
+    cat(sprintf("      rounding : %s", x$rounding))
+  }
+  cat("\n")
 
   if (identical(x$verdict, "impossible")) {
     if (identical(x$tier, "precheck")) {
-      cat("  reason  : ", x$note, "\n", sep = "")
+      cat("  reason  : ", paste(x$note, collapse = " "), "\n", sep = "")
     } else {
       v <- x$witness
       cat(sprintf("  margin  : B = %.*g  (B_upper = %.*g < 0)\n",
@@ -24,16 +30,21 @@ print.corr_psd_check <- function(x, digits = 4, ...) {
       cat("  witness : v =", .fmt_vec(v, digits), "\n")
       cat(sprintf("  certificate: v'Rv + delta*(||v||_1^2 - ||v||_2^2) = %.*g < 0\n",
                   digits, x$margin))
+      if (length(x$note)) cat("  note    : ", paste(x$note, collapse = " "), "\n", sep = "")
     }
+    cat("  caution : pairwise deletion, polychoric estimation, meta-analytic\n",
+        "            assembly, or upstream disattenuation can legitimately\n",
+        "            produce non-PSD reported matrices; see README.\n", sep = "")
   } else {
     if (!is.na(x$b_upper)) {
       cat(sprintf("  margin  : B_upper = %.*g  (>= 0: no impossibility certificate)\n",
                   digits, x$b_upper))
     }
     if (!is.null(x$certified_matrix)) {
-      cat("  evidence: ", x$note %||% "an in-box PSD matrix was verified", "\n", sep = "")
+      cat("  evidence: ", paste(x$note %||% "an in-box PSD matrix was verified",
+                                collapse = " "), "\n", sep = "")
     } else if (!is.null(x$note)) {
-      cat("  note    : ", x$note, "\n", sep = "")
+      cat("  note    : ", paste(x$note, collapse = " "), "\n", sep = "")
     }
   }
   invisible(x)

@@ -76,6 +76,29 @@ a sound over-estimate, a box that contains any PSD matrix can never be reported
 `impossible`. In particular a real correlation matrix rounded to `d` decimals is
 never a false positive.
 
+Every verdict also carries a `certified` flag. `impossible` is always certified;
+a `possible` is certified when an explicit in-box PSD matrix was exhibited and
+Rump-verified, and marked *presumed* otherwise ("not shown impossible").
+
+Be precise about what `impossible` proves: the reported values cannot be the
+**complete-data, single-sample Pearson** correlation matrix of any dataset, up
+to rounding. Genuinely non-PSD reported matrices can arise legitimately — from
+pairwise deletion, polychoric/tetrachoric estimation, meta-analytically
+assembled cells, or upstream disattenuation — so the print enumerates these
+cautions, and the severity output (below) is the discriminator: those mechanisms
+rarely produce violations far beyond the rounding step.
+
+A useful headline statistic folds the verdict and the severity into one number
+in precision units — the smallest reporting imprecision that could excuse the
+matrix:
+
+```{r}
+excusable_delta(R_bad)
+```
+
+Here no conventional rounding could excuse the matrix: entries would have to be
+mis-stated by more than ±`r round(excusable_delta(R_bad), 2)` each.
+
 ## Screening a corpus
 
 `check_corr_psd_batch()` runs the check over a list of matrices and returns a
@@ -153,9 +176,14 @@ impossible_triples(R_bad, decimals = 2)
 Non-PSDness is *often benign*. A composite score plus its subscores, or a full
 set of category dummies, is exactly rank-deficient by construction — not a sign
 of a data problem (van Tilburg & van Tilburg 2023; Lorenzo-Seva & Ferrando
-2021). For a forensic tool this matters, so every impossible result carries a
-`structural` diagnosis that separates a **benign near-boundary** rank-deficiency
-from a **substantive over-the-boundary** violation.
+2021). Beyond structure, whole classes of *reported* matrices are legitimately
+non-PSD: pairwise-deletion tables (each cell from different available cases),
+polychoric/tetrachoric matrices, meta-analytically assembled cells, and
+already-disattenuated matrices. For a forensic tool this matters, so every
+impossible result carries a `structural` diagnosis that separates a **benign
+near-boundary** rank-deficiency from a **substantive over-the-boundary**
+violation, and the print lists the generators to rule out before inferring a
+reporting error.
 
 Here a composite equal to the sum of three subscores is nudged just past the
 rounding boundary. The cellular verdict is `diffuse` (there is no single cell to
@@ -202,6 +230,39 @@ the interval that entry must have occupied — a forensic "impute and check":
 R_miss <- round(rbind(cbind(Sig, r), c(r, 1)), 2)
 R_miss[1, 4] <- R_miss[4, 1] <- NA        # pretend this correlation was unreported
 implied_interval(R_miss)
+```
+
+## Rounding rules, mixed precision, and missing cells
+
+The box must match how the numbers were actually produced. If a table was
+**truncated** rather than rounded, the error is one-sided and up to `10^(-d)`;
+a mismatched symmetric box can exclude the true value. Pass the rule:
+
+```{r}
+check_corr_psd(R_ok, decimals = 2, rounding = "truncate")$verdict
+```
+
+Mixed-precision tables (say, one variable reported at 1 decimal) take a
+`decimals` matrix:
+
+```{r}
+dec <- matrix(2L, 3, 3); dec[1, ] <- dec[, 1] <- 1L
+check_corr_psd(R_ok, decimals = dec)$verdict
+```
+
+A symmetric `NA` cell is freed to `[-1, 1]`, so the verdict holds for *every*
+value the missing entry could take. Freeing a cell can rescue a matrix — or
+not, which is then the stronger claim "impossible whatever the unreported value
+was":
+
+```{r}
+R_na <- R_bad; R_na[1, 2] <- R_na[2, 1] <- NA
+check_corr_psd(R_na, decimals = 2)$verdict     # some value of (1,2) would work
+
+blk <- matrix(c(1, 0.9, 0.9, 0.9, 1, -0.9, 0.9, -0.9, 1), 3, 3)
+J <- matrix(0, 6, 6); J[1:3, 1:3] <- blk; J[4:6, 4:6] <- blk; diag(J) <- 1
+J[2, 3] <- J[3, 2] <- NA                        # free a cell of triangle 1
+check_corr_psd(J, decimals = 2)$verdict         # triangle 2 still impossible
 ```
 
 ## Disattenuated correlations

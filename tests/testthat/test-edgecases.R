@@ -7,9 +7,21 @@ test_that("p < 2 errors", {
   expect_error(check_corr_psd(matrix(1, 1, 1)), "at least 2")
 })
 
-test_that("NA entries error with a clear message", {
+test_that("symmetric NA off-diagonals are freed; NA diagonal / asymmetric NA error", {
+  # a symmetric NA off-diagonal is now a supported "missing cell": freed to
+  # [-1, 1], with the verdict holding for every value it could take
   R <- diag(3); R[1, 2] <- R[2, 1] <- NA
-  expect_error(check_corr_psd(R), "NA or non-finite")
+  res <- check_corr_psd(R)
+  expect_equal(res$verdict, "possible")
+  expect_false(isTRUE(attr(res, "uniform_box")))
+
+  # NA on the diagonal errors
+  Rd <- diag(3); Rd[2, 2] <- NA
+  expect_error(check_corr_psd(Rd), "Diagonal")
+
+  # asymmetric NA errors
+  Ra <- diag(3); Ra[1, 2] <- NA; Ra[2, 1] <- 0.2
+  expect_error(check_corr_psd(Ra), "symmetric")
 })
 
 test_that("non-unit diagonal errors", {

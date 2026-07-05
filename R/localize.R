@@ -97,13 +97,19 @@
 #' @export
 localize_psd_fault <- function(x, decimals = 2, delta = NULL,
                                verify = TRUE, sparse_k = 3L, tol = 1e-6) {
-  # Resolve input to a base check.
+  # Resolve input to a base check. Localization currently requires a UNIFORM
+  # nearest-rounding box (no asymmetric rules, per-cell precision, or NA cells).
   if (inherits(x, "corr_psd_check")) {
     chk <- x
     R <- attr(chk, "R")
     if (is.null(R)) {
       stop("This `corr_psd_check` does not carry its matrix; pass the matrix ",
            "to localize_psd_fault() instead.", call. = FALSE)
+    }
+    if (!isTRUE(attr(chk, "uniform_box") %||% TRUE)) {
+      stop("localize_psd_fault() supports only uniform nearest-rounding boxes ",
+           "(no asymmetric rounding, per-cell precision, or NA cells yet).",
+           call. = FALSE)
     }
     delta <- chk$delta
   } else {
@@ -133,7 +139,8 @@ localize_psd_fault <- function(x, decimals = 2, delta = NULL,
       evidence = list(sole_culprit_cells = NULL, impossible_triples = NULL,
                       lofo_restoring = NULL, sparse_support = NULL, rsquared = plaus$rsquared),
       severity = list(severity_max = NA_real_, severity_frob = NA_real_,
-                      best_lambda_min = NA_real_, witness_margin = chk$margin),
+                      best_lambda_min = NA_real_, witness_margin = chk$margin,
+                      excusable_delta = NA_real_),
       delta = delta, p = p, verify = verify, plausibility = plaus,
       notes = note, base_check = chk))
   }
@@ -154,11 +161,15 @@ localize_psd_fault <- function(x, decimals = 2, delta = NULL,
 
   sparse <- .sparse_support(R, delta, sole_cells, sole_edits,           # D1
                             verify = verify, sparse_k = sparse_k)
+  sev_max <- .severity_max(R, delta, verify = verify)
   sev <- list(                                                          # severity
-    severity_max = .severity_max(R, delta, verify = verify),
+    severity_max = sev_max,
     severity_frob = .severity_frob(R, delta),
     best_lambda_min = .best_lambda_min(R, delta),
-    witness_margin = chk$margin)
+    witness_margin = chk$margin,
+    # smallest uniform reporting half-width that could excuse the matrix:
+    # impossible for every precision finer than this (see ?excusable_delta)
+    excusable_delta = delta + sev_max)
 
   rsq <- .rsquared_evidence(R, delta)                                   # R^2 (V1+V2)
   S_r2 <- which(.rsquared_blamed(rsq))                                  # cleanly-blamed vars

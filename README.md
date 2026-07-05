@@ -85,6 +85,68 @@ decimals always leaves the original inside the box, so it is never a false
 positive. (The package's property test checks exactly this over thousands of
 random PSD matrices.)
 
+### What impossibility does — and does not — prove
+
+The precise claim behind an `impossible` verdict is:
+
+> **the reported values cannot be the complete-data, single-sample Pearson
+> correlation matrix of any dataset, up to the stated rounding.**
+
+The inference from there to a *reporting error* requires ruling out legitimate
+generators of genuinely non-PSD reported matrices:
+
+- **pairwise deletion** — each correlation computed on different available
+  cases; the assembled matrix need not be PSD;
+- **polychoric / tetrachoric estimation** — estimated cell-by-cell and famously
+  non-positive-definite in ordinary use;
+- **meta-analytically assembled matrices** — each cell pooled from a different
+  set of studies (the standard MASEM situation);
+- **upstream disattenuation** — some papers report reliability-corrected
+  matrices, which may legitimately leave the PSD cone;
+- **splicing** — cells transcribed from different samples or subgroups.
+
+The `severity` / `excusable_delta` output is the discriminator: these mechanisms
+typically produce *small* violations, so an impossibility that would require
+corrections tens of times the rounding step survives all of these excuses,
+while a near-boundary violation does not. The impossible-verdict print
+enumerates these cautions, and `check_corr_psd()` asks the analyst to confirm
+the matrix is Pearson, complete-case, single-sample, and uncorrected before
+reading the flag forensically.
+
+### One headline number: the excusable imprecision
+
+`excusable_delta(R)` returns the smallest uniform reporting half-width at which
+the box admits a PSD matrix — the verdict and the severity folded into one
+statistic in precision units. The matrix is impossible at precision `δ` iff
+`excusable_delta(R) > δ`, and a value like `0.4` reads as *"inconsistent with
+any correlation matrix unless each entry were mis-stated by more than ±0.4 — no
+conventional rounding could excuse it."* The same quantity appears in
+`localize_psd_fault()`'s severity and print.
+
+### Verdict certification
+
+Every result carries a `certified` flag. `impossible` is always certified (a
+witness vector). A `possible` with `certified = TRUE` exhibits a Rump-verified
+in-box PSD matrix; `certified = FALSE` marks a *presumed* possible ("not shown
+impossible" — the witness margin is comfortably positive but no certificate was
+found). The print labels the two cases explicitly.
+
+### Rounding rules, mixed precision, and missing cells
+
+`check_corr_psd()` also supports:
+
+- **asymmetric rounding rules** — `rounding = "truncate" / "floor" / "ceiling"`
+  builds the correct one-sided box of width `10^(-d)`. Using the rule that
+  actually produced the values is a soundness requirement: a mismatched
+  symmetric box can exclude the true value and mislabel a valid matrix (this is
+  demonstrated in validation Sim 2);
+- **per-cell precision** — `decimals` (or `delta`) may be a `p × p` matrix for
+  mixed-precision tables;
+- **missing cells** — symmetric `NA` off-diagonals are freed to `[-1, 1]`, so a
+  verdict holds for *every* value the missing entries could take; an
+  `impossible` with missing cells is the stronger claim "impossible whatever
+  the unreported values were".
+
 ## The possible side — verified in-box PSD matrix
 
 Possibility is certified constructively: the tool exhibits an explicit in-box
@@ -255,16 +317,21 @@ become an impossible construct matrix under the reliabilities the authors report
 and the reliabilities into account. When reliabilities are unreported it returns
 the **critical reliability** `rho* = max(1 − lambda_min(R), max|R_ij|)` — how
 reliable the measures must have been — with an optional plausibility floor for a
-reachability statement. The impossibility side reuses the same witness/Rump engine,
-so it carries the same floating-point guarantee. See the vignette for worked
-examples.
+reachability statement. Alongside the point closed form, the tool reports a
+**box-sound** critical reliability (`rho_impossible_box`, located by bisection
+over the rigorous box witness): the certified statement "the disattenuation is
+impossible for any common reliability below X *even allowing for rounding*",
+which is the number quoted in the print and used for the headroom. The
+impossibility side reuses the same witness/Rump engine, so it carries the same
+floating-point guarantee. See the vignette for worked examples.
 
 ## API
 
 | function | purpose |
 |---|---|
-| `check_corr_psd(R, decimals = 2, delta = NULL, tau = NULL)` | main entry point; returns a `corr_psd_check` |
+| `check_corr_psd(R, decimals = 2, delta = NULL, tau = NULL, rounding = "nearest")` | main entry point; `decimals`/`delta` may be per-cell matrices, `NA` cells are freed, asymmetric rounding rules supported; returns a `corr_psd_check` with a `certified` flag |
 | `certificate(x)` | extract the witness vector and margin |
+| `excusable_delta(R)` | smallest reporting imprecision that could excuse the matrix (verdict + severity in precision units) |
 | `check_corr_psd_batch(mats, ...)` | screen a list of matrices → tibble |
 | `localize_psd_fault(x, verify = TRUE, sparse_k = 3, ...)` | localize the fault in an impossible matrix; returns a `psd_fault` |
 | `fault_evidence(x)` | the raw A–D + R² evidence behind a `psd_fault` |
@@ -289,13 +356,18 @@ table records what was drawn from each source, and what is original here.
 
 **Original to this package** (derivations, not taken from the above): the
 closed-form box quadratic-form maximum `v'Rv + δ(‖v‖₁²−‖v‖₂²)` and its use as a
-box-aware witness; the sound interval determinant bound
+box-aware witness; the witness-polishing fixed point (alternate the most
+PSD-favourable in-box matrix along `v` with its bottom eigenvector — sound by
+construction, since every iterate is re-evaluated through the rigorous bound);
+the sound interval determinant bound
 `det = (1−b²)(1−c²) − (a−bc)²` for the impossible-triple scan; the greedy
-minimal-cardinality fault localization; the tiered checker and localization
+minimal-cardinality fault localization; the excusable-imprecision statistic;
+the tiered checker and localization
 ruleset; and the observation that van Tilburg's R²>1 criterion is the
 regression-residual **witness vector** `v = (M₋ᵢ⁻¹cᵢ ; −1)` (since
 `vᵀMv = 1 − R²ᵢ`), which is what lets the R² localizer reuse the existing
-box-witness rigor model instead of an interval determinant or a verified inverse.
+box-witness rigor model instead of an interval determinant or a verified
+inverse. These residual directions also seed the main witness search.
 
 ## References
 
