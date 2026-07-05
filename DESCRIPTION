@@ -1,0 +1,29 @@
+Package: psdness
+Title: Certify Whether a Rounded Correlation Matrix Can be Positive Semidefinite
+Version: 0.1.0
+Authors@R:
+    person("Ian", "Hussey", email = "ianhusseysipod@gmail.com", role = c("aut", "cre"))
+Description: Forensic metascience tool that decides whether a reported
+    correlation matrix, whose off-diagonal entries are rounded to fixed
+    precision, is consistent with any positive semidefinite (PSD) matrix
+    inside the induced rounding box. The payload is certifying
+    IMPOSSIBILITY: when no PSD matrix fits the rounding box, the reported
+    matrix cannot be a genuine correlation matrix. Impossibility verdicts
+    are backed by a rigorous a-priori floating-point error bound on a
+    witness-vector quadratic form (Higham, "Accuracy and Stability of
+    Numerical Algorithms", 2002), so they do not depend on solver
+    tolerances. Possibility is certified by exhibiting an in-box PSD matrix
+    verified via a one-sided Cholesky test (Rump, "Verification of positive
+    definiteness", BIT 46:433-452, 2006).
+License: MIT + file LICENSE
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.2
+Depends:
+    R (>= 3.6)
+Imports:
+    utils,
+    tibble
+Suggests:
+    testthat (>= 3.0.0)
+Config/testthat/edition: 3

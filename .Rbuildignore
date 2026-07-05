@@ -1,0 +1,3 @@
+^psdness\.Rcheck$
+^psdness_.*\.tar\.gz$
+^\.git$
