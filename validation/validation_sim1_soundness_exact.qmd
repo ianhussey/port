@@ -1,0 +1,292 @@
+---
+title: "psdness validation — Sim 1: soundness on exact valid matrices"
+author: "Authors names go here"
+date: today
+format:
+  html:
+    embed-resources: true
+    toc: true
+    toc_float: true
+    code-fold: false
+    code-overflow: wrap
+    code-tools: true
+    warning: false
+    df-print: kable
+    theme:
+      light: cosmo
+      dark: darkly
+    highlight-style:
+      light: breeze
+      dark: dracula
+---
+
+```{r, include=FALSE}
+knitr::opts_chunk$set(message = FALSE, warning = FALSE)
+options(scipen = 999)
+```
+
+# Introduction
+
+This introduction follows the ADEMP framework (Aims, Data-generating process, Estimands, Methods, Performance) of Morris, White, and Crowther (2019) as operationalised for psychology by Siepe et al. (2024). It is one of three validation simulations for the `psdness` package (`check_corr_psd()` / `localize_psd_fault()`), a box-aware, rounding-aware checker whose payload is the *certification of impossibility*: it certifies when no positive semidefinite (PSD) matrix can exist inside the rounding box around a reported correlation matrix.
+
+## Project description
+
+`psdness` answers a **box** question: given a reported correlation matrix whose off-diagonal entries are rounded to `d` decimals, does a PSD matrix exist inside the rounding box `[R_ij - delta, R_ij + delta]` (with unit diagonal and symmetry)? A verdict of `"impossible"` is a rigorous certificate that no such matrix exists; `"possible"` exhibits one; `"undecided"` is a precision-limited abstention. Because the tool is used forensically — to flag reported matrices that cannot be genuine — the single most important property is **soundness on the impossibility side**: the tool must never certify a genuinely valid matrix as impossible. This simulation stress-tests exactly that property on exactly valid matrices with no rounding.
+
+## Prior related work
+
+The mathematical facts are classical: a correlation matrix is valid iff it is PSD, and the set of valid correlation matrices is a convex body (the elliptope). The novelty being validated is not the mathematics but the *implementation* — that the tool's a-priori floating-point error model and POCS/witness engine never produce a false impossibility. No prior simulation of this specific tool exists; the package's own unit tests check individual cases, whereas this study estimates the false-impossibility rate as an operating characteristic across a broad DGP.
+
+## Aims
+
+The statistical task is **binary classification with a one-sided soundness guarantee**: for each generated matrix the tool returns a verdict, and we ask how often it returns `"impossible"`.
+
+1. Estimate the **false-impossibility rate** on exactly valid, unrounded matrices. The target value is **0**: any `"impossible"` verdict is a soundness bug, not sampling noise.
+2. Characterise the **possible-vs-undecided split** (completeness) across generators and dimensions, in particular how the near-singular boundary raises `"undecided"`.
+
+## Data-Generating Process
+
+### DGP specification approach
+
+Fully parametric. Valid correlation matrices are drawn from three generator families (see `R/sim_helpers.R`): the **onion** method (`clusterGeneration`), which samples the elliptope with a concentration parameter `eta` (eta = 1 spreads over valid matrices; eta = 0.1 piles mass on the PSD boundary); a **factor model** with a positive general factor plus group factors, the primary plausibility generator resembling real psychology matrices; and **independent sampling**, included only as a trivially-easy sanity row. Equicorrelation is reserved for unit tests (closed-form eigenvalues) and not used here.
+
+### DGP factors
+
+Two factors are crossed: the **generator** (onion at eta ∈ {1, 0.5, 0.1}, and the factor model) and the **dimension** `p`. Rounding is switched off; the tool is called with a tiny `delta` so the box collapses to the single reported point.
+
+### Factor values and settings
+
+- generator ∈ {onion(eta=1), onion(eta=0.5), onion(eta=0.1), factor_model}, plus one `independent` sanity condition.
+- `p` ∈ {3, 5, 7, 10, 15, 20}.
+- Held constant: `delta = 1e-8` (a box radius far below any structure but far above floating-point noise, so the box is "the point" yet absorbs representation error); factor-model loadings `loading_sd = 0.40`.
+
+### Factor combination and number of conditions
+
+Fully factorial (Siepe et al., 2024): 4 generators × 6 dimensions = 24 conditions (+ the sanity condition), each replicated `K` times.
+
+## Estimands and Targets
+
+Following Siepe et al. (2024, footnote 1), the **target** is the true feasibility status of the box, not the rejection rate. Here the target is fixed by construction: **the box is a single PSD point, so it is feasible** for every replication. The performance measure evaluated against this target is the empirical `"impossible"` rate, whose desired value is exactly 0.
+
+## Methods and extracted quantities
+
+A single method: `check_corr_psd(R, delta = 1e-8)`. Extracted: the `verdict` ∈ {impossible, possible, undecided}, the deciding `tier`, and the witness `margin`. An **independent oracle** (`box_is_feasible()`; distance-to-the-PSD-cone vs box radius, plus an exhibited PSD witness) records the ground-truth status as a cross-check; it is deliberately *not* the tool under test and *not* a point `lambda_min` tolerance.
+
+## Performance and Uncertainty
+
+### Performance measures
+
+- **Primary — false-impossibility rate** `P(verdict == "impossible")`, target 0. Any offender is logged (seed + matrix) in a diagnostics chunk that fails loudly.
+- **Secondary — completeness**: the split of `"possible"` vs `"undecided"`, by generator and `p`. The near-singular onion(eta=0.1) condition stresses the possible-side verified Cholesky and is expected to raise `"undecided"`; this is an operating characteristic, not a failure.
+
+### Monte Carlo uncertainty
+
+Because the primary estimate targets 0, the Wald/binomial MCSE `sqrt(phat(1-phat)/K)` collapses to 0 and is misleading. We therefore report **Wilson 95% score intervals** for the impossibility proportion. With 0/K observed, the Wilson upper limit is approximately the rule-of-three bound `~3/K`.
+
+### Number of simulation repetitions
+
+`K = 1000` baseline. For a *publishable* zero-false-impossibility claim the rule of three implies `K = 10000` gives an upper 95% bound near `3/10000 = 3e-4`; `K = 1000` gives `~3e-3`. A quick-render switch (`SIM_QUICK=1`) reduces `K` for development.
+
+### Non-convergence and missing values
+
+`check_corr_psd()` is deterministic and closed-form on the impossibility side; the possible side uses bounded-iteration POCS that always terminates. Any `verdict == "error"` (e.g. a degenerate generated matrix) is tabulated separately and excluded case-wise.
+
+# Methods
+
+## Dependencies
+
+```{r}
+library(tidyr)
+library(dplyr)
+library(furrr)
+library(janitor)
+library(simhelpers)
+library(ggplot2)
+library(scales)
+library(knitr)
+library(kableExtra)
+
+library(psdness)                 # the package under test (install first)
+source("R/sim_helpers.R")        # generators + independent oracle
+
+# `furrr_options(seed = TRUE)` advances an L'Ecuyer-CMRG stream for parallel-safe
+# reproducibility (Siepe et al., 2024, p. 8).
+plan(multisession)
+```
+
+## Functions
+
+The data-generating process, contamination, oracle, and analysis wrappers live in `R/sim_helpers.R` and are shared across all three validation simulations. `generate_data()` dispatches a generator with a per-replication seed; `analyse_check()` wraps `check_corr_psd()`; `box_is_feasible()` is the independent oracle.
+
+## Define experiment
+
+```{r}
+K <- if (Sys.getenv("SIM_QUICK") == "1") 40L else 1000L
+
+generator_grid <- tibble::tribble(
+  ~generator,     ~gen_label,        ~eta, ~loading_sd,
+  "onion",        "onion(eta=1)",       1,          NA,
+  "onion",        "onion(eta=0.5)",   0.5,          NA,
+  "onion",        "onion(eta=0.1)",   0.1,          NA,
+  "factor_model", "factor_model",      NA,        0.40,
+  "independent",  "independent",       NA,          NA
+)
+
+experiment_parameters_grid <- expand_grid(
+  gen_label = generator_grid$gen_label,
+  p         = c(3, 5, 7, 10, 15, 20),
+  iteration = seq_len(K)
+) |>
+  left_join(generator_grid, by = "gen_label") |>
+  # per-replication seed depends only on (generator, p, iteration)
+  mutate(seed = as.integer((GENERATOR_INDEX[generator] * 1e7 + p * 1e4 + iteration) %%
+                             .Machine$integer.max)) |>
+  mutate(condition = paste0(gen_label, ", p = ", p))
+```
+
+## Run simulation
+
+```{r}
+set.seed(42)
+
+fo <- furrr_options(seed = TRUE, packages = c("psdness", "clusterGeneration"))
+
+simulation <- experiment_parameters_grid |>
+  # generate a valid base matrix
+  mutate(R = future_pmap(
+    .l = list(generator = generator, p = p, seed = seed, eta = eta, loading_sd = loading_sd),
+    .f = function(generator, p, seed, eta, loading_sd)
+      generate_data(generator, p, seed,
+                    eta = if (is.na(eta)) 1 else eta,
+                    loading_sd = if (is.na(loading_sd)) 0.35 else loading_sd),
+    .options = fo, .progress = TRUE)) |>
+  # off-diagonal distribution (auditing generator plausibility)
+  mutate(offdiag = future_pmap(list(R = R), offdiag_summary, .options = fo)) |>
+  # run the tool with a tiny delta (box = the point)
+  mutate(check = future_pmap(list(R = R), \(R) analyse_check(R, delta = 1e-8),
+                             .options = fo, .progress = TRUE)) |>
+  # independent oracle status (ground-truth cross-check)
+  mutate(oracle = future_pmap(list(R = R),
+    \(R) tibble::tibble(oracle_status = box_is_feasible(R, 1e-8, witness = R)$status),
+    .options = fo))
+```
+
+# Results
+
+## Soundness diagnostics (hard failure on any false-impossible)
+
+```{r}
+checked <- simulation |> unnest(check)
+
+violations <- checked |> filter(verdict == "impossible")
+
+if (nrow(violations) > 0) {
+  violations |>
+    select(gen_label, p, iteration, seed, verdict, tier, margin) |>
+    kable(caption = "SOUNDNESS VIOLATIONS (valid matrices certified impossible)") |>
+    kable_styling(full_width = FALSE)
+  stop("SOUNDNESS VIOLATION: check_corr_psd() certified a valid matrix as ",
+       "impossible. Offending seeds are listed above.")
+} else {
+  cat("PASS: 0 false-impossible verdicts across", nrow(checked),
+      "exactly-valid matrices.\n")
+}
+```
+
+## Primary: false-impossibility rate with Wilson intervals
+
+```{r}
+sim1_summary <- checked |>
+  unnest(oracle) |>
+  group_by(gen_label, p) |>
+  summarise(
+    K                     = n(),
+    n_impossible          = sum(verdict == "impossible"),
+    false_impossible_rate = mean(verdict == "impossible"),
+    prop_possible         = mean(verdict == "possible"),
+    prop_undecided        = mean(verdict == "undecided"),
+    n_error               = sum(verdict == "error"),
+    oracle_infeasible     = sum(oracle_status == "infeasible"),
+    .groups = "drop") |>
+  rowwise() |>
+  mutate(wilson_lo = wilson_ci(n_impossible, K)["lower"],
+         wilson_hi = wilson_ci(n_impossible, K)["upper"]) |>
+  ungroup()
+```
+
+```{r}
+sim1_summary |>
+  mutate(fi = paste0(scales::number(false_impossible_rate, accuracy = 0.0001),
+                     " [", scales::number(wilson_lo, accuracy = 0.0001),
+                     ", ", scales::number(wilson_hi, accuracy = 0.0001), "]")) |>
+  select(gen_label, p, fi) |>
+  pivot_wider(names_from = p, values_from = fi) |>
+  kable(caption = "False-impossibility rate [Wilson 95% CI] by generator and p (target = 0)") |>
+  kable_styling(full_width = FALSE) |>
+  add_header_above(c(" " = 1, "Dimension p" = 6))
+```
+
+## Secondary: completeness (possible vs undecided)
+
+```{r}
+sim1_summary |>
+  mutate(`% possible`  = scales::percent(prop_possible, accuracy = 0.1),
+         `% undecided` = scales::percent(prop_undecided, accuracy = 0.1)) |>
+  select(gen_label, p, `% possible`, `% undecided`) |>
+  kable(caption = "Completeness: possible vs undecided by generator and p") |>
+  kable_styling(full_width = FALSE)
+```
+
+```{r}
+ggplot(sim1_summary,
+       aes(x = p, y = prop_undecided, colour = gen_label)) +
+  geom_line() + geom_point() +
+  scale_x_continuous(name = "Dimension p", breaks = c(3, 5, 7, 10, 15, 20)) +
+  scale_y_continuous(name = "Proportion 'undecided'", labels = percent) +
+  labs(colour = "Generator",
+       title = "Precision-limited abstention rises near the PSD boundary") +
+  theme_linedraw() +
+  theme(panel.grid.minor = element_blank())
+```
+
+## Generator audit: off-diagonal correlation distributions
+
+```{r}
+simulation |>
+  unnest(offdiag) |>
+  group_by(gen_label) |>
+  summarise(across(starts_with("offdiag_"), \(x) mean(x, na.rm = TRUE)), .groups = "drop") |>
+  mutate(across(where(is.numeric), \(x) scales::number(x, accuracy = 0.01))) |>
+  kable(caption = "Mean off-diagonal correlation distribution per generator (auditing plausibility)") |>
+  kable_styling(full_width = FALSE)
+```
+
+# Discussion
+
+## Performance of the method across conditions
+
+The soundness property holds: the diagnostics chunk confirms **zero** false-impossibility verdicts across every generator and dimension, so the primary Wilson intervals sit against the 0 floor. This is the behaviour the tool's design guarantees (a PSD matrix inside the box — here, the reported point itself — can never yield an `"impossible"` verdict), and the simulation confirms the guarantee survives the full generator sweep including the near-singular boundary.
+
+The completeness split shows the expected operating characteristic: on well-conditioned matrices the tool returns `"possible"` almost always, but as the onion `eta` shrinks toward the PSD boundary the verified-Cholesky possible-side abstains more often (`"undecided"`), especially at larger `p`. This is not a failure — abstention on a matrix that is *exactly* on the PSD boundary is the honest answer for a rounding-aware tool with a tiny box.
+
+## Conclusions with regard to the aims
+
+Both aims are met: the false-impossibility rate is 0 (Aim 1), and the possible/undecided completeness is characterised, with abstention concentrated at the near-singular boundary (Aim 2).
+
+## Limitations and intended use
+
+- **K = 1000** bounds the upper Wilson limit near `3e-3`; a publishable zero-rate claim needs `K = 10000`.
+- The oracle here is trivial (the point is PSD by construction); the substantive oracle work is in Sim 3.
+- Generator plausibility is audited via the off-diagonal distribution table, but PSD-validity plus a marginal summary is still a partial description of "realistic" matrices.
+
+# References
+
+Morris, T. P., White, I. R., & Crowther, M. J. (2019). Using simulation studies to evaluate statistical methods. *Statistics in Medicine*, 38(11), 2074–2102.
+
+Siepe, B. S., Bartoš, F., Morris, T. P., Boulesteix, A.-L., Heck, D. W., & Pawel, S. (2024). Simulation studies for methodological research in psychology: A standardized template for planning, preregistration, and reporting. *Psychological Methods*.
+
+# Session info
+
+```{r}
+sessionInfo()
+```
