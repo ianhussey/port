@@ -216,12 +216,40 @@ certification and run search-based only. No CVXR or other optimizer is required.
 | `impossible_triples(R, decimals = 2, ...)` | standalone component B (rounding-robust impossible triples) → tibble |
 | `localize_psd_fault_batch(mats, ...)` | localize over a list of matrices → tibble |
 
+## Provenance of the methods
+
+This package assembles established results from verified numerical computing; the
+table records what was drawn from each source, and what is original here.
+
+| Method (module) | Source | What was used |
+|---|---|---|
+| **Verified certificate of infeasibility.** The impossibility verdict is a rigorous certificate that the semidefinite feasibility problem "does a PSD matrix exist in the rounding box?" is *infeasible*, made independent of any solver tolerance by bounding all floating-point rounding *a priori* (no rounding-mode control). | Jansson, Chaykin & Keil (2008); Jansson (2009) — the verified-SDP paradigm | The **strategy**: post-process an approximate/heuristic direction into a rigorous infeasibility verdict via a-priori error bounds instead of trusting a solver's "infeasible" status. (That a dual direction certifies primal infeasibility is classical SDP duality; Jansson's contribution is the *verified* version.) |
+| A-priori floating-point error bounds `γₙ = nu/(1−nu)` for the witness quadratic form (`R/rigor.R`, `R/witness.R`, `R/box.R`), and the Cholesky backward-error bound behind the PSD test | Higham (2002), *Accuracy and Stability of Numerical Algorithms* | The γₙ inner-product / quadratic-form error bounds and the Cholesky backward-error bound used to size the rigorous slack. |
+| Verified positive semidefiniteness by a one-sided Cholesky of `A − cI` (`R/verify.R`) | Rump (2006) | The test itself and the constant `c` that bounds the Cholesky rounding error. |
+| Possibility search / feasibility oracle by alternating projection onto the box and the PSD cone; nearest-correlation-matrix helper (`R/pocs.R`, `R/box.R`, `R/localize-sparse.R`) | Higham (2002, *IMA J. Numer. Anal.*); Cheney & Goldstein (1959) | Alternating projection onto the PSD cone and the unit-diagonal set (Higham's nearest-correlation-matrix iteration); convergence of projections onto two convex sets (Cheney–Goldstein). |
+
+**Original to this package** (derivations, not taken from the above): the
+closed-form box quadratic-form maximum `v'Rv + δ(‖v‖₁²−‖v‖₂²)` and its use as a
+box-aware witness; the sound interval determinant bound
+`det = (1−b²)(1−c²) − (a−bc)²` for the impossible-triple scan; the greedy
+minimal-cardinality fault localization; and the tiered checker and localization
+ruleset.
+
 ## References
 
+- W. Cheney and A. A. Goldstein (1959), "Proximity maps for convex sets,"
+  *Proceedings of the American Mathematical Society*, 10(3):448–450.
+- N. J. Higham (2002), "Computing the nearest correlation matrix—a problem from
+  finance," *IMA Journal of Numerical Analysis*, 22(3):329–343.
 - N. J. Higham (2002), *Accuracy and Stability of Numerical Algorithms*, 2nd ed.,
-  SIAM. (Inner-product and Cholesky error bounds.)
-- S. M. Rump (2006), *Verification of positive definiteness*, BIT Numerical
-  Mathematics 46:433–452.
+  SIAM. (Inner-product / quadratic-form and Cholesky error bounds.)
+- C. Jansson, D. Chaykin, and C. Keil (2008), "Rigorous error bounds for the
+  optimal value in semidefinite programming," *SIAM Journal on Numerical
+  Analysis*, 46(1):180–200. [doi:10.1137/050622870](https://doi.org/10.1137/050622870)
+- C. Jansson (2009), "On verified numerical computations in convex programming,"
+  *Japan Journal of Industrial and Applied Mathematics*, 26(2–3):337–363.
+- S. M. Rump (2006), "Verification of positive definiteness," *BIT Numerical
+  Mathematics*, 46(2):433–452.
 
 ## License
 
