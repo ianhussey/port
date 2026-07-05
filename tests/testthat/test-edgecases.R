@@ -12,7 +12,7 @@ test_that("symmetric NA off-diagonals are freed; NA diagonal / asymmetric NA err
   # [-1, 1], with the verdict holding for every value it could take
   R <- diag(3); R[1, 2] <- R[2, 1] <- NA
   res <- check_corr_psd(R)
-  expect_equal(res$verdict, "possible")
+  expect_equal(res$verdict, "consistent")
   expect_false(isTRUE(attr(res, "uniform_box")))
 
   # NA on the diagonal errors
@@ -34,7 +34,7 @@ test_that("small asymmetry warns and is symmetrized; large asymmetry errors", {
                 0.30005, 1, 0.25,
                 0.2, 0.25, 1), 3, 3)  # asymmetry 5e-5: in the warn band
   expect_warning(res <- check_corr_psd(R, decimals = 2), "not exactly symmetric")
-  expect_equal(res$verdict, "possible")
+  expect_equal(res$verdict, "consistent")
 
   Rbig <- matrix(c(1, 0.3, 0.2,
                    0.9, 1, 0.25,
@@ -44,7 +44,7 @@ test_that("small asymmetry warns and is symmetrized; large asymmetry errors", {
 
 test_that("data frames are accepted", {
   df <- as.data.frame(diag(3))
-  expect_equal(check_corr_psd(df, decimals = 2)$verdict, "possible")
+  expect_equal(check_corr_psd(df, decimals = 2)$verdict, "consistent")
 })
 
 test_that("invalid decimals / delta / tau error", {

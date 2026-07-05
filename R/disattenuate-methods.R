@@ -22,19 +22,19 @@ print.disattenuation_check <- function(x, digits = 2, ...) {
     else "produces a corrected correlation above 1"
   }
   # Box-sound boundary when available; the point closed form as reference.
-  rho_box <- thr$rho_impossible_box
+  rho_box <- thr$rho_inconsistent_box
   rho_hdl <- if (is.finite(rho_box %||% NA_real_) && (rho_box %||% 0) > 0) rho_box
-             else thr$rho_impossible
+             else thr$rho_inconsistent
   box_txt <- if (identical(rho_hdl, rho_box)) {
     sprintf(" (rounding-aware; boundary at exact reported values: %.*f)",
-            digits, thr$rho_impossible)
+            digits, thr$rho_inconsistent)
   } else ""
 
   # ---- critical mode (reliabilities not reported) -------------------------
   if (identical(x$mode, "critical")) {
     cat(sprintf(paste0("  Critical reliability: the disattenuated matrix is valid ",
                        "only for reliability >= %.*f%s (it %s below that).\n"),
-                digits, rho_hdl, box_txt, bind_txt(thr$impossible_binds)))
+                digits, rho_hdl, box_txt, bind_txt(thr$inconsistent_binds)))
     if (cut < 1) {
       cat(sprintf(paste0("  It is also *plausible* (all corrected |r| <= %.2f) ",
                          "only for reliability >= %.*f.\n"),
@@ -44,14 +44,14 @@ print.disattenuation_check <- function(x, digits = 2, ...) {
     if (!is.null(fl)) {
       if (fl < rho_hdl) {
         cat(sprintf(paste0("  Taking %.*f as the lowest reliability these measures ",
-          "plausibly attain, the whole range [%.*f, %.*f) yields an IMPOSSIBLE ",
+          "plausibly attain, the whole range [%.*f, %.*f) yields an INCONSISTENT ",
           "construct matrix: unless every measure was unusually reliable ",
           "(>= %.*f), the disattenuation cannot be valid.\n"),
           digits, fl, digits, fl, digits, rho_hdl, digits, rho_hdl))
       } else {
         cat(sprintf(paste0("  Even the lowest reliability these measures plausibly ",
           "attain (%.*f) clears the %.*f threshold, so no reachable reliability ",
-          "makes the disattenuated matrix impossible.\n"),
+          "makes the disattenuated matrix inconsistent.\n"),
           digits, fl, digits, rho_hdl))
       }
     }
@@ -68,17 +68,17 @@ print.disattenuation_check <- function(x, digits = 2, ...) {
               x$max_disattenuated))
 
   fwd <- x$forward; D <- x$disattenuated
-  if (identical(x$verdict, "impossible")) {
-    if (fwd$range_impossible) {
-      cells <- .fmt_cell(fwd$impossible_cells, D)
+  if (identical(x$verdict, "inconsistent")) {
+    if (fwd$range_inconsistent) {
+      cells <- .fmt_cell(fwd$inconsistent_cells, D)
       cat("    A corrected correlation exceeds 1: ", paste(cells, collapse = "; "),
-          " -- an impossible correlation.\n", sep = "")
+          " -- an inconsistent correlation.\n", sep = "")
     }
-    if (fwd$psd_impossible) {
+    if (fwd$psd_inconsistent) {
       cat("    The disattenuated matrix is not positive semidefinite ",
           "(no valid construct correlation matrix fits, even within rounding).\n", sep = "")
     }
-  } else if (identical(x$verdict, "implausible")) {
+  } else if (identical(x$verdict, "consistent but implausible")) {
     cells <- .fmt_cell(fwd$implausible_cells, D)
     cat(sprintf("    Valid, but a corrected correlation exceeds the plausibility cutoff %.2f: %s.\n",
                 cut, paste(cells, collapse = "; ")))
@@ -86,17 +86,17 @@ print.disattenuation_check <- function(x, digits = 2, ...) {
 
   # thresholds + headroom (common-reliability model)
   cat(sprintf(paste0("    Valid only if reliability >= %.*f%s (it %s below that)"),
-              digits, rho_hdl, box_txt, bind_txt(thr$impossible_binds)))
+              digits, rho_hdl, box_txt, bind_txt(thr$inconsistent_binds)))
   if (cut < 1) {
     cat(sprintf("; valid AND plausible only if >= %.*f", digits, thr$rho_plausible))
   }
   cat(".\n")
   if (x$mode == "common" && is.finite(x$headroom)) {
     if (x$headroom < 0) {
-      cat(sprintf("    The reported %.2f falls %.2f short of the impossibility boundary.\n",
+      cat(sprintf("    The reported %.2f falls %.2f short of the inconsistency boundary.\n",
                   x$reliability, -x$headroom))
     } else {
-      cat(sprintf("    The reported %.2f clears the impossibility boundary by %.2f.\n",
+      cat(sprintf("    The reported %.2f clears the inconsistency boundary by %.2f.\n",
                   x$reliability, x$headroom))
     }
   }

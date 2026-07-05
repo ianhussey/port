@@ -5,9 +5,9 @@
 # geometric mean of the two variables' reliabilities:
 #     D_ij = R_ij / sqrt(rho_i * rho_j),   D_ii = 1.
 # Because reliabilities are in (0, 1], this only ever moves the matrix AWAY from
-# the PSD cone, so a valid observed matrix can become an impossible *construct*
+# the PSD cone, so a valid observed matrix can become an inconsistent *construct*
 # matrix under the reliabilities the authors themselves report. This module asks
-# whether that disattenuated matrix is impossible / implausible / possible,
+# whether that disattenuated matrix is inconsistent / consistent but implausible / consistent,
 # accounting for the rounding of both the correlations and the reliabilities.
 #
 # Key facts used (single common reliability rho, exact values):
@@ -88,30 +88,30 @@ disattenuate <- function(R, reliability) {
        center = disattenuate(R, reliability))
 }
 
-# Forward verdict on a disattenuated box: impossible / implausible / possible /
+# Forward verdict on a disattenuated box: inconsistent / consistent but implausible / consistent /
 # undecided, plus the offending cells.
 .disatten_forward <- function(iv, cutoff) {
   off <- iv$off
   ut <- which(upper.tri(iv$min_abs), arr.ind = TRUE)
   ma <- iv$min_abs[upper.tri(iv$min_abs)]
-  # cells certainly out of range (|D| > 1) or certainly implausible (|D| > cutoff)
+  # cells certainly out of range (|D| > 1) or certainly consistent but implausible (|D| > cutoff)
   imp_rows <- ut[ma > 1, , drop = FALSE]
   impl_rows <- ut[ma > cutoff & ma <= 1, , drop = FALSE]
 
-  range_impossible <- nrow(imp_rows) > 0L
+  range_inconsistent <- nrow(imp_rows) > 0L
   fe <- .box_feasible(iv$lo, iv$hi, off)
-  psd_impossible <- identical(fe$status, "infeasible")
-  impossible <- range_impossible || psd_impossible
+  psd_inconsistent <- identical(fe$status, "infeasible")
+  inconsistent <- range_inconsistent || psd_inconsistent
 
-  any_implausible <- any(ma > cutoff)       # includes >1 cells, but those imply impossible
-  verdict <- if (impossible) "impossible"
-             else if (any_implausible) "implausible"
-             else if (identical(fe$status, "feasible")) "possible"
+  any_implausible <- any(ma > cutoff)       # includes >1 cells, but those imply inconsistent
+  verdict <- if (inconsistent) "inconsistent"
+             else if (any_implausible) "consistent but implausible"
+             else if (identical(fe$status, "feasible")) "consistent"
              else "undecided"
 
   list(verdict = verdict, psd_status = fe$status,
-       range_impossible = range_impossible, psd_impossible = psd_impossible,
-       impossible_cells = imp_rows, implausible_cells = impl_rows)
+       range_inconsistent = range_inconsistent, psd_inconsistent = psd_inconsistent,
+       inconsistent_cells = imp_rows, implausible_cells = impl_rows)
 }
 
 .new_disattenuation_check <- function(...) {
@@ -119,36 +119,36 @@ disattenuate <- function(R, reliability) {
 }
 
 # Common-rho point thresholds (the interpretable narrative numbers, computed at
-# the exact reported values; the box-sound counterpart is .rho_impossible_box).
+# the exact reported values; the box-sound counterpart is .rho_inconsistent_box).
 .rho_thresholds <- function(R, cutoff) {
   lam_min <- min(eigen(R, symmetric = TRUE, only.values = TRUE)$values)
   max_r <- max(abs(R[upper.tri(R)]))
-  rho_impossible <- max(1 - lam_min, max_r)                 # below -> impossible
-  rho_plausible <- if (cutoff < 1) max(1 - lam_min, max_r / cutoff) else rho_impossible
+  rho_inconsistent <- max(1 - lam_min, max_r)                 # below -> inconsistent
+  rho_plausible <- if (cutoff < 1) max(1 - lam_min, max_r / cutoff) else rho_inconsistent
   list(lambda_min = lam_min, max_r = max_r,
-       rho_impossible = rho_impossible, rho_plausible = rho_plausible,
+       rho_inconsistent = rho_inconsistent, rho_plausible = rho_plausible,
        # which constraint sets each boundary
-       impossible_binds = if ((1 - lam_min) >= max_r) "PSD" else "range",
+       inconsistent_binds = if ((1 - lam_min) >= max_r) "PSD" else "range",
        plausible_binds = if (cutoff < 1 && (max_r / cutoff) > (1 - lam_min)) "range" else "PSD")
 }
 
 # Box-sound critical reliability: the largest common rho at which the
 # disattenuated BOX (correlations rounded to delta_R; reliabilities treated as
 # exact, since rho is the variable being solved for) is still certifiably
-# impossible via the rigorous box witness. The claim "the disattenuation is
-# impossible for any common reliability <= rho*_box" is therefore sound even
+# inconsistent via the rigorous box witness. The claim "the disattenuation is
+# inconsistent for any common reliability <= rho*_box" is therefore sound even
 # allowing for rounding of the reported correlations -- unlike the point closed
 # form, which ignores the rounding box. Located by bisection (the certified-
-# impossible region is an interval (0, rho*]).
-# Returns 0 when no reliability >= floor_rho is certifiably impossible
-# ("vacuous"), and NA when the observed box is itself impossible at rho = 1.
-.rho_impossible_box <- function(R, delta_R, observed_impossible,
+# inconsistent region is an interval (0, rho*]).
+# Returns 0 when no reliability >= floor_rho is certifiably inconsistent
+# ("vacuous"), and NA when the observed box is itself inconsistent at rho = 1.
+.rho_inconsistent_box <- function(R, delta_R, observed_inconsistent,
                                 floor_rho = 0.01, tol = 1e-4, max_it = 30L) {
-  if (isTRUE(observed_impossible)) return(NA_real_)
+  if (isTRUE(observed_inconsistent)) return(NA_real_)
   cert_imp <- function(rho) {
     iv <- .disattenuated_intervals(R, rho, delta_R, delta_rel = 0)
     if (any(iv$min_abs[upper.tri(iv$min_abs)] > 1)) return(TRUE)   # range precheck
-    isTRUE(.box_impossible(iv$lo, iv$hi, iv$off)$impossible)
+    isTRUE(.box_inconsistent(iv$lo, iv$hi, iv$off)$inconsistent)
   }
   if (!cert_imp(floor_rho)) return(0)
   lo <- floor_rho; hi <- 1
@@ -164,15 +164,15 @@ disattenuate <- function(R, reliability) {
 #'
 #' Given a reported (rounded) correlation matrix and measurement reliabilities,
 #' decide whether the reliability-disattenuated construct matrix is
-#' `impossible` (no PSD matrix fits, or a corrected correlation exceeds 1),
-#' `implausible` (valid, but a corrected correlation exceeds `max_plausible_r`),
-#' `possible`, or `undecided`. The impossibility side is rigorous and box-aware
+#' `inconsistent` (no PSD matrix fits, or a corrected correlation exceeds 1),
+#' `consistent but implausible` (valid, but a corrected correlation exceeds `max_plausible_r`),
+#' `consistent`, or `undecided`. The inconsistency side is rigorous and box-aware
 #' (it reuses the package's witness / Rump machinery); rounding of both the
 #' correlations and the reliabilities is taken into account.
 #'
 #' With `reliability = NULL` the function instead reports the *critical
 #' reliability* thresholds (the reliability below which disattenuation is
-#' impossible / implausible) — useful when reliabilities were not reported.
+#' inconsistent / consistent but implausible) -- useful when reliabilities were not reported.
 #'
 #' @param R A reported correlation matrix (rounded), symmetric, unit diagonal.
 #' @param reliability A single common reliability, a length-`p` vector of
@@ -184,9 +184,9 @@ disattenuate <- function(R, reliability) {
 #' @param reliability_decimals Decimals the reliabilities were rounded to (sets
 #'   the box on the reliabilities). Use `Inf` to treat reliabilities as exact.
 #' @param max_plausible_r Plausibility cutoff on corrected correlations. A
-#'   corrected `|D_ij|` above this (but at most 1) is flagged `implausible`.
+#'   corrected `|D_ij|` above this (but at most 1) is flagged `consistent but implausible`.
 #'   Default `1` disables the plausibility level (only the mathematical bound of
-#'   1 flags `impossible`); set e.g. `0.9` to activate it.
+#'   1 flags `inconsistent`); set e.g. `0.9` to activate it.
 #' @param plausible_floor Optional lowest reliability the measures could
 #'   plausibly attain, used only for the narrative when `reliability = NULL`
 #'   (a reachability note, never a filter; no default).
@@ -215,8 +215,8 @@ check_disattenuated_psd <- function(R, reliability = NULL, decimals = 2,
 
   observed <- check_corr_psd(R, decimals = decimals)$verdict
   thr <- .rho_thresholds(R, cutoff)
-  thr$rho_impossible_box <- .rho_impossible_box(
-    R, delta_R, observed_impossible = identical(observed, "impossible"))
+  thr$rho_inconsistent_box <- .rho_inconsistent_box(
+    R, delta_R, observed_inconsistent = identical(observed, "inconsistent"))
 
   common <- list(observed_verdict = observed, thresholds = thr,
                  max_plausible_r = cutoff, decimals = decimals,
@@ -235,11 +235,11 @@ check_disattenuated_psd <- function(R, reliability = NULL, decimals = 2,
   reported_rho <- if (length(reliability) == 1L) reliability else NA_real_
   # headroom is measured against the box-sound boundary (falls back to the point
   # closed form only when the box bisection is unavailable)
-  rho_anchor <- if (is.finite(thr$rho_impossible_box %||% NA_real_) &&
-                    (thr$rho_impossible_box %||% 0) > 0) {
-    thr$rho_impossible_box
+  rho_anchor <- if (is.finite(thr$rho_inconsistent_box %||% NA_real_) &&
+                    (thr$rho_inconsistent_box %||% 0) > 0) {
+    thr$rho_inconsistent_box
   } else {
-    thr$rho_impossible
+    thr$rho_inconsistent
   }
   headroom <- if (!is.na(reported_rho)) reported_rho - rho_anchor else NA_real_
   max_disattenuated <- max(abs(iv$center[upper.tri(iv$center)]))

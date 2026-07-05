@@ -29,38 +29,38 @@ test_that("critical reliability matches the closed form rho* = 1 - lambda_min", 
   E <- equicorr(3, 0.5)
   res <- check_disattenuated_psd(E, reliability = NULL, decimals = 4)
   expect_equal(res$thresholds$lambda_min, 0.5, tolerance = 1e-8)
-  expect_equal(res$thresholds$rho_impossible, 0.5, tolerance = 1e-8)
+  expect_equal(res$thresholds$rho_inconsistent, 0.5, tolerance = 1e-8)
 })
 
-test_that("low reliability drives a corrected correlation above 1 -> impossible", {
+test_that("low reliability drives a corrected correlation above 1 -> inconsistent", {
   res <- check_disattenuated_psd(R3, reliability = 0.34, decimals = 2, max_plausible_r = 0.9)
-  expect_equal(res$verdict, "impossible")
-  expect_true(res$forward$range_impossible)
+  expect_equal(res$verdict, "inconsistent")
+  expect_true(res$forward$range_inconsistent)
   # corrected (1,2) = 0.60/0.34 ~ 1.76
   expect_gt(res$disattenuated[1, 2], 1)
 })
 
-test_that("a plausibility cutoff yields an 'implausible' verdict", {
+test_that("a plausibility cutoff yields an 'consistent but implausible' verdict", {
   res <- check_disattenuated_psd(R3, reliability = 0.62, decimals = 2, max_plausible_r = 0.9)
-  expect_equal(res$verdict, "implausible")
+  expect_equal(res$verdict, "consistent but implausible")
   expect_gt(res$max_disattenuated, 0.9)
   expect_lt(res$max_disattenuated, 1)
 })
 
-test_that("cutoff of 1 disables the implausible level", {
+test_that("cutoff of 1 disables the consistent but implausible level", {
   res <- check_disattenuated_psd(R3, reliability = 0.62, decimals = 2, max_plausible_r = 1)
-  expect_true(res$verdict %in% c("possible", "impossible", "undecided"))
-  expect_false(identical(res$verdict, "implausible"))
+  expect_true(res$verdict %in% c("consistent", "inconsistent", "undecided"))
+  expect_false(identical(res$verdict, "consistent but implausible"))
 })
 
-test_that("high reliability keeps the disattenuated matrix possible", {
+test_that("high reliability keeps the disattenuated matrix consistent", {
   res <- check_disattenuated_psd(R3, reliability = 0.95, decimals = 2, max_plausible_r = 0.9)
-  expect_equal(res$verdict, "possible")
+  expect_equal(res$verdict, "consistent")
   expect_true(res$headroom > 0)
 })
 
 test_that("verdict severity is monotone as reliability falls", {
-  sev <- c(possible = 0L, implausible = 1L, impossible = 2L)
+  sev <- c(consistent = 0L, `consistent but implausible` = 1L, inconsistent = 2L)
   rhos <- c(0.98, 0.85, 0.70, 0.55, 0.40)
   v <- vapply(rhos, function(r)
     check_disattenuated_psd(R3, reliability = r, decimals = 2, max_plausible_r = 0.9)$verdict,
@@ -69,14 +69,14 @@ test_that("verdict severity is monotone as reliability falls", {
   expect_false(any(diff(s) < 0))       # non-decreasing severity as rho decreases
 })
 
-test_that("impossibility can bind on PSD rather than range", {
+test_that("inconsistency can bind on PSD rather than range", {
   # near-boundary matrix: PSD fails before any corrected |r| exceeds 1
   R2 <- matrix(c(1, 0.5, 0.5, 0.5, 1, -0.4, 0.5, -0.4, 1), 3, 3)
   res <- check_disattenuated_psd(R2, reliability = 0.7, decimals = 2, max_plausible_r = 0.9)
-  expect_equal(res$verdict, "impossible")
-  expect_true(res$forward$psd_impossible)
-  expect_false(res$forward$range_impossible)
-  expect_equal(res$thresholds$impossible_binds, "PSD")
+  expect_equal(res$verdict, "inconsistent")
+  expect_true(res$forward$psd_inconsistent)
+  expect_false(res$forward$range_inconsistent)
+  expect_equal(res$thresholds$inconsistent_binds, "PSD")
   # the disattenuated centre is genuinely indefinite
   expect_lt(min(eigen(res$disattenuated, symmetric = TRUE, only.values = TRUE)$values), 0)
 })
@@ -85,8 +85,8 @@ test_that("critical mode reports thresholds and an optional floor narrative", {
   reachable <- check_disattenuated_psd(R3, reliability = NULL, decimals = 2,
                                        max_plausible_r = 0.9, plausible_floor = 0.3)
   expect_equal(reachable$mode, "critical")
-  expect_true(reachable$thresholds$rho_impossible > 0.3)   # floor below -> reachable
-  expect_output(print(reachable), "IMPOSSIBLE construct matrix")
+  expect_true(reachable$thresholds$rho_inconsistent > 0.3)   # floor below -> reachable
+  expect_output(print(reachable), "INCONSISTENT construct matrix")
 
   safe <- check_disattenuated_psd(R3, reliability = NULL, decimals = 2,
                                   plausible_floor = 0.95)
@@ -95,7 +95,7 @@ test_that("critical mode reports thresholds and an optional floor narrative", {
 
 test_that("rounded reliabilities widen the disattenuated intervals", {
   # exact reliabilities vs rounded to 1 dp: the boxed version is at least as
-  # willing to reach a verdict of impossible (wider box on the correlations side
+  # willing to reach a verdict of inconsistent (wider box on the correlations side
   # only matters via the reliability box here)
   exact <- check_disattenuated_psd(R3, reliability = 0.50, decimals = 2,
                                    reliability_decimals = Inf, max_plausible_r = 0.9)
@@ -116,5 +116,5 @@ test_that("per-variable reliabilities give a forward verdict", {
   res <- check_disattenuated_psd(R3, reliability = c(0.4, 0.5, 0.9), decimals = 2,
                                  max_plausible_r = 0.9)
   expect_equal(res$mode, "per_variable")
-  expect_true(res$verdict %in% c("impossible", "implausible", "possible", "undecided"))
+  expect_true(res$verdict %in% c("inconsistent", "consistent but implausible", "consistent", "undecided"))
 })

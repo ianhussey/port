@@ -23,14 +23,14 @@ the units of reporting precision:
 }
 \details{
 \itemize{
-\item the matrix is impossible at reporting precision \code{delta} \strong{iff}
+\item the matrix is inconsistent at reporting precision \code{delta} \strong{iff}
 \code{excusable_delta(R) > delta};
 \item a value like \code{0.04} reads as "the reported values are inconsistent with any
-correlation matrix unless each entry were mis-stated by more than ±0.04 --
-not excusable even by rounding to 1 decimal place (±0.05 would be needed)".
+correlation matrix unless each entry were misstated by more than +/-0.04 --
+not excusable even by rounding to 1 decimal place (+/-0.05 would be needed)".
 }
 
-For a matrix that is already possible at fine precision the threshold is ~0.
+For a matrix that is already consistent at fine precision the threshold is ~0.
 The value is located by bisection over the box feasibility oracle (witness
 refutation + Rump-verified POCS), to tolerance \code{tol}.
 }

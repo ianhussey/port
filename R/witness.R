@@ -1,5 +1,5 @@
 # -----------------------------------------------------------------------------
-# Verified witness-vector bound (primary impossibility path, all p).
+# Verified witness-vector bound (primary inconsistency path, all p).
 #
 # For any test direction v != 0, the most PSD-favourable in-box matrix along v
 # gives, exactly,
@@ -14,8 +14,8 @@
 #     2*delta*sum_{i<j}|v_i||v_j| = delta*(||v||_1^2 - ||v||_2^2).
 # Clipping the box to [-1, 1] can only shrink it, so ignoring that clip keeps
 # this an UPPER bound on the achievable quadratic form -- sound for
-# impossibility. If this maximum is < 0 then no in-box matrix is PSD (a PSD
-# matrix would need v'Xv >= 0), and v certifies impossibility.
+# inconsistency. If this maximum is < 0 then no in-box matrix is PSD (a PSD
+# matrix would need v'Xv >= 0), and v certifies inconsistency.
 #
 # v need not be an exact eigenvector: it is only a test direction, so its
 # inaccuracy never invalidates the certificate. Only the *evaluation* of the
@@ -24,7 +24,7 @@
 
 # Evaluate the witness bound for a single direction v, together with a rigorous
 # a-priori forward-error bound `E` such that the exact real value M satisfies
-# M <= M_hat + E =: B_upper. Hence B_upper < 0 rigorously implies impossibility.
+# M <= M_hat + E =: B_upper. Hence B_upper < 0 rigorously implies inconsistency.
 #
 # v may have any (nonzero) norm: we use the general form with ||v||_2^2 rather
 # than assuming a normalized v, which is strictly more rigorous.
@@ -66,7 +66,7 @@
 
 # Fast O(p^2) precheck: if any reported off-diagonal is out of range even at the
 # nearest box edge (|R_ij| - delta > 1), no in-box value can be a valid
-# correlation, so the matrix is impossible. Returns NULL, or a one-row summary.
+# correlation, so the matrix is inconsistent. Returns NULL, or a one-row summary.
 .precheck_range <- function(R, delta) {
   p <- nrow(R)
   off <- which(upper.tri(R), arr.ind = TRUE)
@@ -103,7 +103,7 @@
 }
 
 # Search a family of sound test directions and return the one giving the most
-# negative (most impossibility-favourable) B_upper. Every direction yields a
+# negative (most inconsistency-favourable) B_upper. Every direction yields a
 # valid certificate, so combining several only increases detection power.
 #
 # Directions:

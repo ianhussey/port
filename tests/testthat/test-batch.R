@@ -7,7 +7,7 @@ test_that("batch helper returns a tidy tibble with one row per matrix", {
   expect_s3_class(out, "tbl_df")
   expect_equal(nrow(out), 3L)
   expect_equal(out$id, c("good", "bad", "oob"))
-  expect_equal(out$verdict, c("possible", "impossible", "impossible"))
+  expect_equal(out$verdict, c("consistent", "inconsistent", "inconsistent"))
   expect_equal(out$tier, c("witness", "witness", "precheck"))
   expect_true(all(c("margin", "b_upper", "delta", "p", "message") %in% names(out)))
 })
@@ -21,7 +21,7 @@ test_that("batch helper indexes unnamed lists positionally", {
 test_that("batch helper records validation errors as rows by default", {
   out <- check_corr_psd_batch(list(ok = diag(3), broken = matrix(1, 2, 3)),
                               quiet = TRUE)
-  expect_equal(out$verdict, c("possible", "error"))
+  expect_equal(out$verdict, c("consistent", "error"))
   expect_true(!is.na(out$message[2]))
 })
 

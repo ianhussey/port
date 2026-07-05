@@ -1,10 +1,10 @@
 # -----------------------------------------------------------------------------
-# Component B: rounding-robust impossible-triple scan (primary cheap localizer).
+# Component B: rounding-robust inconsistent-triple scan (primary cheap localizer).
 #
 # For a triple (i,j,k) with a = X_ij, b = X_ik, c = X_jk, the 3x3 PSD condition
 # reduces to det = 1 + 2abc - a^2 - b^2 - c^2 >= 0. We need a SOUND upper bound
 # on max det over the three rounding boxes: if that bound is < 0, the triple is
-# impossible even accounting for rounding. This path is pure interval arithmetic
+# inconsistent even accounting for rounding. This path is pure interval arithmetic
 # -- no solver, no CVXR.
 #
 # Sound bound. Use the exact identities
@@ -47,9 +47,9 @@
   min(ub_a, ub_b, ub_c)
 }
 
-# Scan all triples; return a list of impossible ones (box_max_det < 0), each a
+# Scan all triples; return a list of inconsistent ones (box_max_det < 0), each a
 # list(vars = c(i,j,k), cells = 3x2 matrix of (row,col), box_max_det).
-.scan_impossible_triples <- function(R, delta) {
+.scan_inconsistent_triples <- function(R, delta) {
   p <- nrow(R)
   bnd <- .box_bounds(R, delta)
   lo <- bnd$lo; hi <- bnd$hi
@@ -72,29 +72,29 @@
   out
 }
 
-#' Scan for rounding-robust impossible triples
+#' Scan for rounding-robust inconsistent triples
 #'
 #' For every triple of variables, test whether the induced 3x3 correlation
 #' submatrix can be positive semidefinite for *some* assignment within the
 #' rounding boxes. Uses a sound interval bound on the 3x3 determinant, so a
-#' flagged triple is impossible even after accounting for rounding. Pure
+#' flagged triple is inconsistent even after accounting for rounding. Pure
 #' arithmetic: no solver required. This is component B of [localize_psd_fault()]
 #' exposed on its own.
 #'
 #' @param R A symmetric numeric correlation matrix with unit diagonal.
 #' @param decimals,delta Rounding precision, as in [check_corr_psd()].
-#' @return A [tibble][tibble::tibble] with one row per impossible triple: columns
+#' @return A [tibble][tibble::tibble] with one row per inconsistent triple: columns
 #'   `i`, `j`, `k`, and `box_max_det` (the sound upper bound on the box-max
-#'   determinant; negative means impossible). Empty if none.
+#'   determinant; negative means inconsistent). Empty if none.
 #' @examples
 #' R <- matrix(c(1, 0.9, 0.9, 0.9, 1, -0.9, 0.9, -0.9, 1), 3, 3)
-#' impossible_triples(R, decimals = 2)
+#' inconsistent_triples(R, decimals = 2)
 #' @seealso [localize_psd_fault()]
 #' @export
-impossible_triples <- function(R, decimals = 2, delta = NULL) {
+inconsistent_triples <- function(R, decimals = 2, delta = NULL) {
   R <- .validate_corr(R)
   if (is.null(delta)) delta <- 0.5 * 10^(-decimals)
-  trs <- .scan_impossible_triples(R, delta)
+  trs <- .scan_inconsistent_triples(R, delta)
   if (length(trs) == 0L) {
     return(tibble::tibble(i = integer(), j = integer(), k = integer(),
                           box_max_det = numeric()))

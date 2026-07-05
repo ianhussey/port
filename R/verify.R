@@ -1,5 +1,5 @@
 # -----------------------------------------------------------------------------
-# Rump-style verified positive semidefiniteness (for the POSSIBLE side).
+# Rump-style verified positive semidefiniteness (for the CONSISTENT side).
 #
 # A symmetric matrix A is *provably* PSD in floating point if a standard
 # Cholesky factorization of (A - c*I) completes, where c rigorously bounds the

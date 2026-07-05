@@ -2,7 +2,7 @@
 % Please edit documentation in R/methods.R
 \name{certificate}
 \alias{certificate}
-\title{Extract the impossibility certificate from a \code{corr_psd_check}}
+\title{Extract the inconsistency certificate from a \code{corr_psd_check}}
 \usage{
 certificate(x)
 }
@@ -11,12 +11,12 @@ certificate(x)
 }
 \value{
 A list with \code{witness} (the certificate vector \code{v}, or \code{NULL} when the
-verdict is not \code{impossible} via the witness tier), \code{margin} (the value
+verdict is not \code{inconsistent} via the witness tier), \code{margin} (the value
 \verb{B = v'Rv + delta*(||v||_1^2 - ||v||_2^2)}), \code{b_upper} (the rigorous upper
 bound \code{B_upper}), \code{verdict} and \code{tier}.
 }
 \description{
-Extract the impossibility certificate from a \code{corr_psd_check}
+Extract the inconsistency certificate from a \code{corr_psd_check}
 }
 \examples{
 R <- matrix(c(1, 0.9, 0.9, 0.9, 1, -0.9, 0.9, -0.9, 1), 3, 3)

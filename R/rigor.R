@@ -1,7 +1,7 @@
 # -----------------------------------------------------------------------------
 # Rigorous a-priori floating-point error model.
 #
-# The impossibility verdict must be floating-point-safe: it must not depend on
+# The inconsistency verdict must be floating-point-safe: it must not depend on
 # a solver tolerance. We achieve this with standard backward/forward error
 # bounds (Higham, "Accuracy and Stability of Numerical Algorithms", 2nd ed.,
 # 2002, Ch. 3). All quantities below are deliberate *over*-estimates of the
@@ -17,7 +17,7 @@
 # This is the standard constant that bounds the accumulated relative error of a
 # sequence of n floating-point operations. We return Inf if the guard n*u >= 1
 # is violated (astronomically large n) so that any downstream comparison fails
-# safe (never spuriously declaring impossibility).
+# safe (never spuriously declaring inconsistency).
 .gamma <- function(n, u = .unit_roundoff()) {
   nu <- n * u
   if (nu >= 1) return(Inf)

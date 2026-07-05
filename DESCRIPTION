@@ -1,20 +1,26 @@
-Package: psdness
-Title: Certify Whether a Rounded Correlation Matrix Can be Positive Semidefinite
+Package: port
+Title: Consistency Checks for Reported Rounded Correlation Matrices
 Version: 0.1.0
 Authors@R:
-    person("Ian", "Hussey", email = "ianhusseysipod@gmail.com", role = c("aut", "cre"))
-Description: Forensic metascience tool that decides whether a reported
-    correlation matrix, whose off-diagonal entries are rounded to fixed
-    precision, is consistent with any positive semidefinite (PSD) matrix
-    inside the induced rounding box. The payload is certifying
-    IMPOSSIBILITY: when no PSD matrix fits the rounding box, the reported
-    matrix cannot be a genuine correlation matrix. Impossibility verdicts
-    are backed by a rigorous a-priori floating-point error bound on a
-    witness-vector quadratic form (Higham, "Accuracy and Stability of
-    Numerical Algorithms", 2002), so they do not depend on solver
-    tolerances. Possibility is certified by exhibiting an in-box PSD matrix
-    verified via a one-sided Cholesky test (Rump, "Verification of positive
-    definiteness", BIT 46:433-452, 2006).
+    person("Ian", "Hussey", email = "ian.hussey@unibe.ch", role = c("aut", "cre"))
+Description: Forensic meta-science tools for auditing reported correlation
+    matrices. Published correlations are rounded, so each true value lies
+    somewhere within a small range around the printed number. The package
+    asks whether any valid correlation matrix -- one that is positive
+    semidefinite (PSD) -- can lie within all of those ranges at once. When
+    none can, the reported table cannot have arisen as a single complete
+    set of Pearson correlations; the cause may be benign (for example
+    missing values handled pairwise or a mix of correlation types) or the use 
+    of non-Pearson's correlations. Such 'inconsistent' findings rest on a rigorous
+    floating-point error bound (Higham (2002) <doi:10.1137/1.9780898718027>)
+    and so do not depend on the tolerances of a numerical solver. A
+    'consistent' finding is confirmed by constructing a valid matrix within
+    the ranges and verifying it with a guaranteed Cholesky test (Rump (2006)
+    <doi:10.1007/s10543-006-0056-1>). Beyond the verdict, the package points
+    to the cells, variables, or triples that drive an inconsistent result,
+    grades how far the table is from consistency, and separates benign
+    structural causes from substantive errors. A further layer applies the
+    same checks to reliability-corrected (disattenuated) correlations.
 License: MIT + file LICENSE
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
@@ -27,6 +33,8 @@ Imports:
 Suggests:
     knitr,
     rmarkdown,
+    spelling,
     testthat (>= 3.0.0)
 VignetteBuilder: knitr
+Language: en-US
 Config/testthat/edition: 3

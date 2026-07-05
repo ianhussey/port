@@ -5,11 +5,11 @@
 #' @export
 print.corr_psd_check <- function(x, digits = 4, ...) {
   head <- switch(x$verdict,
-    impossible = "IMPOSSIBLE  (no PSD matrix fits the rounding box)",
-    possible   = if (isTRUE(x$certified))
-                   "POSSIBLE    (certified: in-box PSD matrix exhibited)"
-                 else "POSSIBLE    (presumed: not shown impossible)",
-    undecided  = "UNDECIDED   (ambiguous at this precision)",
+    inconsistent = "INCONSISTENT  (no PSD matrix fits the rounding box)",
+    consistent   = if (isTRUE(x$certified))
+                   "CONSISTENT    (certified: in-box PSD matrix exhibited)"
+                 else "CONSISTENT    (presumed: not shown inconsistent)",
+    undecided    = "UNDECIDED     (ambiguous at this precision)",
     x$verdict)
   cat("<corr_psd_check>\n")
   cat(sprintf("  verdict : %s\n", head))
@@ -20,7 +20,7 @@ print.corr_psd_check <- function(x, digits = 4, ...) {
   }
   cat("\n")
 
-  if (identical(x$verdict, "impossible")) {
+  if (identical(x$verdict, "inconsistent")) {
     if (identical(x$tier, "precheck")) {
       cat("  reason  : ", paste(x$note, collapse = " "), "\n", sep = "")
     } else {
@@ -37,7 +37,7 @@ print.corr_psd_check <- function(x, digits = 4, ...) {
         "            produce non-PSD reported matrices; see README.\n", sep = "")
   } else {
     if (!is.na(x$b_upper)) {
-      cat(sprintf("  margin  : B_upper = %.*g  (>= 0: no impossibility certificate)\n",
+      cat(sprintf("  margin  : B_upper = %.*g  (>= 0: no inconsistency certificate)\n",
                   digits, x$b_upper))
     }
     if (!is.null(x$certified_matrix)) {
@@ -55,11 +55,11 @@ print.corr_psd_check <- function(x, digits = 4, ...) {
   paste0("(", paste(formatC(v, digits = digits, format = "g"), collapse = ", "), ")")
 }
 
-#' Extract the impossibility certificate from a `corr_psd_check`
+#' Extract the inconsistency certificate from a `corr_psd_check`
 #'
 #' @param x A `corr_psd_check` object.
 #' @return A list with `witness` (the certificate vector `v`, or `NULL` when the
-#'   verdict is not `impossible` via the witness tier), `margin` (the value
+#'   verdict is not `inconsistent` via the witness tier), `margin` (the value
 #'   `B = v'Rv + delta*(||v||_1^2 - ||v||_2^2)`), `b_upper` (the rigorous upper
 #'   bound `B_upper`), `verdict` and `tier`.
 #' @examples

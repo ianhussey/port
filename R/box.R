@@ -83,7 +83,7 @@
 
 # POCS search for an in-box PSD matrix in a heterogeneous box. Returns a
 # Rump-verified in-box matrix (list with X, mu) or NULL. NULL means "not found",
-# NOT "infeasible"; infeasibility must be established by .box_impossible().
+# NOT "infeasible"; infeasibility must be established by .box_inconsistent().
 .pocs_feasible <- function(lo, hi, off,
                            mus = c(1e-2, 1e-3, 1e-4, 1e-6),
                            max_iter = 1000L, tol = 1e-13) {
@@ -151,13 +151,13 @@
   best
 }
 
-# Decide whether a heterogeneous box is impossible (no in-box PSD matrix), using
-# a search over sound witness directions. Returns list(impossible, witness,
+# Decide whether a heterogeneous box is inconsistent (no in-box PSD matrix), using
+# a search over sound witness directions. Returns list(inconsistent, witness,
 # b_upper, margin). Directions: bottom eigenvectors of the box midpoint, all
 # coordinate pairs, (small p) 3x3 submatrix eigenvectors, and the p regression-
 # residual directions of the midpoint -- the same family that powers the base
 # checker, all evaluated with the rigorous box bound, then polished.
-.box_impossible <- function(lo, hi, off, triples_max_p = 12L) {
+.box_inconsistent <- function(lo, hi, off, triples_max_p = 12L) {
   p <- nrow(lo)
   mid <- matrix(0, p, p)
   mid[off] <- (lo[off] + hi[off]) / 2
@@ -195,7 +195,7 @@
     pol <- .polish_witness_box(lo, hi, off, best$v)
     if (pol$B_upper < best$B_upper) best <- pol
   }
-  list(impossible = !is.null(best) && best$B_upper < 0,
+  list(inconsistent = !is.null(best) && best$B_upper < 0,
        witness = if (is.null(best)) NULL else best$v,
        b_upper = if (is.null(best)) NA_real_ else best$B_upper,
        margin  = if (is.null(best)) NA_real_ else best$M_hat)
@@ -210,8 +210,8 @@
 .box_feasible <- function(lo, hi, off, verify = TRUE) {
   # Witness first: a sound refutation is cheap (O(p^2) directions) and lets the
   # bisection localizers reject infeasible pins without a full POCS search.
-  imp <- .box_impossible(lo, hi, off)
-  if (isTRUE(imp$impossible)) {
+  imp <- .box_inconsistent(lo, hi, off)
+  if (isTRUE(imp$inconsistent)) {
     return(list(status = "infeasible", witness = imp$witness,
                 b_upper = imp$b_upper, certified = TRUE))
   }

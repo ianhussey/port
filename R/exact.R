@@ -1,10 +1,10 @@
 # -----------------------------------------------------------------------------
 # Exact small-p check (cross-validation only).
 #
-# For p in {2, 3} we can decide possibility exactly by maximizing the relevant
+# For p in {2, 3} we can decide consistency exactly by maximizing the relevant
 # principal minors over the rounding box. This is used in the test suite to
 # cross-check the witness verdict; the witness path remains the source of truth
-# in production. Returns "possible" or "impossible".
+# in production. Returns "consistent" or "inconsistent".
 # -----------------------------------------------------------------------------
 
 # Per-variable box (off-diagonal), clipped to [-1, 1].
@@ -38,25 +38,25 @@
   best
 }
 
-# Exact possibility verdict for p in {2, 3}. Errors for other p.
-.exact_possible <- function(R, delta, tol = 1e-12) {
+# Exact consistency verdict for p in {2, 3}. Errors for other p.
+.exact_consistent <- function(R, delta, tol = 1e-12) {
   p <- nrow(R)
   if (p == 2L) {
     b <- .offdiag_box(R[1, 2], delta)
-    return(if (b["lo"] <= b["hi"] + tol) "possible" else "impossible")
+    return(if (b["lo"] <= b["hi"] + tol) "consistent" else "inconsistent")
   }
   if (p == 3L) {
     bx <- .offdiag_box(R[1, 2], delta)
     by <- .offdiag_box(R[1, 3], delta)
     bz <- .offdiag_box(R[2, 3], delta)
-    # Any empty per-variable box already forces impossibility.
+    # Any empty per-variable box already forces inconsistency.
     if (bx["lo"] > bx["hi"] || by["lo"] > by["hi"] || bz["lo"] > bz["hi"]) {
-      return("impossible")
+      return("inconsistent")
     }
     lo <- c(bx["lo"], by["lo"], bz["lo"])
     hi <- c(bx["hi"], by["hi"], bz["hi"])
     best <- .max_det_p3(lo, hi)
-    return(if (best >= -tol) "possible" else "impossible")
+    return(if (best >= -tol) "consistent" else "inconsistent")
   }
   stop("The exact cross-check supports only p in {2, 3}.", call. = FALSE)
 }

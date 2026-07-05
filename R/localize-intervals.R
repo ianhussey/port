@@ -16,7 +16,7 @@
 # so [lo_ij, hi_ij] is a (slightly conservative) subset of the true interval and
 # required_edit is never understated.
 #
-# Note: for an impossible-given-rounding matrix, no cell's rounding box can
+# Note: for an inconsistent-given-rounding matrix, no cell's rounding box can
 # overlap its own feasible interval (an overlap would exhibit a fully in-box PSD
 # matrix), so every sole-culprit cell has a strictly non-zero required_edit.
 # -----------------------------------------------------------------------------

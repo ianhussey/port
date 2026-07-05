@@ -28,9 +28,9 @@ model.}
 the box on the reliabilities). Use \code{Inf} to treat reliabilities as exact.}
 
 \item{max_plausible_r}{Plausibility cutoff on corrected correlations. A
-corrected \verb{|D_ij|} above this (but at most 1) is flagged \code{implausible}.
+corrected \verb{|D_ij|} above this (but at most 1) is flagged \verb{consistent but implausible}.
 Default \code{1} disables the plausibility level (only the mathematical bound of
-1 flags \code{impossible}); set e.g. \code{0.9} to activate it.}
+1 flags \code{inconsistent}); set e.g. \code{0.9} to activate it.}
 
 \item{plausible_floor}{Optional lowest reliability the measures could
 plausibly attain, used only for the narrative when \code{reliability = NULL}
@@ -42,16 +42,16 @@ An S3 \code{disattenuation_check} object; see the print method.
 \description{
 Given a reported (rounded) correlation matrix and measurement reliabilities,
 decide whether the reliability-disattenuated construct matrix is
-\code{impossible} (no PSD matrix fits, or a corrected correlation exceeds 1),
-\code{implausible} (valid, but a corrected correlation exceeds \code{max_plausible_r}),
-\code{possible}, or \code{undecided}. The impossibility side is rigorous and box-aware
+\code{inconsistent} (no PSD matrix fits, or a corrected correlation exceeds 1),
+\verb{consistent but implausible} (valid, but a corrected correlation exceeds \code{max_plausible_r}),
+\code{consistent}, or \code{undecided}. The inconsistency side is rigorous and box-aware
 (it reuses the package's witness / Rump machinery); rounding of both the
 correlations and the reliabilities is taken into account.
 }
 \details{
 With \code{reliability = NULL} the function instead reports the \emph{critical
 reliability} thresholds (the reliability below which disattenuation is
-impossible / implausible) — useful when reliabilities were not reported.
+inconsistent / consistent but implausible) -- useful when reliabilities were not reported.
 }
 \examples{
 R <- matrix(c(1, 0.60, 0.55, 0.60, 1, 0.50, 0.55, 0.50, 1), 3, 3)

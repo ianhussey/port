@@ -1,7 +1,7 @@
 # -----------------------------------------------------------------------------
 # Causes taxonomy: benign structural rank-deficiency vs substantive violation.
 #
-# van Tilburg & van Tilburg (2023) stress that impossibility (really rank
+# van Tilburg & van Tilburg (2023) stress that inconsistency (really rank
 # deficiency) is OFTEN BENIGN and does not imply questionable research practices:
 # common structural generators include a dummy per level of a categorical
 # variable, including both a composite and its subscores, and splicing

@@ -20,7 +20,7 @@ print.psd_fault <- function(x, digits = 3, ...) {
     return(invisible(x))
   }
 
-  cat(sprintf("  Impossible given rounding (delta = %g).\n", d))
+  cat(sprintf("  Inconsistent given rounding (delta = %g).\n", d))
 
   sole <- Filter(function(c) isTRUE(c$sole), x$evidence$sole_culprit_cells)
   find_rec <- function(i, j) {
@@ -53,15 +53,15 @@ print.psd_fault <- function(x, digits = 3, ...) {
   } else if (v %in% c("triad", "joint")) {
     cat("    cells:", .cells_str(x$implicated$cells), "\n")
   } else if (identical(v, "variable")) {
-    cat(sprintf("    variable %d (its removal restores possibility given rounding).\n",
+    cat(sprintf("    variable %d (its removal restores consistency given rounding).\n",
                 x$implicated$variable))
     if (!is.null(x$implicated$cells)) {
       cat("    most likely cell(s) within its column:",
           .cells_str(x$implicated$cells), "\n")
     }
   } else if (identical(v, "diffuse")) {
-    nt <- length(x$evidence$impossible_triples)
-    cat(sprintf("    %d impossible triple(s); leave-one-out restoring vars: {%s}.\n",
+    nt <- length(x$evidence$inconsistent_triples)
+    cat(sprintf("    %d inconsistent triple(s); leave-one-out restoring vars: {%s}.\n",
                 nt, paste(x$evidence$lofo_restoring$restoring, collapse = ", ")))
   }
 
@@ -112,7 +112,7 @@ print.psd_fault <- function(x, digits = 3, ...) {
   drop <- if (!is.null(x$structural)) .structural_note(x$structural) else character(0)
   extra <- setdiff(x$notes, drop)
   for (n in extra) cat("  -", n, "\n")
-  if (!isTRUE(x$verify)) cat("  (verify = FALSE: impossibility sub-claims are search-based.)\n")
+  if (!isTRUE(x$verify)) cat("  (verify = FALSE: inconsistency sub-claims are search-based.)\n")
   invisible(x)
 }
 
@@ -120,7 +120,7 @@ print.psd_fault <- function(x, digits = 3, ...) {
 #'
 #' @param x A `psd_fault` object.
 #' @return The `evidence` list: `sole_culprit_cells` (component A),
-#'   `impossible_triples` (B), `lofo_restoring` (C), `sparse_support` (D), and
+#'   `inconsistent_triples` (B), `lofo_restoring` (C), `sparse_support` (D), and
 #'   `rsquared` (per-variable R^2 localizer).
 #' @examples
 #' R <- matrix(c(1, 0.9, 0.9, 0.9, 1, -0.9, 0.9, -0.9, 1), 3, 3)

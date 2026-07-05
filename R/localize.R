@@ -16,7 +16,7 @@
       evidence = evidence,              # A-D + R^2 raw outputs
       severity = severity,              # severity_max/frob/best_lambda_min/witness_margin
       structural = structural,          # benign-vs-substantive cause diagnosis
-      plausibility = plausibility,      # per-variable R^2 gradient (possible matrices)
+      plausibility = plausibility,      # per-variable R^2 gradient (consistent matrices)
       delta = delta,
       p = p,
       verify = verify,
@@ -27,9 +27,9 @@
   )
 }
 
-#' Localize the fault in an impossible-given-rounding correlation matrix
+#' Localize the fault in an inconsistent-given-rounding correlation matrix
 #'
-#' When [check_corr_psd()] reports `impossible`, this runs a box-aware
+#' When [check_corr_psd()] reports `inconsistent`, this runs a box-aware
 #' fault-localization layer to support semi-automated inference about WHERE the
 #' non-PSDness comes from and HOW SEVERE it is. Non-PSD is a global property, so
 #' a unique culprit is generally under-identified; the tool reports an honest
@@ -45,7 +45,7 @@
 #'   \item{A. per-cell interval / sole culprit}{for each cell, the interval it
 #'     could take given the others within rounding; a nonempty interval marks a
 #'     sole-culprit candidate with a `required_edit` beyond rounding.}
-#'   \item{B. impossible triples}{triples whose 3x3 box-max determinant is
+#'   \item{B. inconsistent triples}{triples whose 3x3 box-max determinant is
 #'     provably negative (sound interval bound; no solver).}
 #'   \item{C. leave-one-out}{variables whose removal restores feasibility.}
 #'   \item{D. sparse correction / severity}{smallest set of cells whose joint
@@ -57,26 +57,26 @@
 #' }
 #'
 #' @section Structural cause and plausibility:
-#' Every impossible result also carries a `structural` diagnosis that separates a
+#' Every inconsistent result also carries a `structural` diagnosis that separates a
 #' benign near-boundary rank-deficiency (composite+subscores, a full set of
 #' category dummies) from a substantive over-the-boundary violation, using the
 #' severity relative to the rounding step and the pattern of the near-dependency
 #' direction (van Tilburg & van Tilburg 2023; Lorenzo-Seva & Ferrando 2021). For
-#' a `possible` matrix the result reports a `plausibility` gradient: the
+#' a `consistent` matrix the result reports a `plausibility` gradient: the
 #' per-variable reported-point `R^2` and its closest approach to the 100% ceiling.
 #'
 #' @section Localization verdicts:
 #' `cell` (a single cell, methods converge), `cell_tentative` (single cell,
-#' partial corroboration), `triad` (three cells of one impossible triangle; any
+#' partial corroboration), `triad` (three cells of one inconsistent triangle; any
 #' one edit resolves it -- not separable), `variable` (one variable's removal
 #' restores feasibility), `joint` (>= 2 cells needed, no single cell suffices),
-#' `diffuse` (no small explanation), or `none` (matrix was possible given
+#' `diffuse` (no small explanation), or `none` (matrix was consistent given
 #' rounding).
 #'
 #' @section Rigor:
-#' Impossibility-type sub-claims are sound: impossible-triple flags use the
+#' Inconsistency-type sub-claims are sound: inconsistent-triple flags use the
 #' interval bound; "freeing a cell alone cannot restore PSD" and "removal still
-#' impossible" are, when `verify = TRUE`, confirmed by the base package's
+#' inconsistent" are, when `verify = TRUE`, confirmed by the base package's
 #' witness + Rump machinery, not a solver status. Feasibility-type claims exhibit
 #' a Rump-verified witnessing matrix. With `verify = FALSE`, affected claims are
 #' labelled search-based.
@@ -84,7 +84,7 @@
 #' @param x A `corr_psd_check` object, or a numeric correlation matrix.
 #' @param decimals,delta Rounding precision when `x` is a matrix (as in
 #'   [check_corr_psd()]).
-#' @param verify If `TRUE` (default), certify impossibility sub-claims with the
+#' @param verify If `TRUE` (default), certify inconsistency sub-claims with the
 #'   witness + Rump machinery rather than trusting the search.
 #' @param sparse_k Maximum cardinality for the sparse-support / joint search.
 #' @param tol Magnitude threshold for treating an edit / excess as non-zero.
@@ -93,7 +93,7 @@
 #' @examples
 #' R <- matrix(c(1, 0.9, 0.9, 0.9, 1, -0.9, 0.9, -0.9, 1), 3, 3)
 #' localize_psd_fault(R, decimals = 2)
-#' @seealso [check_corr_psd()], [impossible_triples()]
+#' @seealso [check_corr_psd()], [inconsistent_triples()]
 #' @export
 localize_psd_fault <- function(x, decimals = 2, delta = NULL,
                                verify = TRUE, sparse_k = 3L, tol = 1e-6) {
@@ -119,16 +119,16 @@ localize_psd_fault <- function(x, decimals = 2, delta = NULL,
   }
   p <- nrow(R)
 
-  # Rule 7: not impossible -> localization not applicable, but still report the
+  # Rule 7: not inconsistent -> localization not applicable, but still report the
   # plausibility gradient (per-variable R^2 distance to the 100% ceiling, V4).
-  if (!identical(chk$verdict, "impossible")) {
+  if (!identical(chk$verdict, "inconsistent")) {
     plaus <- .plausibility_gradient(R, delta)
     note <- sprintf("Matrix is '%s' given rounding; localization not applicable.",
                     chk$verdict)
     if (isTRUE(plaus$near_ceiling)) {
       tail <- if (plaus$max_r2 >= 1)
-        "exceeds 100% at the exact reported values, but possible within rounding."
-      else "possible, but close to the 100% ceiling."
+        "exceeds 100% at the exact reported values, but consistent within rounding."
+      else "consistent, but close to the 100% ceiling."
       note <- c(note, sprintf("Plausibility: variable %d has reported-point R^2 = %.1f%% -- %s",
         plaus$max_var, 100 * plaus$max_r2, tail))
     }
@@ -136,7 +136,7 @@ localize_psd_fault <- function(x, decimals = 2, delta = NULL,
       localization_verdict = "none",
       implicated = list(cells = NULL, variable = NULL),
       convergence = NA_character_,
-      evidence = list(sole_culprit_cells = NULL, impossible_triples = NULL,
+      evidence = list(sole_culprit_cells = NULL, inconsistent_triples = NULL,
                       lofo_restoring = NULL, sparse_support = NULL, rsquared = plaus$rsquared),
       severity = list(severity_max = NA_real_, severity_frob = NA_real_,
                       best_lambda_min = NA_real_, witness_margin = chk$margin,
@@ -146,7 +146,7 @@ localize_psd_fault <- function(x, decimals = 2, delta = NULL,
   }
 
   # ---- Evidence A-D -------------------------------------------------------
-  triples <- .scan_impossible_triples(R, delta)             # B
+  triples <- .scan_inconsistent_triples(R, delta)             # B
   lofo <- .lofo_restoring(R, delta)                         # C
   cell_int <- .cell_intervals(R, delta, verify = verify)    # A
 
@@ -168,7 +168,7 @@ localize_psd_fault <- function(x, decimals = 2, delta = NULL,
     best_lambda_min = .best_lambda_min(R, delta),
     witness_margin = chk$margin,
     # smallest uniform reporting half-width that could excuse the matrix:
-    # impossible for every precision finer than this (see ?excusable_delta)
+    # inconsistent for every precision finer than this (see ?excusable_delta)
     excusable_delta = delta + sev_max)
 
   rsq <- .rsquared_evidence(R, delta)                                   # R^2 (V1+V2)
@@ -192,7 +192,7 @@ localize_psd_fault <- function(x, decimals = 2, delta = NULL,
 
   evidence <- list(
     sole_culprit_cells = sole_records,
-    impossible_triples = triples,
+    inconsistent_triples = triples,
     lofo_restoring = lofo,
     sparse_support = sparse,
     rsquared = rsq)
@@ -214,13 +214,13 @@ localize_psd_fault <- function(x, decimals = 2, delta = NULL,
         implicated = list(cells = cell_rc, variable = NULL),
         convergence = "all", evidence = evidence, severity = sev,
         delta = delta, p = p, verify = verify,
-        notes = "Single sole culprit corroborated by the sparse correction and an impossible triple.",
+        notes = "Single sole culprit corroborated by the sparse correction and an inconsistent triple.",
         base_check = chk))
     }
     agreed <- c(if (in_sparse) "sparse correction" else NULL,
-                if (in_triple) "impossible triple" else NULL)
+                if (in_triple) "inconsistent triple" else NULL)
     disagreed <- c(if (!in_sparse) "sparse correction" else NULL,
-                   if (!in_triple) "impossible triple" else NULL)
+                   if (!in_triple) "inconsistent triple" else NULL)
     return(.new_psd_fault("cell_tentative",
       implicated = list(cells = cell_rc, variable = NULL),
       convergence = "partial", evidence = evidence, severity = sev,
@@ -232,7 +232,7 @@ localize_psd_fault <- function(x, decimals = 2, delta = NULL,
       base_check = chk))
   }
 
-  # Rule 3: triad -- S_sole is exactly the 3 cells of a single impossible triple.
+  # Rule 3: triad -- S_sole is exactly the 3 cells of a single inconsistent triple.
   if (length(S_sole_keys) == 3L) {
     match_triple <- any(vapply(triple_keysets, function(ks)
       setequal(ks, S_sole_keys), logical(1)))
@@ -255,7 +255,7 @@ localize_psd_fault <- function(x, decimals = 2, delta = NULL,
     col_cells <- unique(c(in_col(S_sole_keys), in_col(S_sparse_keys)))
     likely <- if (length(col_cells) > 0L) do.call(rbind, lapply(col_cells, key_to_cell)) else NULL
     r2_agrees <- k %in% S_r2
-    notes <- sprintf("Removing variable %d restores possibility given rounding.", k)
+    notes <- sprintf("Removing variable %d restores consistency given rounding.", k)
     if (r2_agrees) notes <- c(notes,
       sprintf("Corroborated by the R^2 localizer (variable %d is over-determined).", k))
     return(.new_psd_fault("variable",

@@ -1,8 +1,8 @@
 # -----------------------------------------------------------------------------
-# Self-contained possibility search by projections onto convex sets (POCS).
+# Self-contained consistency search by projections onto convex sets (POCS).
 #
 # Escalation tier used only in the precision-limited ambiguous zone, when the
-# cheap constructions in construct.R did not settle possibility. It is fully
+# cheap constructions in construct.R did not settle consistency. It is fully
 # self-contained: no external solver or optional dependency.
 #
 # The feasible set is the intersection of two closed convex sets:
@@ -14,7 +14,7 @@
 # strictly positive definite, so the one-sided Cholesky test of verify.R can
 # certify it. The witness path remains the source of truth: POCS is used only to
 # *find* a candidate, which is then independently Rump-verified. A failure to
-# find a verifiable point is inconclusive (undecided), never an impossibility
+# find a verifiable point is inconclusive (undecided), never an inconsistency
 # certificate.
 # -----------------------------------------------------------------------------
 
@@ -33,11 +33,11 @@
   (Y + t(Y)) / 2
 }
 
-# Try to certify possibility via POCS. Returns a list(X, mu, how) with a
+# Try to certify consistency via POCS. Returns a list(X, mu, how) with a
 # verified in-box PSD matrix, or NULL. `mus` is a decreasing sequence of PD
 # margins: a larger feasible margin yields a comfortably-verifiable point, and
 # smaller margins are tried when the box only just reaches the PSD cone.
-.pocs_possible <- function(R, delta,
+.pocs_consistent <- function(R, delta,
                            mus = c(1e-2, 1e-3, 1e-4, 1e-6),
                            max_iter = 1000L, tol = 1e-12) {
   p <- nrow(R)
@@ -56,7 +56,7 @@
       if (change < tol) break
     }
     # verify.R's one-sided Cholesky test is the rigorous gate: only an in-box
-    # matrix it certifies PSD is accepted as a possibility certificate.
+    # matrix it certifies PSD is accepted as a consistency certificate.
     if (.in_box(X, R, delta) && .verify_psd(X)) {
       return(list(
         X = X, mu = mu,

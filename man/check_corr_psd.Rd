@@ -17,8 +17,8 @@ check_corr_psd(
 correlation matrix). Small asymmetries are symmetrized with a warning;
 large ones error. \code{p >= 2} is required. Off-diagonal \code{NA} entries
 (symmetric) are allowed and are freed to \verb{[-1, 1]}: verdicts then hold for
-\emph{every} possible value of the missing cells (an \code{impossible} is the
-stronger claim "impossible whatever the unreported values were").}
+\emph{every} possible value of the missing cells (an \code{inconsistent} is the
+stronger claim "inconsistent whatever the unreported values were").}
 
 \item{decimals}{Decimal places the off-diagonals were rounded to: a single
 integer, or a \verb{p x p} symmetric matrix for mixed-precision tables.}
@@ -58,23 +58,23 @@ box is \code{X_ii = 1} exactly and, for \code{i != j},
 The method is a verified witness-vector bound. For any test direction \code{v},
 the most PSD-favourable in-box matrix along \code{v} attains
 \verb{max_\{X in box\} v'Xv = v'Rv + delta*(||v||_1^2 - ||v||_2^2)}. If this maximum
-is negative, no in-box matrix is PSD and \code{v} certifies impossibility. The
+is negative, no in-box matrix is PSD and \code{v} certifies inconsistency. The
 evaluation of this quantity is bounded by a rigorous a-priori floating-point
-error model (Higham 2002, Ch. 3), so the impossibility verdict does not
+error model (Higham 2002, Ch. 3), so the inconsistency verdict does not
 depend on any solver tolerance.
 }
 \section{Verdicts, tiers and certification}{
 
 \describe{
-\item{\code{impossible}}{No PSD matrix exists in the rounding box. Reached at
+\item{\code{inconsistent}}{No PSD matrix exists in the rounding box. Reached at
 tier \code{precheck} (a reported entry is out of range even at its nearest box
 edge) or \code{witness} (a test vector \code{v} gives a rigorously-negative upper
 bound \code{B_upper < 0}). Always certified.}
-\item{\code{possible}}{\code{certified = TRUE} when an explicit in-box matrix was
+\item{\code{consistent}}{\code{certified = TRUE} when an explicit in-box matrix was
 verified PSD (Rump 2006) -- a rigorous existence certificate.
-\code{certified = FALSE} marks a \emph{presumed} possible: the witness margin is
+\code{certified = FALSE} marks a \emph{presumed} consistent: the witness margin is
 comfortably positive but no in-box PSD matrix was exhibited, so the
-verdict means only "not shown impossible".}
+verdict means only "not shown inconsistent".}
 \item{\code{undecided}}{The witness margin sits in the precision-limited
 ambiguous zone \verb{[0, tau]} and no in-box PSD matrix could be certified,
 including by the alternating-projection escalation.}
@@ -83,7 +83,7 @@ including by the alternating-projection escalation.}
 
 \section{Rigor guarantee (and what it does not prove)}{
 
-If \code{verdict == "impossible"}, then no PSD matrix exists in the rounding box,
+If \code{verdict == "inconsistent"}, then no PSD matrix exists in the rounding box,
 subject to the stated floating-point error model (IEEE double precision,
 round-to-nearest, unit roundoff \code{u = .Machine$double.eps / 2}, with Higham
 \code{gamma_n} backward/forward error bounds applied conservatively). The verdict
@@ -96,7 +96,7 @@ meta-analytically assembled cells, or upstream disattenuation; large
 severities (see \code{\link[=localize_psd_fault]{localize_psd_fault()}}) are hard to explain by any of these.
 The complementary guarantee also holds: because the bound is a sound
 over-estimate, a rounding box that contains any PSD matrix can never be
-reported \code{impossible}.
+reported \code{inconsistent}.
 }
 
 \examples{
@@ -106,7 +106,7 @@ R <- matrix(c(1, 0.9, 0.9,
               0.9, -0.9, 1), 3, 3)
 check_corr_psd(R, decimals = 2)
 
-# A genuine correlation matrix rounded to 2dp is never impossible.
+# A genuine correlation matrix rounded to 2dp is never inconsistent.
 G <- round(cor(matrix(rnorm(200), ncol = 4)), 2)
 check_corr_psd(G, decimals = 2)
 

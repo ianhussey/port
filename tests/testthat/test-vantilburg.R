@@ -21,15 +21,15 @@ test_that("the residual-witness identity v'Rv = 1 - R^2 holds", {
   L <- matrix(rnorm(30), 6, 5); S <- L %*% t(L); d <- sqrt(diag(S))
   S <- S / outer(d, d); diag(S) <- 1
   for (i in 1:6) {
-    dir <- psdness:::.rsquared_direction(S, i)
+    dir <- port:::.rsquared_direction(S, i)
     quad <- as.numeric(t(dir$v) %*% S %*% dir$v) / sum(dir$v^2)
     expect_equal(quad, 1 - dir$r2, tolerance = 1e-8)
   }
 })
 
 test_that("R^2 localizer cleanly blames the over-connected variable", {
-  rsq <- psdness:::.rsquared_evidence(variable_R, 0.005)
-  blamed <- which(psdness:::.rsquared_blamed(rsq))
+  rsq <- port:::.rsquared_evidence(variable_R, 0.005)
+  blamed <- which(port:::.rsquared_blamed(rsq))
   expect_equal(blamed, 4L)
   expect_true(rsq[[4]]$r2 > 1)
   expect_true(rsq[[4]]$complement_pd)
@@ -38,8 +38,8 @@ test_that("R^2 localizer cleanly blames the over-connected variable", {
 test_that("R^2 blame requires a PD complement (V6 under-identification)", {
   # In the variable fixture, variables 1-3 have a non-PD complement (it contains
   # the bad structure), so they are NOT cleanly blamed even if their direction fires.
-  rsq <- psdness:::.rsquared_evidence(variable_R, 0.005)
-  for (k in 1:3) expect_false(psdness:::.rsquared_blamed(rsq)[k])
+  rsq <- port:::.rsquared_evidence(variable_R, 0.005)
+  for (k in 1:3) expect_false(port:::.rsquared_blamed(rsq)[k])
 })
 
 test_that("R^2 attribution and convergence surface in the verdict", {
@@ -52,7 +52,7 @@ test_that("R^2 attribution and convergence surface in the verdict", {
 
 test_that("a single bad cell shows up as its two endpoint variables in R^2", {
   lf <- localize_psd_fault(cell_R, decimals = 2)
-  blamed <- which(psdness:::.rsquared_blamed(lf$evidence$rsquared))
+  blamed <- which(port:::.rsquared_blamed(lf$evidence$rsquared))
   expect_setequal(blamed, c(1L, 2L))     # the endpoints of bad cell (1,2)
 })
 
@@ -62,7 +62,7 @@ test_that("a gross violation is labelled substantive, not structural", {
   triad <- matrix(c(1, 0.9, 0.9, 0.9, 1, -0.9, 0.9, -0.9, 1), 3, 3)
   lf <- localize_psd_fault(triad, decimals = 2)
   expect_equal(lf$structural$severity_class, "substantive")
-  expect_match(psdness:::.structural_note(lf$structural), "Substantive")
+  expect_match(port:::.structural_note(lf$structural), "Substantive")
 })
 
 test_that("a composite+subscores near-boundary case is labelled benign", {
@@ -73,8 +73,8 @@ test_that("a composite+subscores near-boundary case is labelled benign", {
   lf <- localize_psd_fault(round(Cn, 2), decimals = 2)
   expect_equal(lf$structural$severity_class, "near-boundary")
   expect_equal(lf$structural$pattern, "composite")
-  expect_match(psdness:::.structural_note(lf$structural), "benign")
-  expect_match(psdness:::.structural_note(lf$structural), "van Tilburg")
+  expect_match(port:::.structural_note(lf$structural), "benign")
+  expect_match(port:::.structural_note(lf$structural), "van Tilburg")
 })
 
 test_that("a full set of category dummies reads as ipsative and benign", {
@@ -82,15 +82,15 @@ test_that("a full set of category dummies reads as ipsative and benign", {
   Dn <- D; Dn[1, 2] <- Dn[2, 1] <- -0.52; Dn[1, 3] <- Dn[3, 1] <- -0.52
   lf <- localize_psd_fault(round(Dn, 2), decimals = 2)
   expect_equal(lf$structural$pattern, "ipsative")
-  expect_match(psdness:::.structural_note(lf$structural), "benign")
+  expect_match(port:::.structural_note(lf$structural), "benign")
 })
 
 # ---- Plausibility gradient (V4) --------------------------------------------
 
-test_that("a possible matrix at the ceiling reports a plausibility gradient", {
+test_that("a consistent matrix at the ceiling reports a plausibility gradient", {
   Sig <- matrix(0.5, 3, 3); diag(Sig) <- 1
   a <- c(1, 1, 1); r <- as.numeric(Sig %*% a) / sqrt(sum(a * (Sig %*% a)))
-  C <- rbind(cbind(Sig, r), c(r, 1))         # exactly singular -> possible when rounded
+  C <- rbind(cbind(Sig, r), c(r, 1))         # exactly singular -> consistent when rounded
   lf <- localize_psd_fault(round(C, 2), decimals = 2)
   expect_equal(lf$localization_verdict, "none")
   expect_false(is.null(lf$plausibility))

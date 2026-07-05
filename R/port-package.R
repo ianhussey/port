@@ -1,10 +1,10 @@
-#' psdness: Certify Whether a Rounded Correlation Matrix Can Be PSD
+#' port: Certify Whether a Rounded Correlation Matrix Can Be PSD
 #'
 #' Given a reported correlation matrix whose off-diagonal entries are rounded
 #' to a fixed number of decimals, [check_corr_psd()] decides whether *any*
 #' positive semidefinite (PSD) matrix is consistent with the induced rounding
 #' box. The tool is designed for research-integrity / forensic metascience: its
-#' payload is certifying **impossibility** (no PSD matrix fits the rounding
+#' payload is certifying **inconsistency** (no PSD matrix fits the rounding
 #' box), which is evidence that a reported matrix cannot be a genuine
 #' correlation matrix.
 #'

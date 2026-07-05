@@ -3,7 +3,7 @@
 #
 # For variable i with correlation vector c_i to the others and their submatrix
 # M_{-i}, the squared multiple correlation is R^2_i = c_i' M_{-i}^{-1} c_i, and
-# the matrix is impossible if any R^2_i > 1 (V1). The key identity used here:
+# the matrix is inconsistent if any R^2_i > 1 (V1). The key identity used here:
 # putting variable i last and taking the regression-residual direction
 #     v = (M_{-i}^{-1} c_i ; -1),
 # one gets  v' M v = 1 - R^2_i. So "R^2_i > 1" is exactly a witness vector, the
@@ -33,7 +33,7 @@
   list(v = v / nrm, r2 = r2, complement_pd = .verify_psd(M))
 }
 
-# Per-variable R^2 evidence. box_impossible is the rigorous box-witness verdict
+# Per-variable R^2 evidence. box_inconsistent is the rigorous box-witness verdict
 # along the residual direction; complement_pd gates clean attribution (V6).
 .rsquared_evidence <- function(R, delta) {
   p <- nrow(R)
@@ -43,14 +43,14 @@
     d <- .rsquared_direction(R, i)
     if (is.null(d)) {
       recs[[i]] <- list(variable = i, r2 = NA_real_, vif = NA_real_,
-                        complement_pd = FALSE, box_impossible = NA, b_upper = NA_real_)
+                        complement_pd = FALSE, box_inconsistent = NA, b_upper = NA_real_)
       next
     }
     wb <- .witness_box_bound(bnd$lo, bnd$hi, bnd$off, d$v)
     vif <- if (is.finite(d$r2) && d$r2 != 1) 1 / (1 - d$r2) else Inf
     recs[[i]] <- list(variable = i, r2 = d$r2, vif = vif,
                       complement_pd = isTRUE(d$complement_pd),
-                      box_impossible = isTRUE(wb$B_upper < 0), b_upper = wb$B_upper)
+                      box_inconsistent = isTRUE(wb$B_upper < 0), b_upper = wb$B_upper)
   }
   recs
 }
@@ -58,11 +58,11 @@
 # Variables that the R^2 localizer cleanly blames: the residual direction is a
 # rigorous box witness AND the complementary submatrix is PD (V6).
 .rsquared_blamed <- function(rsq) {
-  vapply(rsq, function(z) isTRUE(z$box_impossible) && isTRUE(z$complement_pd),
+  vapply(rsq, function(z) isTRUE(z$box_inconsistent) && isTRUE(z$complement_pd),
          logical(1))
 }
 
-# Plausibility gradient (V4): for a POSSIBLE matrix, per-variable reported-point
+# Plausibility gradient (V4): for a CONSISTENT matrix, per-variable reported-point
 # R^2 and the closest approach to the 100% ceiling. Only variables with a PD
 # complement give a meaningful R^2.
 .plausibility_gradient <- function(R, delta, ceiling = 0.95) {

@@ -10,13 +10,13 @@
 #' unifies the verdict and the severity into a single interpretable statistic in
 #' the units of reporting precision:
 #'
-#' * the matrix is impossible at reporting precision `delta` **iff**
+#' * the matrix is inconsistent at reporting precision `delta` **iff**
 #'   `excusable_delta(R) > delta`;
 #' * a value like `0.04` reads as "the reported values are inconsistent with any
-#'   correlation matrix unless each entry were mis-stated by more than ±0.04 --
-#'   not excusable even by rounding to 1 decimal place (±0.05 would be needed)".
+#'   correlation matrix unless each entry were misstated by more than +/-0.04 --
+#'   not excusable even by rounding to 1 decimal place (+/-0.05 would be needed)".
 #'
-#' For a matrix that is already possible at fine precision the threshold is ~0.
+#' For a matrix that is already consistent at fine precision the threshold is ~0.
 #' The value is located by bisection over the box feasibility oracle (witness
 #' refutation + Rump-verified POCS), to tolerance `tol`.
 #'

@@ -1,10 +1,10 @@
 # -----------------------------------------------------------------------------
-# Constructive possibility certificates.
+# Constructive consistency certificates.
 #
 # We try to exhibit an explicit in-box matrix and *verify* it PSD with
-# .verify_psd(). Any success is a rigorous proof of possibility (an in-box PSD
+# .verify_psd(). Any success is a rigorous proof of consistency (an in-box PSD
 # matrix exists). Failure of all candidates is inconclusive, not a proof of
-# impossibility.
+# inconsistency.
 # -----------------------------------------------------------------------------
 
 # Is X inside the rounding box around R (off-diagonals within delta, clipped to
@@ -45,8 +45,8 @@
 }
 
 # Try a small family of in-box candidates and return the first verified-PSD one
-# as a possibility certificate, or NULL.
-.construct_possible <- function(R, delta) {
+# as a consistency certificate, or NULL.
+.construct_consistent <- function(R, delta) {
   candidates <- list(
     list(X = R,                          how = "the reported matrix itself is PSD"),
     list(X = .shrink_offdiag(R, delta),  how = "an in-box matrix shrunk toward the diagonal is PSD"),

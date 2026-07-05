@@ -10,7 +10,7 @@
                                 certified = NA, rounding = "nearest") {
   structure(
     list(
-      verdict = verdict,                 # "impossible" / "possible" / "undecided"
+      verdict = verdict,                 # "inconsistent" / "consistent" / "undecided"
       tier = tier,                       # "precheck" / "witness" / "pocs"
       certified = certified,             # TRUE: verdict carries a certificate
       witness = witness,                 # certificate vector v (or NULL)
@@ -39,29 +39,29 @@
 #' The method is a verified witness-vector bound. For any test direction `v`,
 #' the most PSD-favourable in-box matrix along `v` attains
 #' `max_{X in box} v'Xv = v'Rv + delta*(||v||_1^2 - ||v||_2^2)`. If this maximum
-#' is negative, no in-box matrix is PSD and `v` certifies impossibility. The
+#' is negative, no in-box matrix is PSD and `v` certifies inconsistency. The
 #' evaluation of this quantity is bounded by a rigorous a-priori floating-point
-#' error model (Higham 2002, Ch. 3), so the impossibility verdict does not
+#' error model (Higham 2002, Ch. 3), so the inconsistency verdict does not
 #' depend on any solver tolerance.
 #'
 #' @section Verdicts, tiers and certification:
 #' \describe{
-#'   \item{`impossible`}{No PSD matrix exists in the rounding box. Reached at
+#'   \item{`inconsistent`}{No PSD matrix exists in the rounding box. Reached at
 #'     tier `precheck` (a reported entry is out of range even at its nearest box
 #'     edge) or `witness` (a test vector `v` gives a rigorously-negative upper
 #'     bound `B_upper < 0`). Always certified.}
-#'   \item{`possible`}{`certified = TRUE` when an explicit in-box matrix was
+#'   \item{`consistent`}{`certified = TRUE` when an explicit in-box matrix was
 #'     verified PSD (Rump 2006) -- a rigorous existence certificate.
-#'     `certified = FALSE` marks a *presumed* possible: the witness margin is
+#'     `certified = FALSE` marks a *presumed* consistent: the witness margin is
 #'     comfortably positive but no in-box PSD matrix was exhibited, so the
-#'     verdict means only "not shown impossible".}
+#'     verdict means only "not shown inconsistent".}
 #'   \item{`undecided`}{The witness margin sits in the precision-limited
 #'     ambiguous zone `[0, tau]` and no in-box PSD matrix could be certified,
 #'     including by the alternating-projection escalation.}
 #' }
 #'
 #' @section Rigor guarantee (and what it does not prove):
-#' If `verdict == "impossible"`, then no PSD matrix exists in the rounding box,
+#' If `verdict == "inconsistent"`, then no PSD matrix exists in the rounding box,
 #' subject to the stated floating-point error model (IEEE double precision,
 #' round-to-nearest, unit roundoff `u = .Machine$double.eps / 2`, with Higham
 #' `gamma_n` backward/forward error bounds applied conservatively). The verdict
@@ -74,14 +74,14 @@
 #' severities (see [localize_psd_fault()]) are hard to explain by any of these.
 #' The complementary guarantee also holds: because the bound is a sound
 #' over-estimate, a rounding box that contains any PSD matrix can never be
-#' reported `impossible`.
+#' reported `inconsistent`.
 #'
 #' @param R A symmetric numeric `p x p` matrix with unit diagonal (the reported
 #'   correlation matrix). Small asymmetries are symmetrized with a warning;
 #'   large ones error. `p >= 2` is required. Off-diagonal `NA` entries
 #'   (symmetric) are allowed and are freed to `[-1, 1]`: verdicts then hold for
-#'   *every* possible value of the missing cells (an `impossible` is the
-#'   stronger claim "impossible whatever the unreported values were").
+#'   *every* possible value of the missing cells (an `inconsistent` is the
+#'   stronger claim "inconsistent whatever the unreported values were").
 #' @param decimals Decimal places the off-diagonals were rounded to: a single
 #'   integer, or a `p x p` symmetric matrix for mixed-precision tables.
 #' @param delta Optional absolute half-width(s) of the rounding box: a scalar or
@@ -111,7 +111,7 @@
 #'               0.9, -0.9, 1), 3, 3)
 #' check_corr_psd(R, decimals = 2)
 #'
-#' # A genuine correlation matrix rounded to 2dp is never impossible.
+#' # A genuine correlation matrix rounded to 2dp is never inconsistent.
 #' G <- round(cor(matrix(rnorm(200), ncol = 4)), 2)
 #' check_corr_psd(G, decimals = 2)
 #'
@@ -186,49 +186,49 @@ check_corr_psd <- function(R, decimals = 2, delta = NULL, tau = NULL,
     pc <- .precheck_range(R, delta)
     if (!is.null(pc)) {
       return(.new_corr_psd_check(
-        verdict = "impossible", tier = "precheck", delta = delta, p = p,
+        verdict = "inconsistent", tier = "precheck", delta = delta, p = p,
         certified = TRUE, detail = pc,
         note = sprintf(
           "Reported entry R[%d,%d] = %s is out of range: |%s| - delta = %.4g > 1.",
           pc$i, pc$j, format(pc$value), format(pc$value), abs(pc$value) - delta)))
     }
 
-    # Tier 2: witness-vector bound (primary impossibility path).
+    # Tier 2: witness-vector bound (primary inconsistency path).
     w <- .witness_search(R, delta)
     if (!is.null(w) && w$B_upper < 0) {
       return(.new_corr_psd_check(
-        verdict = "impossible", tier = "witness", delta = delta, p = p,
+        verdict = "inconsistent", tier = "witness", delta = delta, p = p,
         certified = TRUE, witness = w$v, margin = w$M_hat, b_upper = w$B_upper))
     }
 
     b_upper <- if (is.null(w)) NA_real_ else w$B_upper
     margin  <- if (is.null(w)) NA_real_ else w$M_hat
 
-    # Possibility: try to exhibit and verify an in-box PSD matrix.
-    cons <- .construct_possible(R, delta)
+    # Consistency: try to exhibit and verify an in-box PSD matrix.
+    cons <- .construct_consistent(R, delta)
     if (!is.null(cons)) {
       return(.new_corr_psd_check(
-        verdict = "possible", tier = "witness", delta = delta, p = p,
+        verdict = "consistent", tier = "witness", delta = delta, p = p,
         certified = TRUE, margin = margin, b_upper = b_upper,
         certified_matrix = cons$X, note = cons$how))
     }
 
     # No construction certified. If the witness margin is comfortably positive we
-    # report a PRESUMED "possible" (not shown impossible); otherwise we are in
+    # report a PRESUMED "consistent" (not shown inconsistent); otherwise we are in
     # the ambiguous zone and escalate.
     if (!is.na(b_upper) && b_upper > tau) {
       return(.new_corr_psd_check(
-        verdict = "possible", tier = "witness", delta = delta, p = p,
+        verdict = "consistent", tier = "witness", delta = delta, p = p,
         certified = FALSE, margin = margin, b_upper = b_upper,
-        note = paste("presumed: not shown impossible (witness margin above tau);",
+        note = paste("presumed: not shown inconsistent (witness margin above tau);",
                      "no in-box PSD matrix was certified")))
     }
 
-    # Ambiguous zone: escalate to the self-contained POCS possibility search.
-    pocs <- .pocs_possible(R, delta)
+    # Ambiguous zone: escalate to the self-contained POCS consistency search.
+    pocs <- .pocs_consistent(R, delta)
     if (!is.null(pocs)) {
       return(.new_corr_psd_check(
-        verdict = "possible", tier = "pocs", delta = delta, p = p,
+        verdict = "consistent", tier = "pocs", delta = delta, p = p,
         certified = TRUE, margin = margin, b_upper = b_upper,
         certified_matrix = pocs$X, note = pocs$how))
     }
@@ -264,7 +264,7 @@ check_corr_psd <- function(R, decimals = 2, delta = NULL, tau = NULL,
     k <- which(bx$empty & upper.tri(R), arr.ind = TRUE)[1L, ]
     i <- as.integer(k[1]); j <- as.integer(k[2])
     return(.new_corr_psd_check(
-      verdict = "impossible", tier = "precheck", delta = bx$half_max, p = p,
+      verdict = "inconsistent", tier = "precheck", delta = bx$half_max, p = p,
       certified = TRUE, rounding = rounding,
       detail = list(i = i, j = j, value = R[i, j]),
       note = c(sprintf(
@@ -272,21 +272,21 @@ check_corr_psd <- function(R, decimals = 2, delta = NULL, tau = NULL,
         i, j, format(R[i, j]), rounding), na_note)))
   }
 
-  # Tier 2: box witness (primary impossibility path).
-  imp <- .box_impossible(bx$lo, bx$hi, bx$off)
-  if (isTRUE(imp$impossible)) {
+  # Tier 2: box witness (primary inconsistency path).
+  imp <- .box_inconsistent(bx$lo, bx$hi, bx$off)
+  if (isTRUE(imp$inconsistent)) {
     return(.new_corr_psd_check(
-      verdict = "impossible", tier = "witness", delta = bx$half_max, p = p,
+      verdict = "inconsistent", tier = "witness", delta = bx$half_max, p = p,
       certified = TRUE, rounding = rounding,
       witness = imp$witness, margin = imp$margin, b_upper = imp$b_upper,
       note = na_note))
   }
 
-  # Possibility: POCS search + Rump verification on the heterogeneous box.
+  # Consistency: POCS search + Rump verification on the heterogeneous box.
   hit <- .pocs_feasible(bx$lo, bx$hi, bx$off)
   if (!is.null(hit)) {
     return(.new_corr_psd_check(
-      verdict = "possible", tier = "pocs", delta = bx$half_max, p = p,
+      verdict = "consistent", tier = "pocs", delta = bx$half_max, p = p,
       certified = TRUE, rounding = rounding,
       margin = imp$margin, b_upper = imp$b_upper, certified_matrix = hit$X,
       note = c("alternating projections found an in-box matrix, independently verified PSD",
@@ -295,10 +295,10 @@ check_corr_psd <- function(R, decimals = 2, delta = NULL, tau = NULL,
 
   if (!is.na(imp$b_upper) && imp$b_upper > tau) {
     return(.new_corr_psd_check(
-      verdict = "possible", tier = "witness", delta = bx$half_max, p = p,
+      verdict = "consistent", tier = "witness", delta = bx$half_max, p = p,
       certified = FALSE, rounding = rounding,
       margin = imp$margin, b_upper = imp$b_upper,
-      note = c(paste("presumed: not shown impossible (witness margin above tau);",
+      note = c(paste("presumed: not shown inconsistent (witness margin above tau);",
                      "no in-box PSD matrix was certified"), na_note)))
   }
 

@@ -2,7 +2,7 @@
 % Please edit documentation in R/localize.R
 \name{localize_psd_fault}
 \alias{localize_psd_fault}
-\title{Localize the fault in an impossible-given-rounding correlation matrix}
+\title{Localize the fault in an inconsistent-given-rounding correlation matrix}
 \usage{
 localize_psd_fault(
   x,
@@ -19,7 +19,7 @@ localize_psd_fault(
 \item{decimals, delta}{Rounding precision when \code{x} is a matrix (as in
 \code{\link[=check_corr_psd]{check_corr_psd()}}).}
 
-\item{verify}{If \code{TRUE} (default), certify impossibility sub-claims with the
+\item{verify}{If \code{TRUE} (default), certify inconsistency sub-claims with the
 witness + Rump machinery rather than trusting the search.}
 
 \item{sparse_k}{Maximum cardinality for the sparse-support / joint search.}
@@ -30,7 +30,7 @@ witness + Rump machinery rather than trusting the search.}
 An S3 \code{psd_fault} object; see the print method and \code{\link[=fault_evidence]{fault_evidence()}}.
 }
 \description{
-When \code{\link[=check_corr_psd]{check_corr_psd()}} reports \code{impossible}, this runs a box-aware
+When \code{\link[=check_corr_psd]{check_corr_psd()}} reports \code{inconsistent}, this runs a box-aware
 fault-localization layer to support semi-automated inference about WHERE the
 non-PSDness comes from and HOW SEVERE it is. Non-PSD is a global property, so
 a unique culprit is generally under-identified; the tool reports an honest
@@ -48,7 +48,7 @@ All feasibility computations respect the rounding BOX, never point values:
 \item{A. per-cell interval / sole culprit}{for each cell, the interval it
 could take given the others within rounding; a nonempty interval marks a
 sole-culprit candidate with a \code{required_edit} beyond rounding.}
-\item{B. impossible triples}{triples whose 3x3 box-max determinant is
+\item{B. inconsistent triples}{triples whose 3x3 box-max determinant is
 provably negative (sound interval bound; no solver).}
 \item{C. leave-one-out}{variables whose removal restores feasibility.}
 \item{D. sparse correction / severity}{smallest set of cells whose joint
@@ -62,30 +62,30 @@ complementary submatrix being PD. A variable-level voter, not an arbiter.}
 
 \section{Structural cause and plausibility}{
 
-Every impossible result also carries a \code{structural} diagnosis that separates a
+Every inconsistent result also carries a \code{structural} diagnosis that separates a
 benign near-boundary rank-deficiency (composite+subscores, a full set of
 category dummies) from a substantive over-the-boundary violation, using the
 severity relative to the rounding step and the pattern of the near-dependency
 direction (van Tilburg & van Tilburg 2023; Lorenzo-Seva & Ferrando 2021). For
-a \code{possible} matrix the result reports a \code{plausibility} gradient: the
+a \code{consistent} matrix the result reports a \code{plausibility} gradient: the
 per-variable reported-point \code{R^2} and its closest approach to the 100\% ceiling.
 }
 
 \section{Localization verdicts}{
 
 \code{cell} (a single cell, methods converge), \code{cell_tentative} (single cell,
-partial corroboration), \code{triad} (three cells of one impossible triangle; any
+partial corroboration), \code{triad} (three cells of one inconsistent triangle; any
 one edit resolves it -- not separable), \code{variable} (one variable's removal
 restores feasibility), \code{joint} (>= 2 cells needed, no single cell suffices),
-\code{diffuse} (no small explanation), or \code{none} (matrix was possible given
+\code{diffuse} (no small explanation), or \code{none} (matrix was consistent given
 rounding).
 }
 
 \section{Rigor}{
 
-Impossibility-type sub-claims are sound: impossible-triple flags use the
+Inconsistency-type sub-claims are sound: inconsistent-triple flags use the
 interval bound; "freeing a cell alone cannot restore PSD" and "removal still
-impossible" are, when \code{verify = TRUE}, confirmed by the base package's
+inconsistent" are, when \code{verify = TRUE}, confirmed by the base package's
 witness + Rump machinery, not a solver status. Feasibility-type claims exhibit
 a Rump-verified witnessing matrix. With \code{verify = FALSE}, affected claims are
 labelled search-based.
@@ -96,5 +96,5 @@ R <- matrix(c(1, 0.9, 0.9, 0.9, 1, -0.9, 0.9, -0.9, 1), 3, 3)
 localize_psd_fault(R, decimals = 2)
 }
 \seealso{
-\code{\link[=check_corr_psd]{check_corr_psd()}}, \code{\link[=impossible_triples]{impossible_triples()}}
+\code{\link[=check_corr_psd]{check_corr_psd()}}, \code{\link[=inconsistent_triples]{inconsistent_triples()}}
 }
