@@ -1,4 +1,6 @@
-# psdness
+# PORT: Positive-semi-definiteness Of Pearson's *r* Tables
+
+
 
 > Certify whether a *rounded* correlation matrix can be positive semidefinite.
 
