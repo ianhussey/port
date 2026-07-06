@@ -43,8 +43,12 @@ value and mislabel a valid matrix.}
 \value{
 An object of class \code{corr_psd_check} (a list) with elements
 \code{verdict}, \code{tier}, \code{certified}, \code{witness}, \code{margin}, \code{b_upper}, \code{delta}
-(maximum half-width), \code{p}, \code{rounding}, \code{certified_matrix}, \code{detail} and
-\code{note}. See \code{\link[=certificate]{certificate()}} and the print method.
+(maximum half-width), \code{p}, \code{rounding}, \code{certified_matrix}, \code{detail},
+\code{note}, and a summary of the reported off-diagonal correlations \code{r_min},
+\code{r_max}, \code{r_mean}, \code{r_sd} (over the unique off-diagonal entries, excluding
+the unit diagonal and any \code{NA} cells; \code{r_sd} is the sample SD, \code{NA} when
+fewer than two correlations are present). See \code{\link[=certificate]{certificate()}} and the print
+method.
 }
 \description{
 Given a reported correlation matrix \code{R} whose off-diagonal entries are

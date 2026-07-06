@@ -19,6 +19,10 @@ print.corr_psd_check <- function(x, digits = 4, ...) {
     cat(sprintf("      rounding : %s", x$rounding))
   }
   cat("\n")
+  if (!is.null(x$r_min)) {
+    cat(sprintf("  corr    : min %.*g  max %.*g  mean %.*g  sd %.*g  (off-diagonal)\n",
+                digits, x$r_min, digits, x$r_max, digits, x$r_mean, digits, x$r_sd))
+  }
 
   if (identical(x$verdict, "inconsistent")) {
     if (identical(x$tier, "precheck")) {

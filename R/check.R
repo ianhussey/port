@@ -27,6 +27,19 @@
   )
 }
 
+# Summary of the reported off-diagonal correlations: min / max / mean / SD over
+# the unique upper-triangle entries, with NA (freed) cells excluded. The SD is
+# the sample SD and is NA when fewer than two correlations are present.
+.offdiag_stats <- function(R) {
+  v <- R[upper.tri(R)]
+  v <- v[!is.na(v)]
+  n <- length(v)
+  list(r_min  = if (n >= 1L) min(v)  else NA_real_,
+       r_max  = if (n >= 1L) max(v)  else NA_real_,
+       r_mean = if (n >= 1L) mean(v) else NA_real_,
+       r_sd   = if (n >= 2L) sqrt(sum((v - mean(v))^2) / (n - 1L)) else NA_real_)
+}
+
 #' Decide whether a rounded correlation matrix can be positive semidefinite
 #'
 #' Given a reported correlation matrix `R` whose off-diagonal entries are
@@ -101,8 +114,12 @@
 #'
 #' @return An object of class `corr_psd_check` (a list) with elements
 #'   `verdict`, `tier`, `certified`, `witness`, `margin`, `b_upper`, `delta`
-#'   (maximum half-width), `p`, `rounding`, `certified_matrix`, `detail` and
-#'   `note`. See [certificate()] and the print method.
+#'   (maximum half-width), `p`, `rounding`, `certified_matrix`, `detail`,
+#'   `note`, and a summary of the reported off-diagonal correlations `r_min`,
+#'   `r_max`, `r_mean`, `r_sd` (over the unique off-diagonal entries, excluding
+#'   the unit diagonal and any `NA` cells; `r_sd` is the sample SD, `NA` when
+#'   fewer than two correlations are present). See [certificate()] and the print
+#'   method.
 #'
 #' @examples
 #' # Strongly inconsistent 3x3: r12 = r13 = 0.9, r23 = -0.9.
@@ -170,6 +187,7 @@ check_corr_psd <- function(R, decimals = 2, delta = NULL, tau = NULL,
     bx <- .reported_box(R, decimals, delta, rounding)
     if (is.null(tau)) tau <- 10 * bx$half_max
     res <- .check_box(R, bx, chk_tau(tau), rounding)
+    res[c("r_min", "r_max", "r_mean", "r_sd")] <- .offdiag_stats(R)
     attr(res, "R") <- R
     attr(res, "uniform_box") <- FALSE
     return(res)
@@ -242,6 +260,7 @@ check_corr_psd <- function(R, decimals = 2, delta = NULL, tau = NULL,
   }
 
   res <- build()
+  res[c("r_min", "r_max", "r_mean", "r_sd")] <- .offdiag_stats(R)
   attr(res, "R") <- R
   attr(res, "uniform_box") <- TRUE
   res

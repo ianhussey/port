@@ -28,7 +28,8 @@ re-raises the error.}
 \value{
 A \link[tibble:tibble]{tibble} with one row per input matrix and columns
 \code{id}, \code{verdict}, \code{tier}, \code{certified}, \code{margin}, \code{b_upper}, \code{delta}, \code{p},
-and \code{message}.
+the off-diagonal correlation summary \code{r_min}, \code{r_max}, \code{r_mean}, \code{r_sd}
+(excluding the diagonal and any \code{NA} cells), and \code{message}.
 }
 \description{
 Run \code{\link[=check_corr_psd]{check_corr_psd()}} over a list of matrices and collect the verdicts in a

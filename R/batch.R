@@ -20,7 +20,8 @@
 #'
 #' @return A [tibble][tibble::tibble] with one row per input matrix and columns
 #'   `id`, `verdict`, `tier`, `certified`, `margin`, `b_upper`, `delta`, `p`,
-#'   and `message`.
+#'   the off-diagonal correlation summary `r_min`, `r_max`, `r_mean`, `r_sd`
+#'   (excluding the diagonal and any `NA` cells), and `message`.
 #'
 #' @examples
 #' good <- diag(3)
@@ -47,6 +48,10 @@ check_corr_psd_batch <- function(mats, decimals = 2, delta = NULL, tau = NULL,
   b_upper <- rep(NA_real_, n)
   del     <- rep(NA_real_, n)
   pp      <- rep(NA_integer_, n)
+  r_min   <- rep(NA_real_, n)
+  r_max   <- rep(NA_real_, n)
+  r_mean  <- rep(NA_real_, n)
+  r_sd    <- rep(NA_real_, n)
   msg     <- rep(NA_character_, n)
 
   for (i in seq_len(n)) {
@@ -67,6 +72,10 @@ check_corr_psd_batch <- function(mats, decimals = 2, delta = NULL, tau = NULL,
     b_upper[i] <- res$b_upper
     del[i]     <- res$delta
     pp[i]      <- res$p
+    r_min[i]   <- res$r_min
+    r_max[i]   <- res$r_max
+    r_mean[i]  <- res$r_mean
+    r_sd[i]    <- res$r_sd
     msg[i]     <- paste(res$note %||% NA_character_, collapse = " ")
   }
 
@@ -85,6 +94,10 @@ check_corr_psd_batch <- function(mats, decimals = 2, delta = NULL, tau = NULL,
     b_upper = b_upper,
     delta = del,
     p = pp,
+    r_min = r_min,
+    r_max = r_max,
+    r_mean = r_mean,
+    r_sd = r_sd,
     message = msg
   )
 }
