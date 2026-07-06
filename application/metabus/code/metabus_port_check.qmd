@@ -1,0 +1,327 @@
+---
+title: "Checking the metaBUS correlation matrices with `port`"
+subtitle: "A forensic screen of 12,547 reported correlation matrices"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    embed-resources: true
+    code-fold: show
+    theme: cosmo
+    fig-width: 7
+    fig-height: 4
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", message = FALSE,
+                      warning = FALSE, dpi = 110)
+
+library(port)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(knitr)
+library(furrr)
+
+theme_set(theme_minimal(base_size = 12))
+
+# Parallel backend for the batched deep dive below, matching the validation
+# simulations' furrr setup.
+plan(multisession)
+
+`%||%` <- function(a, b) if (is.null(a)) b else a   # port's helper is internal
+
+# Small on-disk cache so the expensive screens run once and re-renders are fast.
+# The .rds caches live under data/processed/; they are derived and can be deleted.
+cache <- function(file, expr) {
+  if (file.exists(file)) return(readRDS(file))
+  val <- force(expr)
+  saveRDS(val, file)
+  val
+}
+```
+
+## What this is
+
+[metaBUS](http://metabus.org) is a curated database of correlations harvested from the applied-psychology literature. The object `matrixList` holds **`r format(12547L, big.mark = ",")` reported correlation matrices**, one per source, with the variables named and every off-diagonal rounded to the two decimals that are the field's reporting convention.
+
+A correlation matrix is a genuine (complete-data, single-sample) Pearson matrix only if it is **positive semidefinite** (PSD). But the numbers we see are *rounded*, so the honest question is the **box** question that `port` answers:
+
+> given that every off-diagonal was rounded to two decimals, does **any** PSD matrix exist inside the rounding box around the reported values?
+
+`port` returns one of three verdicts per matrix:
+
+- **`inconsistent`** — no PSD matrix fits the rounding box (a rigorous,
+  floating-point-safe certificate: the reported values cannot be a
+  complete-data Pearson matrix, up to rounding);
+- **`consistent`** — a PSD matrix inside the box is exhibited;
+- **`undecided`** — precision-limited; the box grazes the PSD boundary.
+
+A caveat for *this* corpus, stated up front: metaBUS matrices are often **meta-analytically assembled** — different cells come from different studies and samples. Such synthetic matrices are *routinely* non-PSD for entirely benign reasons (as are pairwise-deletion, polychoric, and disattenuated matrices). So the headline is **not** the count of inconsistent matrices, but their **severity**: how far past the PSD boundary they sit, which is what separates a benign near-boundary rounding/assembly artefact from a substantive error.
+
+```{r load-data}
+load("../data/raw/matrixList.RData")   # provides `matrixList`
+
+p <- vapply(matrixList, nrow, integer(1))
+
+tibble(matrices = length(matrixList),
+       variables_min = min(p), 
+       variables_median = median(p), 
+       variables_max = max(p)) |>
+  kable(caption = "The corpus")
+```
+
+### The precision assumption
+
+Nearly all cells are reported to two decimals, so we screen at `decimals = 2` (`delta = 0.005`). This is **sound** for any cell reported to two *or more* decimals: assuming two decimals gives a box at least as wide as the true rounding, so a genuinely valid matrix is never falsely flagged. The only cells it could mishandle are ones truly reported at *one* decimal (a handful of matrices); those we would, if anything, under-flag, never over-flag.
+
+```{r precision}
+dp <- function(x) { x <- abs(x[!is.na(x)]); k <- 0L
+  while (k < 6L && any(abs(x * 10^k - round(x * 10^k)) > 1e-9)) k <- k + 1L; k }
+
+maxdp <- vapply(matrixList, function(M) dp(M[upper.tri(M)]), integer(1))
+
+tibble(`finest decimal place used` = maxdp) |>
+  count(`finest decimal place used`) |>
+  mutate(`% of corpus` = round(100 * n / sum(n), 1)) |>
+  kable(caption = "Reported precision (max decimal places per matrix)")
+```
+
+## Screening the whole corpus
+
+`check_corr_psd_batch()` runs the rigorous check over every matrix and returns a tidy table (`id`, `verdict`, `certified`, `margin`, `delta`, `p`, ...). This is the one step that touches all `r format(length(matrixList), big.mark = ",")` matrices; it takes a couple of minutes and is cached.
+
+```{r screen}
+screen <- cache("../data/processed/metabus_screen.rds",
+                check_corr_psd_batch(matrixList, decimals = 2, quiet = TRUE))
+
+screen |>
+  count(verdict) |>
+  mutate(`%` = round(100 * n / sum(n), 1)) |>
+  arrange(desc(n)) |>
+  kable(caption = "Verdict distribution across the corpus")
+```
+
+```{r screen-plot, echo=FALSE}
+screen |>
+  count(verdict) |>
+  mutate(verdict = reorder(verdict, n)) |>
+  ggplot(aes(verdict, n, fill = verdict)) +
+  geom_col(width = 0.7, show.legend = FALSE) +
+  geom_text(aes(label = format(n, big.mark = ",")), hjust = -0.1, size = 3.5) +
+  coord_flip(clip = "off") +
+  scale_fill_manual(values = c(inconsistent = "#c0392b", consistent = "#27ae60",
+                               undecided = "#f39c12", error = "grey50")) +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.12))) +
+  labs(x = NULL, y = "matrices", title = "port verdicts on the metaBUS corpus")
+```
+
+Inconsistency should track matrix size — more variables means more triples that can frustrate one another:
+
+```{r by-size, echo=FALSE}
+screen |>
+  mutate(p_bin = cut(p, breaks = c(2, 4, 6, 8, 10, 15, 20, 30, Inf),
+                     labels = c("3-4", "5-6", "7-8", "9-10", "11-15", "16-20", "21-30", "31+"))) |>
+  group_by(p_bin) |>
+  summarise(n = n(), `% inconsistent` = round(100 * mean(verdict == "inconsistent"), 1)) |>
+  kable(caption = "Inconsistent share by matrix size")
+```
+
+## How clear-cut are the inconsistencies?
+
+Every inconsistent verdict from the witness tier carries a **margin** — the value `B = v'Rv + delta*(||v||_1^2 - ||v||_2^2)` of the certificate direction `v`. It is already in the screen table, at no extra cost, and its sign is the certificate: `B < 0` proves no in-box matrix is PSD. The *more* negative it is, the further the box sits inside the infeasible region, so its distribution gives a corpus-wide read on how marginal the violations are (it is a certificate value, not a per-cell size, so read it qualitatively rather than comparing exact magnitudes across matrices of different `p`). The distribution is not concentrated at zero: a minority of matrices sit within a decimal place of consistency, but most lie clearly past the boundary, with a heavy tail of deeply inconsistent tables.
+
+```{r margin, echo=FALSE}
+incon <- filter(screen, verdict == "inconsistent", is.finite(margin), margin < 0)
+
+ggplot(incon, aes(-margin)) +
+  geom_histogram(bins = 50, fill = "#c0392b", colour = "white", linewidth = 0.1) +
+  scale_x_continuous(trans = "log10") +
+  labs(x = "-margin  (certificate depth, log scale)", y = "matrices",
+       title = "Inconsistency runs from shallow to deep",
+       subtitle = sprintf("%d witness-certified inconsistent matrices (median -margin %.2f)",
+                          nrow(incon), median(-incon$margin)))
+```
+
+## Severity and localization (resumable, batched deep dive)
+
+The interpretable severity number is `excusable_delta()`: the smallest per-cell reporting imprecision that would make a matrix consistent, in the same units as `delta`. And `localize_psd_fault()` says *where* the violation lives and whether it is structurally benign. Both are far heavier than the screen (seconds per matrix), so the deep dive processes the inconsistent matrices **in parallel batches (via `furrr`/`future`), writing each completed batch to disk**. Each batch is analysed across worker processes; a run then resumes from what is already saved and works only on the matrices still outstanding, so the full set can be completed across several renders — or survive an interruption — without repeating any work. `MAX_PER_RUN` bounds how many *new* matrices a single render processes (the full set is large; at a few seconds each a complete pass takes a while, so cap it and re-render to continue).
+
+```{r deep-setup}
+DEEP_FILE   <- "../data/processed/metabus_deep.rds"
+BATCH_SIZE  <- 25L      # matrices processed before each write to disk
+MAX_PER_RUN <- Inf      # cap on NEW matrices per render (e.g. 200L to bound a run)
+
+dir.create(dirname(DEEP_FILE), showWarnings = FALSE, recursive = TRUE)
+
+# Target set: every inconsistent matrix (swap in a sample here if desired).
+target_ids <- screen$id[screen$verdict == "inconsistent"]
+
+# One pass per matrix: localization class + structural read + excusable_delta.
+# Takes the matrix explicitly so only a batch's matrices ship to the workers.
+analyse_one <- function(id, M) {
+  lf <- localize_psd_fault(M, decimals = 2)
+  sc <- lf$structural$severity_class
+  tibble(id = id, p = nrow(M),
+         excusable_delta = excusable_delta(M),
+         localization_verdict = lf$localization_verdict,
+         severity_class = if (is.null(sc)) NA_character_ else sc)
+}
+
+# furrr options: parallel-safe RNG stream + load port/tibble on the workers.
+fo <- furrr_options(seed = TRUE, packages = c("port", "tibble"))
+
+empty_deep <- tibble(id = character(), p = integer(), excusable_delta = double(),
+                     localization_verdict = character(), severity_class = character())
+```
+
+```{r deep-run}
+# Resume from whatever has already been completed on disk.
+deep <- if (file.exists(DEEP_FILE)) readRDS(DEEP_FILE) else empty_deep
+
+todo <- utils::head(setdiff(target_ids, deep$id), MAX_PER_RUN)
+
+if (length(todo) > 0L) {
+  batches <- split(todo, ceiling(seq_along(todo) / BATCH_SIZE))
+  for (b in batches) {
+    # each batch is analysed in parallel across workers (furrr), then the
+    # completed batch is written to disk before the next one starts.
+    rows <- future_pmap(list(id = b, M = matrixList[b]), analyse_one, .options = fo)
+    deep <- bind_rows(deep, bind_rows(rows))
+    saveRDS(deep, DEEP_FILE)                       # persist the completed batch
+    message(sprintf("deep dive: %d / %d inconsistent matrices done",
+                    sum(deep$id %in% target_ids), length(target_ids)))
+  }
+}
+
+# Keep only rows for the current target set (in case the file holds extras).
+deep <- deep[deep$id %in% target_ids, , drop = FALSE]
+
+n_done <- nrow(deep); n_target <- length(target_ids)
+cat(sprintf("Deep dive: %d of %d inconsistent matrices completed (%.0f%%)%s.\n",
+            n_done, n_target, 100 * n_done / n_target,
+            if (n_done < n_target) " -- re-render to continue" else ""))
+```
+
+### Severity in precision units
+
+```{r severity-band}
+deep |>
+  mutate(band = case_when(
+    excusable_delta <= 0.05 ~ "<= 0.05  (excusable by 1-decimal reporting)",
+    excusable_delta <= 0.10 ~ "0.05-0.10  (mild)",
+    excusable_delta <= 0.20 ~ "0.10-0.20  (moderate)",
+    TRUE                    ~ "> 0.20  (substantive: far beyond rounding)")) |>
+  count(band) |>
+  mutate(`%` = round(100 * n / sum(n), 1)) |>
+  kable(caption = "Severity of the completed inconsistent matrices, in precision units")
+```
+
+```{r severity-plot, echo=FALSE}
+ggplot(deep, aes(excusable_delta)) +
+  geom_histogram(bins = 25, fill = "#c0392b", colour = "white", linewidth = 0.1) +
+  geom_vline(xintercept = c(0.05, 0.20), linetype = 2, colour = "grey40") +
+  scale_x_continuous(trans = "log10") +
+  labs(x = "excusable_delta (log scale)", y = "matrices",
+       title = "Smallest imprecision that would excuse each matrix",
+       subtitle = "Dashed: 1-decimal (0.05) and substantive (0.20) marks")
+```
+
+### Where the fault sits, and whether it is benign
+
+```{r localize-class}
+deep |>
+  count(localization_verdict) |>
+  mutate(`%` = round(100 * n / sum(n), 1)) |>
+  arrange(desc(n)) |>
+  kable(caption = "Localization classes (completed)")
+
+deep |>
+  count(severity_class) |>
+  mutate(`%` = round(100 * n / sum(n), 1)) |>
+  kable(caption = "Structural severity class (completed)")
+```
+
+## Worked examples
+
+Concrete matrices make the range tangible. We restrict the worked examples to the more **compact** completed matrices (<= 10 variables) so the certificates print legibly, and pull the **most severe** and a **marginal** inconsistency from them.
+
+```{r examples-pick}
+compact <- deep |> filter(p <= 10) |> arrange(desc(excusable_delta))
+
+if (nrow(compact) < 2) compact <- arrange(deep, desc(excusable_delta))
+
+worst_id    <- compact$id[1]
+marginal_id <- compact$id[nrow(compact)]
+```
+
+### The most severe inconsistency (compact matrices)
+
+```{r ex-worst}
+worst <- matrixList[[worst_id]]
+cat("source id:", worst_id, "  variables:", nrow(worst), "\n")
+check_corr_psd(worst, decimals = 2)
+```
+
+```{r ex-worst-localize}
+localize_psd_fault(worst, decimals = 2)
+```
+
+### A marginal inconsistency
+
+Just past the boundary — the kind of thing rounding of an assembled table readily produces:
+
+```{r ex-marginal}
+marginal <- matrixList[[marginal_id]]
+cat("source id:", marginal_id, "  variables:", nrow(marginal),
+    "  excusable_delta:", round(compact$excusable_delta[nrow(compact)], 4), "\n")
+check_corr_psd(marginal, decimals = 2)
+```
+
+### A consistent matrix
+
+For contrast, a matrix the screen clears:
+
+```{r ex-ok}
+ok_id <- screen$id[screen$verdict == "consistent"][1]
+
+check_corr_psd(matrixList[[ok_id]], decimals = 2)
+```
+
+## Summary
+
+```{r summary, echo=FALSE}
+n_incon <- sum(screen$verdict == "inconsistent")
+
+tibble(
+  metric = c("matrices screened",
+             "inconsistent",
+             "consistent",
+             "undecided",
+             "deep dive completed",
+             "completed inconsistencies excusable by 1-decimal reporting (<= 0.05)"),
+  value = c(format(nrow(screen), big.mark = ","),
+            sprintf("%s (%.1f%%)", format(n_incon, big.mark = ","),
+                    100 * n_incon / nrow(screen)),
+            sprintf("%.1f%%", 100 * mean(screen$verdict == "consistent")),
+            sprintf("%.1f%%", 100 * mean(screen$verdict == "undecided")),
+            sprintf("%s of %s", format(nrow(deep), big.mark = ","),
+                    format(n_incon, big.mark = ",")),
+            if (nrow(deep) > 0L)
+              sprintf("%.1f%%", 100 * mean(deep$excusable_delta <= 0.05)) else "n/a")
+) |>
+  kable(caption = "Screen summary")
+```
+
+**Reading it.** 
+
+A non-trivial share (~6.5%) of metaBUS matrices are not positive semidefinite even allowing for rounding — unsurprising for an assembled corpus, where cells come from different samples. But the violations are *graded*, not uniform: a minority sit within about one decimal place of consistency (the benign signature of assembly and rounding), while the majority lie clearly past the boundary and a heavy tail is inconsistent by an amount no rounding can explain. `port` turns the blunt non-PSD fact into that gradient, and for each flagged matrix localizes the offending cells, states the interval they should have occupied, and certifies the verdict without any solver tolerance — so a reviewer can triage from the deep tail down.
+
+The screen assumed two-decimal reporting; matrices in the substantive tail are worth re-checking against their original sources for transcription error, pairwise deletion, or disattenuation before inferring a mistake.
+
+## Session info
+
+```{r}
+sessionInfo()
+```
