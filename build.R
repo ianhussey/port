@@ -8,13 +8,17 @@ devtools::document()
 
 devtools::check(vignettes = FALSE)
 
-#devtools::install()
+
+#devtools::install(build_vignettes = TRUE)
+#vignette("port")
+
 # or from github, after push
 devtools::install_github("ianhussey/port")
 
 library(port)
 
 ?port
+
 
 detach("package:port", unload=TRUE)
 
