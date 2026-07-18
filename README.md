@@ -104,7 +104,7 @@ When no cheap construction succeeds and the witness margin sits in the precision
 
 ```r
 # install.packages("remotes")
-remotes::install_github("ianhussey/psd-ness")
+remotes::install_github("ianhussey/port")
 ```
 
 There are no hard third-party dependencies beyond `tibble` (for the batch helper's output).
