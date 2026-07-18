@@ -233,9 +233,7 @@ This package assembles established results from verified numerical computing; th
 
 Hussey, I. (2026). port: Consistency Checks for Reported Rounded Correlation Matrices. [Computer software] [doi:10.5281/zenodo.21434236](https://doi.org/10.5281/zenodo.21434236). 
 
-```
 [![DOI](https://zenodo.org/badge/1289802776.svg)](https://doi.org/10.5281/zenodo.21434236)
-```
 
 ## License
 
