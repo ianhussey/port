@@ -1,4 +1,4 @@
-# PORT: Positive-semi-definiteness Of Pearson's *r* Tables
+# PORT: Positive-semi-definiteness Of Rounded correlation Tables
 
 <!-- badges: start -->
 [![R-CMD-check](https://github.com/ianhussey/port/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/ianhussey/port/actions/workflows/R-CMD-check.yaml)
@@ -241,7 +241,7 @@ This package assembles established results from verified numerical computing; th
 
 ## Suggested citation
 
-Hussey, I. (2026). port: Consistency Checks for Reported Rounded Correlation Matrices. [Computer software] [doi:10.5281/zenodo.21434236](https://doi.org/10.5281/zenodo.21434236). 
+Hussey, I. (2026). port: Positive-semi-definiteness Of Rounded correlation Tables. [Computer software] [https://github.com/ianhussey/port](https://github.com/ianhussey/port) [doi:10.5281/zenodo.21434236](https://doi.org/10.5281/zenodo.21434236). 
 
 ## License
 
