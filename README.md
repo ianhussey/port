@@ -229,6 +229,14 @@ This package assembles established results from verified numerical computing; th
 - S. M. Rump (2006), "Verification of positive definiteness," *BIT Numerical Mathematics*, 46(2):433–452. [doi:10.1007/s10543-006-0056-1](https://doi.org/10.1007/s10543-006-0056-1)
 - W. A. P. van Tilburg and L. J. A. van Tilburg (2023), "Inconsistent hypotheses and effect-size limits," *Advances in Methods and Practices in Psychological Science*, 6(4). [doi:10.1177/25152459231197605](https://doi.org/10.1177/25152459231197605)
 
+## Suggested citation
+
+Hussey, I. (2026). port: Consistency Checks for Reported Rounded Correlation Matrices. [Computer software] [doi:10.5281/zenodo.21434236](https://doi.org/10.5281/zenodo.21434236). 
+
+```
+[![DOI](https://zenodo.org/badge/1289802776.svg)](https://doi.org/10.5281/zenodo.21434236)
+```
+
 ## License
 
 MIT © Ian Hussey
