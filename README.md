@@ -245,4 +245,6 @@ Hussey, I. (2026). port: Consistency Checks for Reported Rounded Correlation Mat
 
 ## License
 
-MIT © Ian Hussey
+Code is MIT licenced © Ian Hussey (2026)
+
+Text and images are CC BY 4.0 (see above citation)
