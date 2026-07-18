@@ -144,6 +144,98 @@ ggplot(incon, aes(-margin)) +
                           nrow(incon), median(-incon$margin)))
 ```
 
+## Correlation distributions and predictors of inconsistency
+
+Because `check_corr_psd_batch()` now reports the per-matrix off-diagonal correlation summary (`r_min`, `r_max`, `r_mean`, `r_sd`) alongside the number of variables `p`, we can describe the corpus and ask which features of a table predict inconsistency — all from the screen table, at no extra cost.
+
+```{r corr-features}
+feat <- screen |>
+  filter(verdict != "error") |>
+  mutate(max_abs_r = pmax(abs(r_min), abs(r_max)),
+         inconsistent = verdict == "inconsistent")
+
+feat |>
+  transmute(`min r` = r_min, `max r` = r_max, `mean r` = r_mean,
+            `SD of r` = r_sd, `max |r|` = max_abs_r, `n variables` = p) |>
+  pivot_longer(everything(), names_to = "quantity", values_to = "v") |>
+  group_by(quantity) |>
+  summarise(mean = round(mean(v), 3), sd = round(sd(v), 3),
+            min = round(min(v), 3), median = round(median(v), 3),
+            max = round(max(v), 3), .groups = "drop") |>
+  kable(caption = "Per-matrix correlation summaries across the corpus")
+```
+
+### Correlation structure vs matrix size
+
+Larger tables tend to have a slightly tighter spread of correlations, but the key point is how size and spread jointly relate to inconsistency (below).
+
+```{r corr-vs-p, echo=FALSE}
+feat |>
+  group_by(p) |>
+  summarise(mean_r_sd = mean(r_sd), mean_max_abs = mean(max_abs_r), n = n(),
+            .groups = "drop") |>
+  ggplot(aes(p, mean_r_sd)) +
+  geom_line(colour = "grey70") +
+  geom_point(aes(size = n), alpha = 0.6, colour = "#2c3e50") +
+  scale_size_area(max_size = 5) +
+  labs(x = "number of variables (p)", y = "mean SD of off-diagonal correlations",
+       size = "matrices", title = "Correlation spread vs matrix size")
+```
+
+### What distinguishes the inconsistent tables
+
+```{r corr-by-verdict, echo=FALSE}
+feat |>
+  filter(verdict %in% c("consistent", "inconsistent")) |>
+  select(verdict, `mean r` = r_mean, `SD of r` = r_sd, `max |r|` = max_abs_r,
+         `n variables` = p) |>
+  pivot_longer(-verdict, names_to = "quantity", values_to = "v") |>
+  ggplot(aes(v, fill = verdict)) +
+  geom_density(alpha = 0.5, colour = NA) +
+  facet_wrap(~ quantity, scales = "free") +
+  scale_fill_manual(values = c(consistent = "#27ae60", inconsistent = "#c0392b")) +
+  labs(x = NULL, y = "density", fill = NULL,
+       title = "Consistent vs inconsistent tables")
+```
+
+Inconsistency rate rises with both the spread of correlations and their largest magnitude:
+
+```{r rate-by-bins, echo=FALSE}
+rate_by <- function(var) {
+  br <- unique(quantile(feat[[var]], seq(0, 1, 0.2), na.rm = TRUE))
+  feat |>
+    mutate(bin = cut(.data[[var]], br, include.lowest = TRUE)) |>
+    group_by(bin) |>
+    summarise(n = n(), `% inconsistent` = round(100 * mean(inconsistent), 1),
+              .groups = "drop")
+}
+rate_by("r_sd")      |> kable(caption = "Inconsistency rate by SD-of-r quintile")
+rate_by("max_abs_r") |> kable(caption = "Inconsistency rate by max |r| quintile")
+```
+
+### A joint model
+
+A logistic regression on standardized predictors puts the effects on one scale (odds ratio per SD of each feature):
+
+```{r logit}
+md <- feat |>
+  filter(verdict %in% c("consistent", "inconsistent")) |>
+  transmute(y        = as.integer(inconsistent),
+            z_mean   = as.numeric(scale(r_mean)),
+            z_sd     = as.numeric(scale(r_sd)),
+            z_maxabs = as.numeric(scale(max_abs_r)),
+            z_p      = as.numeric(scale(p)))
+fit <- glm(y ~ z_mean + z_sd + z_maxabs + z_p, data = md, family = binomial)
+co  <- summary(fit)$coefficients
+tibble(term = c("(intercept)", "mean r", "SD of r", "max |r|", "n variables"),
+       `odds ratio / SD` = round(exp(co[, 1]), 2),
+       z = round(co[, 3], 1),
+       `p value` = signif(co[, 4], 2)) |>
+  kable(caption = "Logistic regression: standardized predictors of inconsistency")
+```
+
+The table quantifies which features carry the most weight. Geometrically, more variables and larger correlation magnitudes create more opportunities for a frustrated triple, so both should push the odds of inconsistency up; the mean correlation level matters less than the spread and the extremes.
+
 ## Severity and localization (resumable, batched deep dive)
 
 The interpretable severity number is `excusable_delta()`: the smallest per-cell reporting imprecision that would make a matrix consistent, in the same units as `delta`. And `localize_psd_fault()` says *where* the violation lives and whether it is structurally benign. Both are far heavier than the screen (seconds per matrix), so the deep dive processes the inconsistent matrices **in parallel batches (via `furrr`/`future`), writing each completed batch to disk**. Each batch is analysed across worker processes; a run then resumes from what is already saved and works only on the matrices still outstanding, so the full set can be completed across several renders — or survive an interruption — without repeating any work. `MAX_PER_RUN` bounds how many *new* matrices a single render processes (the full set is large; at a few seconds each a complete pass takes a while, so cap it and re-render to continue).
@@ -158,27 +250,62 @@ dir.create(dirname(DEEP_FILE), showWarnings = FALSE, recursive = TRUE)
 # Target set: every inconsistent matrix (swap in a sample here if desired).
 target_ids <- screen$id[screen$verdict == "inconsistent"]
 
-# One pass per matrix: localization class + structural read + excusable_delta.
+# One pass per matrix: severity, localization, structural read, smallest
+# eigenvalue, and the sole-culprit cells (their reported value and the interval
+# they must occupy) captured as a nested tibble for the cell-level export below.
 # Takes the matrix explicitly so only a batch's matrices ship to the workers.
 analyse_one <- function(id, M) {
-  lf <- localize_psd_fault(M, decimals = 2)
-  sc <- lf$structural$severity_class
-  tibble(id = id, p = nrow(M),
-         excusable_delta = excusable_delta(M),
-         localization_verdict = lf$localization_verdict,
-         severity_class = if (is.null(sc)) NA_character_ else sc)
+  lf   <- localize_psd_fault(M, decimals = 2)
+  sev  <- lf$severity
+  st   <- lf$structural
+  recs <- lf$evidence$sole_culprit_cells               # component A: sole culprits
+  pull <- function(field) if (length(recs))
+    vapply(recs, function(c) as.numeric(c[[field]]), numeric(1)) else numeric(0)
+  sole_cells <- tibble(
+    i = if (length(recs)) vapply(recs, function(c) as.integer(c$i), integer(1)) else integer(0),
+    j = if (length(recs)) vapply(recs, function(c) as.integer(c$j), integer(1)) else integer(0),
+    reported = pull("reported"),
+    implied_lo = pull("lo"), implied_hi = pull("hi"),
+    required_edit = pull("required_edit"))
+  imp <- lf$implicated$cells
+  tibble(
+    id = id, p = nrow(M),
+    min_eig = min(eigen(M, symmetric = TRUE, only.values = TRUE)$values),
+    margin = sev$witness_margin,
+    excusable_delta = sev$excusable_delta,
+    severity_max = sev$severity_max,
+    severity_frob = sev$severity_frob,
+    best_lambda_min = sev$best_lambda_min,
+    localization_verdict = lf$localization_verdict,
+    severity_class = if (is.null(st$severity_class)) NA_character_ else st$severity_class,
+    severity_ratio = if (is.null(st$severity_ratio)) NA_real_ else st$severity_ratio,
+    n_sole = nrow(sole_cells),
+    implicated_cells = if (is.null(imp)) NA_character_ else
+      paste(sprintf("(%d,%d)", imp[, 1], imp[, 2]), collapse = "; "),
+    sole_cells = list(sole_cells))
 }
 
 # furrr options: parallel-safe RNG stream + load port/tibble on the workers.
 fo <- furrr_options(seed = TRUE, packages = c("port", "tibble"))
 
-empty_deep <- tibble(id = character(), p = integer(), excusable_delta = double(),
-                     localization_verdict = character(), severity_class = character())
+empty_deep <- tibble(
+  id = character(), p = integer(), min_eig = double(), margin = double(),
+  excusable_delta = double(), severity_max = double(), severity_frob = double(),
+  best_lambda_min = double(), localization_verdict = character(),
+  severity_class = character(), severity_ratio = double(),
+  n_sole = integer(), implicated_cells = character(), sole_cells = list())
 ```
 
 ```{r deep-run}
 # Resume from whatever has already been completed on disk.
 deep <- if (file.exists(DEEP_FILE)) readRDS(DEEP_FILE) else empty_deep
+
+# If the cache predates the enriched schema, it cannot supply the cell-level
+# detail, so rebuild it from scratch.
+if (!all(names(empty_deep) %in% names(deep))) {
+  message("deep-dive cache has an older schema; rebuilding from scratch.")
+  deep <- empty_deep
+}
 
 todo <- utils::head(setdiff(target_ids, deep$id), MAX_PER_RUN)
 
@@ -241,6 +368,95 @@ deep |>
   count(severity_class) |>
   mutate(`%` = round(100 * n / sum(n), 1)) |>
   kable(caption = "Structural severity class (completed)")
+```
+
+## Export for human inspection
+
+To support manual checking of the worst-offending articles (e.g. for data-extraction errors), the completed deep dive is written to three CSVs under `data/processed/`:
+
+- **`metabus_offenders.csv`** — one row per inconsistent matrix, worst first: severity (`excusable_delta`, `severity_max`, smallest eigenvalue), localization class, structural read, the implicated cells, and the correlation summary.
+- **`metabus_offender_cells.csv`** — cell-level detail for every *sole-culprit* cell (a single cell whose value alone makes the table inconsistent): the reported correlation, its rounding box, and the interval it would have to occupy for the table to be valid, with the `required_edit` beyond rounding. A reported value far outside its implied interval is the classic signature of a transcription/extraction error.
+- **`metabus_offender_matrices_top.csv`** — the full off-diagonal of the `TOP_N` most severe matrices in long form with variable names, so a reviewer can reconstruct each table and compare it to the source.
+
+```{r export, message=FALSE}
+OUT_DIR <- dirname(DEEP_FILE)
+DELTA   <- 0.005                          # nearest-rounding half-width at 2 dp
+
+# 1. Offender triage table (one row per inconsistent matrix, worst first).
+offenders <- deep |>
+  select(-sole_cells) |>
+  left_join(select(screen, id, r_min, r_max, r_mean, r_sd), by = "id") |>
+  arrange(desc(excusable_delta)) |>
+  transmute(
+    id, n_variables = p,
+    min_eigenvalue = round(min_eig, 4),
+    certificate_margin = round(margin, 4),
+    excusable_delta = round(excusable_delta, 4),
+    severity_max = round(severity_max, 4),
+    severity_frob = round(severity_frob, 4),
+    localization = localization_verdict,
+    severity_class,
+    severity_ratio = round(severity_ratio, 1),
+    n_sole_culprit_cells = n_sole,
+    implicated_cells,
+    r_min = round(r_min, 3), r_max = round(r_max, 3),
+    r_mean = round(r_mean, 3), r_sd = round(r_sd, 3))
+write.csv(offenders, file.path(OUT_DIR, "metabus_offenders.csv"), row.names = FALSE)
+
+# 2. Cell-level detail for the sole-culprit cells: reported value vs the
+#    interval it must occupy, with the rounding box and the required edit.
+add_cell_context <- function(id, tbl) {
+  if (is.null(tbl) || nrow(tbl) == 0L) return(NULL)
+  M  <- matrixList[[id]]
+  vn <- rownames(M); if (is.null(vn)) vn <- as.character(seq_len(nrow(M)))
+  tibble(
+    id = id, i = tbl$i, j = tbl$j, var_i = vn[tbl$i], var_j = vn[tbl$j],
+    reported_r = tbl$reported,
+    rounding_lo = round(tbl$reported - DELTA, 4),
+    rounding_hi = round(tbl$reported + DELTA, 4),
+    implied_lo = round(tbl$implied_lo, 4),
+    implied_hi = round(tbl$implied_hi, 4),
+    required_edit = round(tbl$required_edit, 4))
+}
+cells <- bind_rows(Map(add_cell_context, deep$id, deep$sole_cells))
+if (nrow(cells) > 0L) {
+  cells <- cells |>
+    left_join(select(offenders, id, localization, severity_class, excusable_delta),
+              by = "id") |>
+    arrange(desc(excusable_delta), id, desc(abs(required_edit)))
+}
+write.csv(cells, file.path(OUT_DIR, "metabus_offender_cells.csv"), row.names = FALSE)
+
+# 3. Full matrices of the worst offenders (long format, with variable names).
+TOP_N <- 100L
+worst_ids <- head(offenders$id, TOP_N)
+mat_long <- bind_rows(lapply(worst_ids, function(id) {
+  M  <- matrixList[[id]]
+  vn <- rownames(M); if (is.null(vn)) vn <- as.character(seq_len(nrow(M)))
+  ut <- which(upper.tri(M), arr.ind = TRUE)
+  tibble(id = id, i = ut[, 1], j = ut[, 2],
+         var_i = vn[ut[, 1]], var_j = vn[ut[, 2]], r = M[ut])
+}))
+write.csv(mat_long, file.path(OUT_DIR, "metabus_offender_matrices_top.csv"),
+          row.names = FALSE)
+
+cat(sprintf("Wrote to %s:\n  metabus_offenders.csv              (%d rows)\n  metabus_offender_cells.csv         (%d sole-culprit cells)\n  metabus_offender_matrices_top.csv  (%d cells from %d worst matrices)\n",
+            OUT_DIR, nrow(offenders), nrow(cells), nrow(mat_long), length(worst_ids)))
+```
+
+```{r export-preview, echo=FALSE}
+offenders |>
+  head(10) |>
+  select(id, n_variables, excusable_delta, severity_max, localization,
+         severity_class, implicated_cells) |>
+  kable(caption = "Worst 10 offenders (full detail in metabus_offenders.csv)")
+
+if (nrow(cells) > 0L) {
+  cells |>
+    head(12) |>
+    select(id, var_i, var_j, reported_r, implied_lo, implied_hi, required_edit) |>
+    kable(caption = "Sole-culprit cells: reported value vs the interval it must occupy")
+}
 ```
 
 ## Worked examples
