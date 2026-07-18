@@ -101,7 +101,7 @@ There are no hard third-party dependencies beyond `tibble` (for the batch helper
 
 ## Usage
 
-See also vignette in the R package (`vignette(package = "port")`).
+See also vignette in the R package (`vignette("port")`).
 
 ```r
 library(port)
