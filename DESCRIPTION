@@ -22,7 +22,7 @@ Description: Forensic meta-science tools for auditing reported correlation
     grades how far the table is from consistency, and separates benign
     structural causes from substantive errors. A further layer applies the
     same checks to reliability-corrected (disattenuated) correlations.
-URL: https://github.com/ianhussey/port
+URL: https://doi.org/10.5281/zenodo.21434236
 BugReports: https://github.com/ianhussey/port/issues
 License: MIT + file LICENSE
 Encoding: UTF-8
