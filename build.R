@@ -1,4 +1,3 @@
-
 library(roxygen2)
 #setwd("~/git/")
 #devtools::create("port")
@@ -6,13 +5,15 @@ setwd("~/git/port")
 
 devtools::document()
 
-devtools::check(vignettes = FALSE)
+devtools::check()
 
+# once you have the package updated, you can use it to build the vignettes, check the whole thing, and reinstall again
+devtools::build_vignettes()
 
-#devtools::install(build_vignettes = TRUE)
+devtools::install(build_vignettes = TRUE)
 
-# or from github, after push
-devtools::install_github("ianhussey/port")
+# # or from github, after push
+# devtools::install_github("ianhussey/port")
 
 library(port)
 
@@ -20,17 +21,14 @@ library(port)
 vignette("port")
 
 
-detach("package:port", unload=TRUE)
+detach("package:port", unload = TRUE)
 
-# once you have the package updated, you can use it to build the vignettes, check the whole thing, and reinstall again
-devtools::build_vignettes()
-devtools::check()
 
 # cran checks
-# win-builder 
+# win-builder
 library(devtools)
-check_win_devel()        # emails results to the maintainer address in DESCRIPTION
+check_win_devel() # emails results to the maintainer address in DESCRIPTION
 
-# R-hub 
+# R-hub
 library(rhub)
-rhub_check()             # v2: runs on GitHub Actions in your repo
+rhub_check() # v2: runs on GitHub Actions in your repo
