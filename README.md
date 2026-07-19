@@ -1,4 +1,6 @@
-# PORT: Positive-semi-definiteness Of Rounded correlation Tables
+<img src="man/figures/logo.png" width="30%" alt="port logo" />
+
+# port: Positive-semi-definiteness Of Rounded correlation Tables
 
 <!-- badges: start -->
 [![R-CMD-check](https://github.com/ianhussey/port/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/ianhussey/port/actions/workflows/R-CMD-check.yaml)
@@ -10,7 +12,7 @@
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21434236.svg)](https://doi.org/10.5281/zenodo.21434236)
 <!-- badges: end -->
 
-`port` is a trustworthiness assessment / forensic-metascience tool for assessing whether reported rounded Pearson's *r* correlation matrices are mathmatically possible and therefore trustworthy. 
+`port` is a forensic meta-science R package for conducting trustworthiness assessments on reported rounded Pearson's *r* correlation matrices. 
 
 Given a reported correlation matrix whose off-diagonal entries have been rounded to a fixed number of decimals, it decides whether any positive semidefinite (PSD) matrix is consistent with the resulting rounding box. When no PSD matrix fits the box, the reported matrix cannot be a genuine correlation matrix, and the method labels the matrix "inconsistent" (following the terminology employed by other forensic meta-science methods such as GRIM). 
 
