@@ -7,7 +7,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-[![DOI](https://zenodo.org/badge/1289802776.svg)](https://doi.org/10.5281/zenodo.21434236)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21434236.svg)](https://doi.org/10.5281/zenodo.21434236)
 <!-- badges: end -->
 
 `port` is a trustworthiness assessment / forensic-metascience tool for assessing whether reported rounded Pearson's *r* correlation matrices are mathmatically possible and therefore trustworthy. 

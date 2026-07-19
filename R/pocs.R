@@ -8,7 +8,7 @@
 # The feasible set is the intersection of two closed convex sets:
 #   * the box  B = { X symmetric : X_ii = 1, X_ij in [lo_ij, hi_ij] };
 #   * the tightened PSD cone C_mu = { X : X - mu*I is PSD } for a margin mu >= 0.
-# Alternating projections X <- P_B(P_{C_mu}(X)) converge to a point in B ∩ C_mu
+# Alternating projections X <- P_B(P_{C_mu}(X)) converge to a point in B intersect C_mu
 # whenever that intersection is nonempty (von Neumann / Cheney-Goldstein for two
 # closed convex sets). A strictly-positive margin mu makes the recovered point
 # strictly positive definite, so the one-sided Cholesky test of verify.R can

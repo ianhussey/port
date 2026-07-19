@@ -4,12 +4,17 @@ This is a new submission.
 
 ## Test environments
 
-- local macOS, R release
-- (add: win-builder devel/release, R-hub, GitHub Actions before submitting)
+- local macOS (aarch64), R 4.5.2 (release)
+- win-builder (x86_64-w64-mingw32), R-devel, via `devtools::check_win_devel()`
 
 ## R CMD check results
 
-0 errors | 0 warnings | 1 note (new submission).
+0 errors | 0 warnings | 1 note.
+
+The one NOTE is the standard "New submission" flag; there are no other notes on
+CRAN's machines. (A local `R CMD check --as-cran` additionally reports an
+HTML-Tidy version note, which is specific to the local `tidy` install and does
+not occur on the CRAN check farm.)
 
 ## Notes for the reviewer
 

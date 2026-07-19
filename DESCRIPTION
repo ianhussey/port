@@ -10,9 +10,10 @@ Description: Forensic meta-science tools for auditing reported correlation
     semidefinite (PSD) -- can lie within all of those ranges at once. When
     none can, the reported table cannot have arisen as a single complete
     set of Pearson correlations; the cause may be benign (for example
-    missing values handled pairwise or a mix of correlation types) or the use 
-    of non-Pearson's correlations. Such 'inconsistent' findings rest on a rigorous
-    floating-point error bound (Higham (2002) <doi:10.1137/1.9780898718027>)
+    missing values handled pairwise, a mix of correlation types, or
+    non-Pearson correlations). Such 'inconsistent' findings rest on a
+    rigorous floating-point error bound (Higham (2002)
+    <doi:10.1137/1.9780898718027>)
     and so do not depend on the tolerances of a numerical solver. A
     'consistent' finding is confirmed by constructing a valid matrix within
     the ranges and verifying it with a guaranteed Cholesky test (Rump (2006)
@@ -21,6 +22,8 @@ Description: Forensic meta-science tools for auditing reported correlation
     grades how far the table is from consistency, and separates benign
     structural causes from substantive errors. A further layer applies the
     same checks to reliability-corrected (disattenuated) correlations.
+URL: https://github.com/ianhussey/port
+BugReports: https://github.com/ianhussey/port/issues
 License: MIT + file LICENSE
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)

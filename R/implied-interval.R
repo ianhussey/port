@@ -8,7 +8,7 @@
 #   X_ij must satisfy  (X_ij - g)^2 <= (1 - alpha)(1 - beta),
 # where, with A = M_{-{i,j}}^{-1} and c_i, c_j the two variables' correlations to
 # the rest,  alpha = c_i' A c_i,  beta = c_j' A c_j,  g = c_i' A c_j. Hence
-#   X_ij in [g - sqrt((1-alpha)(1-beta)), g + sqrt((1-alpha)(1-beta))] ∩ [-1, 1].
+#   X_ij in [g - sqrt((1-alpha)(1-beta)), g + sqrt((1-alpha)(1-beta))] intersect [-1, 1].
 # This is a fast, point-conditioned (partial-correlation) reading. It is NOT the
 # same as the box-aware interval (component A), which lets the other cells roam
 # their rounding boxes; that stays the rigorous localization path. Here the

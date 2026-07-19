@@ -18,7 +18,7 @@ library(port)
 
 ## What `port` is
 
-`port` (Positive-semi-definiteness Of Pearson's *r* Tables) is a trustworthiness-assessment / forensic-metascience tool, in the tradition of GRIM, GRIMMER, and SPRITE. It asks whether a reported, rounded Pearson correlation matrix is mathematically possible, and therefore whether its numbers can be trusted as reported.
+`port` (Positive-semi-definiteness Of Rounded correlation *r* Tables) is a trustworthiness-assessment / forensic-metascience tool, in the tradition of GRIM, GRIMMER, and SPRITE. It asks whether a reported, rounded Pearson correlation matrix is mathematically possible, and therefore whether its numbers can be trusted as reported.
 
 A correlation matrix is only valid if it is positive semidefinite (PSD). Reported matrices in papers, though, are rounded: you see `0.62`, not the real number behind it. So the honest question is not "is this exact matrix PSD?" but
 

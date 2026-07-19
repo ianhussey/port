@@ -10,7 +10,7 @@ localize_psd_fault(
   delta = NULL,
   verify = TRUE,
   sparse_k = 3L,
-  tol = 0.000001
+  tol = 1e-06
 )
 }
 \arguments{

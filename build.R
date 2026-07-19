@@ -10,7 +10,6 @@ devtools::check(vignettes = FALSE)
 
 
 #devtools::install(build_vignettes = TRUE)
-#vignette("port")
 
 # or from github, after push
 devtools::install_github("ianhussey/port")
@@ -18,6 +17,7 @@ devtools::install_github("ianhussey/port")
 library(port)
 
 ?port
+vignette("port")
 
 
 detach("package:port", unload=TRUE)
@@ -26,3 +26,11 @@ detach("package:port", unload=TRUE)
 devtools::build_vignettes()
 devtools::check()
 
+# cran checks
+# win-builder 
+library(devtools)
+check_win_devel()        # emails results to the maintainer address in DESCRIPTION
+
+# R-hub 
+library(rhub)
+rhub_check()             # v2: runs on GitHub Actions in your repo

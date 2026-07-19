@@ -4,7 +4,7 @@
 \alias{excusable_delta}
 \title{Smallest reporting imprecision that could excuse a matrix}
 \usage{
-excusable_delta(R, tol = 0.000001)
+excusable_delta(R, tol = 1e-06)
 }
 \arguments{
 \item{R}{A symmetric numeric correlation matrix with unit diagonal.}

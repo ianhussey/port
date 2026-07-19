@@ -18,6 +18,14 @@ correlation matrix.
 See \code{\link[=check_corr_psd]{check_corr_psd()}} for the main entry point and the package README for
 the mathematics and the rigor guarantee.
 }
+\seealso{
+Useful links:
+\itemize{
+  \item \url{https://github.com/ianhussey/port}
+  \item Report bugs at \url{https://github.com/ianhussey/port/issues}
+}
+
+}
 \author{
 \strong{Maintainer}: Ian Hussey \email{ian.hussey@unibe.ch}
 
