@@ -11,7 +11,9 @@
 # [-1, 1]; unit diagonal)? Used to double-check solver / constructed solutions.
 .in_box <- function(X, R, delta, tol = 1e-9) {
   p <- nrow(R)
-  if (any(abs(diag(X) - 1) > tol)) return(FALSE)
+  if (any(abs(diag(X) - 1) > tol)) {
+    return(FALSE)
+  }
   off <- upper.tri(R) | lower.tri(R)
   lo <- pmax(R[off] - delta, -1) - tol
   hi <- pmin(R[off] + delta, 1) + tol
@@ -48,10 +50,19 @@
 # as a consistency certificate, or NULL.
 .construct_consistent <- function(R, delta) {
   candidates <- list(
-    list(X = R,                          how = "the reported matrix itself is PSD"),
-    list(X = .shrink_offdiag(R, delta),  how = "an in-box matrix shrunk toward the diagonal is PSD"),
-    list(X = .shrink_offdiag(R, delta / 2), how = "a partially shrunk in-box matrix is PSD"),
-    list(X = .project_clip(R, delta),    how = "the box-clipped PSD projection of R is PSD")
+    list(X = R, how = "the reported matrix itself is PSD"),
+    list(
+      X = .shrink_offdiag(R, delta),
+      how = "an in-box matrix shrunk toward the diagonal is PSD"
+    ),
+    list(
+      X = .shrink_offdiag(R, delta / 2),
+      how = "a partially shrunk in-box matrix is PSD"
+    ),
+    list(
+      X = .project_clip(R, delta),
+      how = "the box-clipped PSD projection of R is PSD"
+    )
   )
   for (cand in candidates) {
     if (.in_box(cand$X, R, delta) && .verify_psd(cand$X)) return(cand)

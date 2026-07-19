@@ -33,9 +33,12 @@
 
 # Sound upper bound on max det over the three boxes; box_i = c(lo, hi).
 .triple_det_ub <- function(bx_a, bx_b, bx_c) {
-  a0 <- .nearest_zero(bx_a[1], bx_a[2]); fa <- 1 - a0 * a0
-  b0 <- .nearest_zero(bx_b[1], bx_b[2]); fb <- 1 - b0 * b0
-  c0 <- .nearest_zero(bx_c[1], bx_c[2]); fc <- 1 - c0 * c0
+  a0 <- .nearest_zero(bx_a[1], bx_a[2])
+  fa <- 1 - a0 * a0
+  b0 <- .nearest_zero(bx_b[1], bx_b[2])
+  fb <- 1 - b0 * b0
+  c0 <- .nearest_zero(bx_c[1], bx_c[2])
+  fc <- 1 - c0 * c0
 
   pbc <- .interval_prod(bx_b[1], bx_b[2], bx_c[1], bx_c[2])
   pac <- .interval_prod(bx_a[1], bx_a[2], bx_c[1], bx_c[2])
@@ -52,21 +55,27 @@
 .scan_inconsistent_triples <- function(R, delta) {
   p <- nrow(R)
   bnd <- .box_bounds(R, delta)
-  lo <- bnd$lo; hi <- bnd$hi
+  lo <- bnd$lo
+  hi <- bnd$hi
   out <- list()
-  if (p < 3L) return(out)
+  if (p < 3L) {
+    return(out)
+  }
   combs <- utils::combn(p, 3L)
   for (m in seq_len(ncol(combs))) {
-    i <- combs[1, m]; j <- combs[2, m]; k <- combs[3, m]
-    bx_a <- c(lo[i, j], hi[i, j])   # X_ij
-    bx_b <- c(lo[i, k], hi[i, k])   # X_ik
-    bx_c <- c(lo[j, k], hi[j, k])   # X_jk
+    i <- combs[1, m]
+    j <- combs[2, m]
+    k <- combs[3, m]
+    bx_a <- c(lo[i, j], hi[i, j]) # X_ij
+    bx_b <- c(lo[i, k], hi[i, k]) # X_ik
+    bx_c <- c(lo[j, k], hi[j, k]) # X_jk
     ub <- .triple_det_ub(bx_a, bx_b, bx_c)
     if (ub < 0) {
       out[[length(out) + 1L]] <- list(
         vars = c(i, j, k),
         cells = rbind(c(i, j), c(i, k), c(j, k)),
-        box_max_det = ub)
+        box_max_det = ub
+      )
     }
   }
   out
@@ -93,15 +102,22 @@
 #' @export
 inconsistent_triples <- function(R, decimals = 2, delta = NULL) {
   R <- .validate_corr(R)
-  if (is.null(delta)) delta <- 0.5 * 10^(-decimals)
+  if (is.null(delta)) {
+    delta <- 0.5 * 10^(-decimals)
+  }
   trs <- .scan_inconsistent_triples(R, delta)
   if (length(trs) == 0L) {
-    return(tibble::tibble(i = integer(), j = integer(), k = integer(),
-                          box_max_det = numeric()))
+    return(tibble::tibble(
+      i = integer(),
+      j = integer(),
+      k = integer(),
+      box_max_det = numeric()
+    ))
   }
   tibble::tibble(
     i = vapply(trs, function(t) t$vars[1], integer(1)),
     j = vapply(trs, function(t) t$vars[2], integer(1)),
     k = vapply(trs, function(t) t$vars[3], integer(1)),
-    box_max_det = vapply(trs, function(t) t$box_max_det, numeric(1)))
+    box_max_det = vapply(trs, function(t) t$box_max_det, numeric(1))
+  )
 }

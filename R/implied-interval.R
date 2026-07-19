@@ -21,29 +21,46 @@
 .implied_interval_points <- function(R, i, j) {
   p <- nrow(R)
   others <- setdiff(seq_len(p), c(i, j))
-  if (length(others) == 0L) return(c(lo = -1, hi = 1))          # p = 2
+  if (length(others) == 0L) {
+    return(c(lo = -1, hi = 1))
+  } # p = 2
   M <- R[others, others, drop = FALSE]
-  if (anyNA(M)) return(c(lo = NA_real_, hi = NA_real_))          # another cell missing
+  if (anyNA(M)) {
+    return(c(lo = NA_real_, hi = NA_real_))
+  } # another cell missing
   Ainv <- tryCatch(solve(M), error = function(e) NULL)
-  if (is.null(Ainv)) return(c(lo = NA_real_, hi = NA_real_))
-  ci <- R[others, i]; cj <- R[others, j]
-  if (anyNA(ci) || anyNA(cj)) return(c(lo = NA_real_, hi = NA_real_))
+  if (is.null(Ainv)) {
+    return(c(lo = NA_real_, hi = NA_real_))
+  }
+  ci <- R[others, i]
+  cj <- R[others, j]
+  if (anyNA(ci) || anyNA(cj)) {
+    return(c(lo = NA_real_, hi = NA_real_))
+  }
   alpha <- sum(ci * (Ainv %*% ci))
-  beta  <- sum(cj * (Ainv %*% cj))
-  g     <- sum(ci * (Ainv %*% cj))
-  if (1 - alpha < 0 || 1 - beta < 0) return(c(lo = NA_real_, hi = NA_real_))  # empty
+  beta <- sum(cj * (Ainv %*% cj))
+  g <- sum(ci * (Ainv %*% cj))
+  if (1 - alpha < 0 || 1 - beta < 0) {
+    return(c(lo = NA_real_, hi = NA_real_))
+  } # empty
   rad <- sqrt((1 - alpha) * (1 - beta))
   c(lo = max(-1, g - rad), hi = min(1, g + rad))
 }
 
 # Relaxed validation: like .validate_corr but permits NA off-diagonals.
 .validate_corr_na <- function(R) {
-  if (is.data.frame(R)) R <- as.matrix(R)
+  if (is.data.frame(R)) {
+    R <- as.matrix(R)
+  }
   if (!is.matrix(R) || !is.numeric(R)) {
     stop("`R` must be a numeric matrix.", call. = FALSE)
   }
-  if (nrow(R) != ncol(R)) stop("`R` must be square.", call. = FALSE)
-  if (nrow(R) < 2L) stop("`R` must have at least 2 variables.", call. = FALSE)
+  if (nrow(R) != ncol(R)) {
+    stop("`R` must be square.", call. = FALSE)
+  }
+  if (nrow(R) < 2L) {
+    stop("`R` must have at least 2 variables.", call. = FALSE)
+  }
   d <- diag(R)
   if (anyNA(d) || any(abs(d - 1) > 1e-8)) {
     stop("Diagonal entries must equal 1 (and be non-missing).", call. = FALSE)
@@ -54,7 +71,9 @@
   }
   # NA must be mirrored across the diagonal
   na_ok <- all(is.na(R) == is.na(t(R)))
-  if (!na_ok) stop("Missing (NA) entries must be symmetric.", call. = FALSE)
+  if (!na_ok) {
+    stop("Missing (NA) entries must be symmetric.", call. = FALSE)
+  }
   R
 }
 
@@ -92,33 +111,57 @@
 #' implied_interval(R)
 #' @seealso [localize_psd_fault()]
 #' @export
-implied_interval <- function(R, cells = NULL, decimals = 2, delta = NULL,
-                             hold = c("points", "box"), verify = TRUE) {
+implied_interval <- function(
+  R,
+  cells = NULL,
+  decimals = 2,
+  delta = NULL,
+  hold = c("points", "box"),
+  verify = TRUE
+) {
   hold <- match.arg(hold)
   R <- .validate_corr_na(R)
   p <- nrow(R)
-  if (is.null(delta)) delta <- 0.5 * 10^(-decimals)
+  if (is.null(delta)) {
+    delta <- 0.5 * 10^(-decimals)
+  }
 
   if (is.null(cells)) {
     na_idx <- which(is.na(R) & upper.tri(R), arr.ind = TRUE)
     if (nrow(na_idx) == 0L) {
-      stop("No missing (NA) cells found; supply `cells` to interrogate ",
-           "reported entries.", call. = FALSE)
+      stop(
+        "No missing (NA) cells found; supply `cells` to interrogate ",
+        "reported entries.",
+        call. = FALSE
+      )
     }
     cells <- na_idx
   }
-  if (is.null(dim(cells))) cells <- matrix(cells, nrow = 1)
+  if (is.null(dim(cells))) {
+    cells <- matrix(cells, nrow = 1)
+  }
   storage.mode(cells) <- "integer"
 
   rows <- vector("list", nrow(cells))
   for (r in seq_len(nrow(cells))) {
-    i <- cells[r, 1]; j <- cells[r, 2]
-    if (i == j) stop("Cells must be off-diagonal.", call. = FALSE)
+    i <- cells[r, 1]
+    j <- cells[r, 2]
+    if (i == j) {
+      stop("Cells must be off-diagonal.", call. = FALSE)
+    }
     # every other off-diagonal must be finite for this interrogation
-    Rtest <- R; Rtest[i, j] <- Rtest[j, i] <- 0
+    Rtest <- R
+    Rtest[i, j] <- Rtest[j, i] <- 0
     if (anyNA(Rtest)) {
-      stop(sprintf("Interrogating cell (%d,%d) requires all other cells to be ",
-                   i, j), "non-missing.", call. = FALSE)
+      stop(
+        sprintf(
+          "Interrogating cell (%d,%d) requires all other cells to be ",
+          i,
+          j
+        ),
+        "non-missing.",
+        call. = FALSE
+      )
     }
     reported <- R[i, j]
     if (identical(hold, "points")) {
@@ -129,10 +172,20 @@ implied_interval <- function(R, cells = NULL, decimals = 2, delta = NULL,
       fo <- .box_feasible(fb$lo, fb$hi, fb$off, verify = verify)
       if (identical(fo$status, "feasible")) {
         xf <- fo$X[i, j]
-        lo_ij <- if (identical(.feasible_status_at(bnd, i, j, -1, verify), "feasible")) -1
-                 else .bisect_boundary(bnd, i, j, -1, xf, verify)
-        hi_ij <- if (identical(.feasible_status_at(bnd, i, j, 1, verify), "feasible")) 1
-                 else .bisect_boundary(bnd, i, j, 1, xf, verify)
+        lo_ij <- if (
+          identical(.feasible_status_at(bnd, i, j, -1, verify), "feasible")
+        ) {
+          -1
+        } else {
+          .bisect_boundary(bnd, i, j, -1, xf, verify)
+        }
+        hi_ij <- if (
+          identical(.feasible_status_at(bnd, i, j, 1, verify), "feasible")
+        ) {
+          1
+        } else {
+          .bisect_boundary(bnd, i, j, 1, xf, verify)
+        }
         iv <- c(lo = lo_ij, hi = hi_ij)
       } else {
         iv <- c(lo = NA_real_, hi = NA_real_)
@@ -141,17 +194,25 @@ implied_interval <- function(R, cells = NULL, decimals = 2, delta = NULL,
     status <- if (any(is.na(iv))) "empty" else "feasible"
     if (is.na(reported)) {
       edit <- NA_real_
-      if (status == "feasible") status <- "feasible"  # imputation
+      if (status == "feasible") status <- "feasible" # imputation
     } else {
       edit <- if (status == "feasible") {
         .signed_gap(reported - delta, reported + delta, iv["lo"], iv["hi"])
-      } else NA_real_
+      } else {
+        NA_real_
+      }
     }
     rows[[r]] <- data.frame(
-      i = i, j = j, reported = reported,
-      lo = unname(iv["lo"]), hi = unname(iv["hi"]),
-      required_edit = unname(edit), hold = hold, status = status,
-      stringsAsFactors = FALSE)
+      i = i,
+      j = j,
+      reported = reported,
+      lo = unname(iv["lo"]),
+      hi = unname(iv["hi"]),
+      required_edit = unname(edit),
+      hold = hold,
+      status = status,
+      stringsAsFactors = FALSE
+    )
   }
   tibble::as_tibble(do.call(rbind, rows))
 }

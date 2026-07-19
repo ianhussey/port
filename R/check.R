@@ -3,24 +3,33 @@
 # -----------------------------------------------------------------------------
 
 # S3 constructor for the result object.
-.new_corr_psd_check <- function(verdict, tier, delta, p,
-                                witness = NULL, margin = NA_real_,
-                                b_upper = NA_real_, certified_matrix = NULL,
-                                detail = NULL, note = NULL,
-                                certified = NA, rounding = "nearest") {
+.new_corr_psd_check <- function(
+  verdict,
+  tier,
+  delta,
+  p,
+  witness = NULL,
+  margin = NA_real_,
+  b_upper = NA_real_,
+  certified_matrix = NULL,
+  detail = NULL,
+  note = NULL,
+  certified = NA,
+  rounding = "nearest"
+) {
   structure(
     list(
-      verdict = verdict,                 # "inconsistent" / "consistent" / "undecided"
-      tier = tier,                       # "precheck" / "witness" / "pocs"
-      certified = certified,             # TRUE: verdict carries a certificate
-      witness = witness,                 # certificate vector v (or NULL)
-      margin = margin,                   # B = v'Rv + delta*(||v||_1^2 - ||v||_2^2)
-      b_upper = b_upper,                 # margin + rigorous FP slack
-      delta = delta,                     # (max) half-width of the box
+      verdict = verdict, # "inconsistent" / "consistent" / "undecided"
+      tier = tier, # "precheck" / "witness" / "pocs"
+      certified = certified, # TRUE: verdict carries a certificate
+      witness = witness, # certificate vector v (or NULL)
+      margin = margin, # B = v'Rv + delta*(||v||_1^2 - ||v||_2^2)
+      b_upper = b_upper, # margin + rigorous FP slack
+      delta = delta, # (max) half-width of the box
       p = p,
-      rounding = rounding,               # rounding rule the box was built for
+      rounding = rounding, # rounding rule the box was built for
       certified_matrix = certified_matrix, # in-box PSD witness matrix (or NULL)
-      detail = detail,                   # tier-specific detail (e.g. precheck entry)
+      detail = detail, # tier-specific detail (e.g. precheck entry)
       note = note
     ),
     class = "corr_psd_check"
@@ -34,10 +43,12 @@
   v <- R[upper.tri(R)]
   v <- v[!is.na(v)]
   n <- length(v)
-  list(r_min  = if (n >= 1L) min(v)  else NA_real_,
-       r_max  = if (n >= 1L) max(v)  else NA_real_,
-       r_mean = if (n >= 1L) mean(v) else NA_real_,
-       r_sd   = if (n >= 2L) sqrt(sum((v - mean(v))^2) / (n - 1L)) else NA_real_)
+  list(
+    r_min = if (n >= 1L) min(v) else NA_real_,
+    r_max = if (n >= 1L) max(v) else NA_real_,
+    r_mean = if (n >= 1L) mean(v) else NA_real_,
+    r_sd = if (n >= 2L) sqrt(sum((v - mean(v))^2) / (n - 1L)) else NA_real_
+  )
 }
 
 #' Decide whether a rounded correlation matrix can be positive semidefinite
@@ -134,43 +145,79 @@
 #'
 #' @seealso [certificate()], [check_corr_psd_batch()]
 #' @export
-check_corr_psd <- function(R, decimals = 2, delta = NULL, tau = NULL,
-                           rounding = c("nearest", "truncate", "floor", "ceiling")) {
+check_corr_psd <- function(
+  R,
+  decimals = 2,
+  delta = NULL,
+  tau = NULL,
+  rounding = c("nearest", "truncate", "floor", "ceiling")
+) {
   rounding <- match.arg(rounding)
-  if (is.data.frame(R)) R <- as.matrix(R)
+  if (is.data.frame(R)) {
+    R <- as.matrix(R)
+  }
   has_na <- is.matrix(R) && is.numeric(R) && anyNA(R)
   R <- if (has_na) .validate_corr_na(R) else .validate_corr(R)
   p <- nrow(R)
 
   # --- precision arguments ---------------------------------------------------
-  dec_ok <- function(x) is.numeric(x) && !anyNA(x) && all(is.finite(x)) &&
-    all(x >= 0) && all(x == round(x))
+  dec_ok <- function(x) {
+    is.numeric(x) &&
+      !anyNA(x) &&
+      all(is.finite(x)) &&
+      all(x >= 0) &&
+      all(x == round(x))
+  }
   if (is.null(delta)) {
     if (is.matrix(decimals)) {
-      if (!all(dim(decimals) == p) || !dec_ok(decimals) ||
-          max(abs(decimals - t(decimals))) > 0) {
-        stop("A `decimals` matrix must be p x p, symmetric, with non-negative ",
-             "integer entries.", call. = FALSE)
+      if (
+        !all(dim(decimals) == p) ||
+          !dec_ok(decimals) ||
+          max(abs(decimals - t(decimals))) > 0
+      ) {
+        stop(
+          "A `decimals` matrix must be p x p, symmetric, with non-negative ",
+          "integer entries.",
+          call. = FALSE
+        )
       }
     } else if (!(length(decimals) == 1L && dec_ok(decimals))) {
-      stop("`decimals` must be a single non-negative integer (or a p x p matrix).",
-           call. = FALSE)
+      stop(
+        "`decimals` must be a single non-negative integer (or a p x p matrix).",
+        call. = FALSE
+      )
     }
   } else {
     if (!identical(rounding, "nearest")) {
-      stop("Supply `decimals` (not `delta`) when `rounding` is not \"nearest\": ",
-           "asymmetric boxes are derived from the decimal width.", call. = FALSE)
+      stop(
+        "Supply `decimals` (not `delta`) when `rounding` is not \"nearest\": ",
+        "asymmetric boxes are derived from the decimal width.",
+        call. = FALSE
+      )
     }
     if (is.matrix(delta)) {
-      if (!all(dim(delta) == p) || anyNA(delta) || any(!is.finite(delta)) ||
-          any(delta < 0) || max(abs(delta - t(delta))) > 0) {
-        stop("A `delta` matrix must be p x p, symmetric, non-negative and finite.",
-             call. = FALSE)
+      if (
+        !all(dim(delta) == p) ||
+          anyNA(delta) ||
+          any(!is.finite(delta)) ||
+          any(delta < 0) ||
+          max(abs(delta - t(delta))) > 0
+      ) {
+        stop(
+          "A `delta` matrix must be p x p, symmetric, non-negative and finite.",
+          call. = FALSE
+        )
       }
-    } else if (!(is.numeric(delta) && length(delta) == 1L && is.finite(delta) &&
-                 delta >= 0)) {
-      stop("`delta` must be a single non-negative finite number (or a p x p matrix).",
-           call. = FALSE)
+    } else if (
+      !(is.numeric(delta) &&
+        length(delta) == 1L &&
+        is.finite(delta) &&
+        delta >= 0)
+    ) {
+      stop(
+        "`delta` must be a single non-negative finite number (or a p x p matrix).",
+        call. = FALSE
+      )
     }
   }
   chk_tau <- function(tau) {
@@ -180,12 +227,16 @@ check_corr_psd <- function(R, decimals = 2, delta = NULL, tau = NULL,
     tau
   }
 
-  uniform <- !has_na && identical(rounding, "nearest") &&
-    !is.matrix(decimals) && !is.matrix(delta)
+  uniform <- !has_na &&
+    identical(rounding, "nearest") &&
+    !is.matrix(decimals) &&
+    !is.matrix(delta)
 
   if (!uniform) {
     bx <- .reported_box(R, decimals, delta, rounding)
-    if (is.null(tau)) tau <- 10 * bx$half_max
+    if (is.null(tau)) {
+      tau <- 10 * bx$half_max
+    }
     res <- .check_box(R, bx, chk_tau(tau), rounding)
     res[c("r_min", "r_max", "r_mean", "r_sd")] <- .offdiag_stats(R)
     attr(res, "R") <- R
@@ -193,8 +244,12 @@ check_corr_psd <- function(R, decimals = 2, delta = NULL, tau = NULL,
     return(res)
   }
 
-  if (is.null(delta)) delta <- 0.5 * 10^(-decimals)
-  if (is.null(tau)) tau <- 10 * delta
+  if (is.null(delta)) {
+    delta <- 0.5 * 10^(-decimals)
+  }
+  if (is.null(tau)) {
+    tau <- 10 * delta
+  }
   tau <- chk_tau(tau)
 
   # The tiered logic lives in build(); we attach R to the result at a single
@@ -204,31 +259,55 @@ check_corr_psd <- function(R, decimals = 2, delta = NULL, tau = NULL,
     pc <- .precheck_range(R, delta)
     if (!is.null(pc)) {
       return(.new_corr_psd_check(
-        verdict = "inconsistent", tier = "precheck", delta = delta, p = p,
-        certified = TRUE, detail = pc,
+        verdict = "inconsistent",
+        tier = "precheck",
+        delta = delta,
+        p = p,
+        certified = TRUE,
+        detail = pc,
         note = sprintf(
           "Reported entry R[%d,%d] = %s is out of range: |%s| - delta = %.4g > 1.",
-          pc$i, pc$j, format(pc$value), format(pc$value), abs(pc$value) - delta)))
+          pc$i,
+          pc$j,
+          format(pc$value),
+          format(pc$value),
+          abs(pc$value) - delta
+        )
+      ))
     }
 
     # Tier 2: witness-vector bound (primary inconsistency path).
     w <- .witness_search(R, delta)
     if (!is.null(w) && w$B_upper < 0) {
       return(.new_corr_psd_check(
-        verdict = "inconsistent", tier = "witness", delta = delta, p = p,
-        certified = TRUE, witness = w$v, margin = w$M_hat, b_upper = w$B_upper))
+        verdict = "inconsistent",
+        tier = "witness",
+        delta = delta,
+        p = p,
+        certified = TRUE,
+        witness = w$v,
+        margin = w$M_hat,
+        b_upper = w$B_upper
+      ))
     }
 
     b_upper <- if (is.null(w)) NA_real_ else w$B_upper
-    margin  <- if (is.null(w)) NA_real_ else w$M_hat
+    margin <- if (is.null(w)) NA_real_ else w$M_hat
 
     # Consistency: try to exhibit and verify an in-box PSD matrix.
     cons <- .construct_consistent(R, delta)
     if (!is.null(cons)) {
       return(.new_corr_psd_check(
-        verdict = "consistent", tier = "witness", delta = delta, p = p,
-        certified = TRUE, margin = margin, b_upper = b_upper,
-        certified_matrix = cons$X, note = cons$how))
+        verdict = "consistent",
+        tier = "witness",
+        delta = delta,
+        p = p,
+        certified = TRUE,
+        margin = margin,
+        b_upper = b_upper,
+        certified_matrix = cons$X,
+        note = cons$how
+      ))
     }
 
     # No construction certified. If the witness margin is comfortably positive we
@@ -236,27 +315,50 @@ check_corr_psd <- function(R, decimals = 2, delta = NULL, tau = NULL,
     # the ambiguous zone and escalate.
     if (!is.na(b_upper) && b_upper > tau) {
       return(.new_corr_psd_check(
-        verdict = "consistent", tier = "witness", delta = delta, p = p,
-        certified = FALSE, margin = margin, b_upper = b_upper,
-        note = paste("presumed: not shown inconsistent (witness margin above tau);",
-                     "no in-box PSD matrix was certified")))
+        verdict = "consistent",
+        tier = "witness",
+        delta = delta,
+        p = p,
+        certified = FALSE,
+        margin = margin,
+        b_upper = b_upper,
+        note = paste(
+          "presumed: not shown inconsistent (witness margin above tau);",
+          "no in-box PSD matrix was certified"
+        )
+      ))
     }
 
     # Ambiguous zone: escalate to the self-contained POCS consistency search.
     pocs <- .pocs_consistent(R, delta)
     if (!is.null(pocs)) {
       return(.new_corr_psd_check(
-        verdict = "consistent", tier = "pocs", delta = delta, p = p,
-        certified = TRUE, margin = margin, b_upper = b_upper,
-        certified_matrix = pocs$X, note = pocs$how))
+        verdict = "consistent",
+        tier = "pocs",
+        delta = delta,
+        p = p,
+        certified = TRUE,
+        margin = margin,
+        b_upper = b_upper,
+        certified_matrix = pocs$X,
+        note = pocs$how
+      ))
     }
 
     .new_corr_psd_check(
-      verdict = "undecided", tier = "pocs", delta = delta, p = p,
-      certified = FALSE, margin = margin, b_upper = b_upper,
-      note = paste("witness margin within the precision-limited zone [0, tau]",
-                   "and no in-box PSD matrix could be constructed or found by",
-                   "alternating projections"))
+      verdict = "undecided",
+      tier = "pocs",
+      delta = delta,
+      p = p,
+      certified = FALSE,
+      margin = margin,
+      b_upper = b_upper,
+      note = paste(
+        "witness margin within the precision-limited zone [0, tau]",
+        "and no in-box PSD matrix could be constructed or found by",
+        "alternating projections"
+      )
+    )
   }
 
   res <- build()
@@ -274,58 +376,116 @@ check_corr_psd <- function(R, decimals = 2, delta = NULL, tau = NULL,
   p <- nrow(R)
   n_na <- sum(bx$na_mask & upper.tri(R))
   na_note <- if (n_na > 0L) {
-    sprintf(paste0("%d missing cell(s) freed to [-1, 1]; the verdict holds for ",
-                   "every possible value of the missing entries."), n_na)
-  } else NULL
+    sprintf(
+      paste0(
+        "%d missing cell(s) freed to [-1, 1]; the verdict holds for ",
+        "every possible value of the missing entries."
+      ),
+      n_na
+    )
+  } else {
+    NULL
+  }
 
   # Tier 1: precheck -- a reported interval entirely outside [-1, 1].
   if (any(bx$empty)) {
     k <- which(bx$empty & upper.tri(R), arr.ind = TRUE)[1L, ]
-    i <- as.integer(k[1]); j <- as.integer(k[2])
+    i <- as.integer(k[1])
+    j <- as.integer(k[2])
     return(.new_corr_psd_check(
-      verdict = "inconsistent", tier = "precheck", delta = bx$half_max, p = p,
-      certified = TRUE, rounding = rounding,
+      verdict = "inconsistent",
+      tier = "precheck",
+      delta = bx$half_max,
+      p = p,
+      certified = TRUE,
+      rounding = rounding,
       detail = list(i = i, j = j, value = R[i, j]),
-      note = c(sprintf(
-        "Reported entry R[%d,%d] = %s cannot arise from any value in [-1, 1] under the '%s' rule.",
-        i, j, format(R[i, j]), rounding), na_note)))
+      note = c(
+        sprintf(
+          "Reported entry R[%d,%d] = %s cannot arise from any value in [-1, 1] under the '%s' rule.",
+          i,
+          j,
+          format(R[i, j]),
+          rounding
+        ),
+        na_note
+      )
+    ))
   }
 
   # Tier 2: box witness (primary inconsistency path).
   imp <- .box_inconsistent(bx$lo, bx$hi, bx$off)
   if (isTRUE(imp$inconsistent)) {
     return(.new_corr_psd_check(
-      verdict = "inconsistent", tier = "witness", delta = bx$half_max, p = p,
-      certified = TRUE, rounding = rounding,
-      witness = imp$witness, margin = imp$margin, b_upper = imp$b_upper,
-      note = na_note))
+      verdict = "inconsistent",
+      tier = "witness",
+      delta = bx$half_max,
+      p = p,
+      certified = TRUE,
+      rounding = rounding,
+      witness = imp$witness,
+      margin = imp$margin,
+      b_upper = imp$b_upper,
+      note = na_note
+    ))
   }
 
   # Consistency: POCS search + Rump verification on the heterogeneous box.
   hit <- .pocs_feasible(bx$lo, bx$hi, bx$off)
   if (!is.null(hit)) {
     return(.new_corr_psd_check(
-      verdict = "consistent", tier = "pocs", delta = bx$half_max, p = p,
-      certified = TRUE, rounding = rounding,
-      margin = imp$margin, b_upper = imp$b_upper, certified_matrix = hit$X,
-      note = c("alternating projections found an in-box matrix, independently verified PSD",
-               na_note)))
+      verdict = "consistent",
+      tier = "pocs",
+      delta = bx$half_max,
+      p = p,
+      certified = TRUE,
+      rounding = rounding,
+      margin = imp$margin,
+      b_upper = imp$b_upper,
+      certified_matrix = hit$X,
+      note = c(
+        "alternating projections found an in-box matrix, independently verified PSD",
+        na_note
+      )
+    ))
   }
 
   if (!is.na(imp$b_upper) && imp$b_upper > tau) {
     return(.new_corr_psd_check(
-      verdict = "consistent", tier = "witness", delta = bx$half_max, p = p,
-      certified = FALSE, rounding = rounding,
-      margin = imp$margin, b_upper = imp$b_upper,
-      note = c(paste("presumed: not shown inconsistent (witness margin above tau);",
-                     "no in-box PSD matrix was certified"), na_note)))
+      verdict = "consistent",
+      tier = "witness",
+      delta = bx$half_max,
+      p = p,
+      certified = FALSE,
+      rounding = rounding,
+      margin = imp$margin,
+      b_upper = imp$b_upper,
+      note = c(
+        paste(
+          "presumed: not shown inconsistent (witness margin above tau);",
+          "no in-box PSD matrix was certified"
+        ),
+        na_note
+      )
+    ))
   }
 
   .new_corr_psd_check(
-    verdict = "undecided", tier = "pocs", delta = bx$half_max, p = p,
-    certified = FALSE, rounding = rounding,
-    margin = imp$margin, b_upper = imp$b_upper,
-    note = c(paste("witness margin within the precision-limited zone [0, tau]",
-                   "and no in-box PSD matrix could be found by alternating",
-                   "projections"), na_note))
+    verdict = "undecided",
+    tier = "pocs",
+    delta = bx$half_max,
+    p = p,
+    certified = FALSE,
+    rounding = rounding,
+    margin = imp$margin,
+    b_upper = imp$b_upper,
+    note = c(
+      paste(
+        "witness margin within the precision-limited zone [0, tau]",
+        "and no in-box PSD matrix could be found by alternating",
+        "projections"
+      ),
+      na_note
+    )
+  )
 }

@@ -27,7 +27,10 @@
     Y <- .proj_psd_margin(X, 0)
     Y[off] <- pmin(pmax(Y[off], -1), 1)
     diag(Y) <- 1
-    if (max(abs(Y - X)) < tol) { X <- Y; break }
+    if (max(abs(Y - X)) < tol) {
+      X <- Y
+      break
+    }
     X <- Y
   }
   X
@@ -39,7 +42,8 @@
   idx <- which(upper.tri(R), arr.ind = TRUE)
   ex <- numeric(nrow(idx))
   for (r in seq_len(nrow(idx))) {
-    i <- idx[r, 1]; j <- idx[r, 2]
+    i <- idx[r, 1]
+    j <- idx[r, 2]
     ex[r] <- max(0, X[i, j] - (R[i, j] + delta), (R[i, j] - delta) - X[i, j])
   }
   list(idx = idx, excess = ex)
@@ -57,14 +61,18 @@
   p <- nrow(R)
   off <- upper.tri(R) | lower.tri(R)
   feas <- function(eps) {
-    lo <- matrix(0, p, p); hi <- matrix(0, p, p)
+    lo <- matrix(0, p, p)
+    hi <- matrix(0, p, p)
     lo[off] <- pmax(R[off] - delta - eps, -1)
     hi[off] <- pmin(R[off] + delta + eps, 1)
     identical(.box_feasible(lo, hi, off, verify = verify)$status, "feasible")
   }
-  lo_e <- 0; hi_e <- 2                      # eps = 2 makes every box [-1,1]
+  lo_e <- 0
+  hi_e <- 2 # eps = 2 makes every box [-1,1]
   for (it in seq_len(max_it)) {
-    if (hi_e - lo_e < tol) break
+    if (hi_e - lo_e < tol) {
+      break
+    }
     m <- (lo_e + hi_e) / 2
     if (feas(m)) hi_e <- m else lo_e <- m
   }
@@ -77,20 +85,30 @@
 .best_lambda_min <- function(R, delta, tol = 1e-6, max_it = 40L) {
   p <- nrow(R)
   bnd <- .box_bounds(R, delta)
-  lo <- bnd$lo; hi <- bnd$hi; off <- bnd$off
+  lo <- bnd$lo
+  hi <- bnd$hi
+  off <- bnd$off
   feas_margin <- function(mu) {
-    start <- matrix(0, p, p); start[off] <- (lo[off] + hi[off]) / 2; diag(start) <- 1
+    start <- matrix(0, p, p)
+    start[off] <- (lo[off] + hi[off]) / 2
+    diag(start) <- 1
     X <- .proj_box(start, lo, hi, off)
     for (k in seq_len(1000L)) {
       Xn <- .proj_box(.proj_psd_margin(X, mu), lo, hi, off)
-      if (max(abs(Xn - X)) < 1e-12) { X <- Xn; break }
+      if (max(abs(Xn - X)) < 1e-12) {
+        X <- Xn
+        break
+      }
       X <- Xn
     }
     max(abs(.proj_psd_margin(X, mu) - X)) < 1e-7
   }
-  lo_m <- -1; hi_m <- 0                      # feasible for very negative mu
+  lo_m <- -1
+  hi_m <- 0 # feasible for very negative mu
   for (it in seq_len(max_it)) {
-    if (hi_m - lo_m < tol) break
+    if (hi_m - lo_m < tol) {
+      break
+    }
     m <- (lo_m + hi_m) / 2
     if (feas_margin(m)) lo_m <- m else hi_m <- m
   }
@@ -100,9 +118,11 @@
 # Does freeing the given set of cells (to [-1,1]) restore feasibility? Returns
 # the Rump-verified restoring matrix or NULL.
 .free_set_box <- function(bnd, cells) {
-  lo <- bnd$lo; hi <- bnd$hi
+  lo <- bnd$lo
+  hi <- bnd$hi
   for (r in seq_len(nrow(cells))) {
-    i <- cells[r, 1]; j <- cells[r, 2]
+    i <- cells[r, 1]
+    j <- cells[r, 2]
     lo[i, j] <- lo[j, i] <- -1
     hi[i, j] <- hi[j, i] <- 1
   }
@@ -117,9 +137,15 @@
 # Sparse minimal-cardinality support. `sole_cells` is a matrix of the cells whose
 # singleton freeing already restores (from component A). Returns list(cells,
 # magnitudes, cardinality) or NULL if no set of size <= sparse_k restores.
-.sparse_support <- function(R, delta, sole_cells, sole_edits,
-                            verify = TRUE, sparse_k = 3L,
-                            max_cells_exhaustive = 15L) {
+.sparse_support <- function(
+  R,
+  delta,
+  sole_cells,
+  sole_edits,
+  verify = TRUE,
+  sparse_k = 3L,
+  max_cells_exhaustive = 15L
+) {
   bnd <- .box_bounds(R, delta)
   allcells <- which(upper.tri(R), arr.ind = TRUE)
   m <- nrow(allcells)
@@ -128,8 +154,10 @@
     # total beyond-box movement of the restoring matrix on the freed cells
     tot <- 0
     for (r in seq_len(nrow(cells))) {
-      i <- cells[r, 1]; j <- cells[r, 2]
-      tot <- tot + max(0, X[i, j] - (R[i, j] + delta), (R[i, j] - delta) - X[i, j])
+      i <- cells[r, 1]
+      j <- cells[r, 2]
+      tot <- tot +
+        max(0, X[i, j] - (R[i, j] + delta), (R[i, j] - delta) - X[i, j])
     }
     tot
   }
@@ -138,29 +166,48 @@
   if (nrow(sole_cells) > 0L) {
     best_r <- which.min(abs(sole_edits))
     c1 <- sole_cells[best_r, , drop = FALSE]
-    return(list(cells = c1, magnitudes = abs(sole_edits[best_r]), cardinality = 1L))
+    return(list(
+      cells = c1,
+      magnitudes = abs(sole_edits[best_r]),
+      cardinality = 1L
+    ))
   }
 
   # Cardinality 2..sparse_k: bounded-exhaustive when the cell count is small,
   # greedy otherwise.
   if (m <= max_cells_exhaustive) {
     for (kk in 2:max(2L, sparse_k)) {
-      if (kk > m) break
+      if (kk > m) {
+        break
+      }
       combs <- utils::combn(m, kk)
-      best <- NULL; best_score <- Inf
+      best <- NULL
+      best_score <- Inf
       for (cc in seq_len(ncol(combs))) {
         cells <- allcells[combs[, cc], , drop = FALSE]
         X <- .set_restores(bnd, cells, verify)
         if (!is.null(X)) {
           sc <- score_set(cells, X)
-          if (sc < best_score) { best_score <- sc; best <- list(cells = cells, X = X) }
+          if (sc < best_score) {
+            best_score <- sc
+            best <- list(cells = cells, X = X)
+          }
         }
       }
       if (!is.null(best)) {
-        mags <- vapply(seq_len(nrow(best$cells)), function(r) {
-          i <- best$cells[r, 1]; j <- best$cells[r, 2]
-          max(0, best$X[i, j] - (R[i, j] + delta), (R[i, j] - delta) - best$X[i, j])
-        }, numeric(1))
+        mags <- vapply(
+          seq_len(nrow(best$cells)),
+          function(r) {
+            i <- best$cells[r, 1]
+            j <- best$cells[r, 2]
+            max(
+              0,
+              best$X[i, j] - (R[i, j] + delta),
+              (R[i, j] - delta) - best$X[i, j]
+            )
+          },
+          numeric(1)
+        )
         return(list(cells = best$cells, magnitudes = mags, cardinality = kk))
       }
     }
@@ -172,18 +219,34 @@
   chosen <- matrix(integer(0), ncol = 2)
   remaining <- allcells
   for (kk in seq_len(sparse_k)) {
-    best_cell <- NULL; best_X <- NULL; best_score <- Inf
+    best_cell <- NULL
+    best_X <- NULL
+    best_score <- Inf
     for (r in seq_len(nrow(remaining))) {
       cand <- rbind(chosen, remaining[r, , drop = FALSE])
       X <- .set_restores(bnd, cand, verify)
-      if (!is.null(X)) { best_cell <- remaining[r, , drop = FALSE]; best_X <- X; best_score <- 0; break }
+      if (!is.null(X)) {
+        best_cell <- remaining[r, , drop = FALSE]
+        best_X <- X
+        best_score <- 0
+        break
+      }
     }
     if (!is.null(best_X)) {
       cells <- rbind(chosen, best_cell)
-      mags <- vapply(seq_len(nrow(cells)), function(r) {
-        i <- cells[r, 1]; j <- cells[r, 2]
-        max(0, best_X[i, j] - (R[i, j] + delta), (R[i, j] - delta) - best_X[i, j])
-      }, numeric(1))
+      mags <- vapply(
+        seq_len(nrow(cells)),
+        function(r) {
+          i <- cells[r, 1]
+          j <- cells[r, 2]
+          max(
+            0,
+            best_X[i, j] - (R[i, j] + delta),
+            (R[i, j] - delta) - best_X[i, j]
+          )
+        },
+        numeric(1)
+      )
       return(list(cells = cells, magnitudes = mags, cardinality = nrow(cells)))
     }
     # otherwise greedily commit the cell whose addition most lowers the witness

@@ -5,8 +5,14 @@
 
 test_that("exact p=2 check matches the range condition", {
   # |r| <= 1 + delta  is consistent; beyond is inconsistent
-  expect_equal(port:::.exact_consistent(matrix(c(1, 1.00, 1.00, 1), 2), 0.005), "consistent")
-  expect_equal(port:::.exact_consistent(matrix(c(1, 1.01, 1.01, 1), 2), 0.005), "inconsistent")
+  expect_equal(
+    port:::.exact_consistent(matrix(c(1, 1.00, 1.00, 1), 2), 0.005),
+    "consistent"
+  )
+  expect_equal(
+    port:::.exact_consistent(matrix(c(1, 1.01, 1.01, 1), 2), 0.005),
+    "inconsistent"
+  )
 })
 
 test_that("exact p=3 check matches the classic inconsistent case", {
@@ -31,13 +37,19 @@ test_that("witness never contradicts the exact verdict on random p in {2,3}", {
     }
     # Soundness of inconsistency: witness-inconsistent => exact-inconsistent.
     if (res$verdict == "inconsistent") {
-      expect_equal(ex, "inconsistent",
-                   info = paste("witness inconsistent but exact consistent, trial", t))
+      expect_equal(
+        ex,
+        "inconsistent",
+        info = paste("witness inconsistent but exact consistent, trial", t)
+      )
     }
     # And a certified-consistent (has an in-box PSD matrix) must be exact-consistent.
     if (res$verdict == "consistent" && !is.null(res$certified_matrix)) {
-      expect_equal(ex, "consistent",
-                   info = paste("certified consistent but exact inconsistent, trial", t))
+      expect_equal(
+        ex,
+        "consistent",
+        info = paste("certified consistent but exact inconsistent, trial", t)
+      )
     }
   }
   # There should be at most a handful of genuinely ambiguous (undecided) cases.

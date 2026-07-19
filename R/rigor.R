@@ -20,6 +20,8 @@
 # safe (never spuriously declaring inconsistency).
 .gamma <- function(n, u = .unit_roundoff()) {
   nu <- n * u
-  if (nu >= 1) return(Inf)
+  if (nu >= 1) {
+    return(Inf)
+  }
   nu / (1 - nu)
 }

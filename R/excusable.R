@@ -39,8 +39,12 @@ excusable_delta <- function(R, tol = 1e-6) {
 # nearest-rounding could excuse it: the largest d with 0.5*10^(-d) >= w.
 # Returns -Inf when even 0-decimal rounding (+-0.5) could not excuse it.
 .excusable_decimals <- function(w) {
-  if (!is.finite(w) || w <= 0) return(Inf)
+  if (!is.finite(w) || w <= 0) {
+    return(Inf)
+  }
   d <- floor(-log10(2 * w) + 1e-12)
-  if (0.5 * 10^(-d) < w) d <- d - 1   # guard against boundary rounding
+  if (0.5 * 10^(-d) < w) {
+    d <- d - 1
+  } # guard against boundary rounding
   d
 }

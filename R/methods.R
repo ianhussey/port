@@ -4,13 +4,17 @@
 
 #' @export
 print.corr_psd_check <- function(x, digits = 4, ...) {
-  head <- switch(x$verdict,
+  head <- switch(
+    x$verdict,
     inconsistent = "INCONSISTENT  (no PSD matrix fits the rounding box)",
-    consistent   = if (isTRUE(x$certified))
-                   "CONSISTENT    (certified: in-box PSD matrix exhibited)"
-                 else "CONSISTENT    (presumed: not shown inconsistent)",
-    undecided    = "UNDECIDED     (ambiguous at this precision)",
-    x$verdict)
+    consistent = if (isTRUE(x$certified)) {
+      "CONSISTENT    (certified: in-box PSD matrix exhibited)"
+    } else {
+      "CONSISTENT    (presumed: not shown inconsistent)"
+    },
+    undecided = "UNDECIDED     (ambiguous at this precision)",
+    x$verdict
+  )
   cat("<corr_psd_check>\n")
   cat(sprintf("  verdict : %s\n", head))
   cat(sprintf("  tier    : %s\n", x$tier))
@@ -20,8 +24,17 @@ print.corr_psd_check <- function(x, digits = 4, ...) {
   }
   cat("\n")
   if (!is.null(x$r_min)) {
-    cat(sprintf("  corr    : min %.*g  max %.*g  mean %.*g  sd %.*g  (off-diagonal)\n",
-                digits, x$r_min, digits, x$r_max, digits, x$r_mean, digits, x$r_sd))
+    cat(sprintf(
+      "  corr    : min %.*g  max %.*g  mean %.*g  sd %.*g  (off-diagonal)\n",
+      digits,
+      x$r_min,
+      digits,
+      x$r_max,
+      digits,
+      x$r_mean,
+      digits,
+      x$r_sd
+    ))
   }
 
   if (identical(x$verdict, "inconsistent")) {
@@ -29,24 +42,44 @@ print.corr_psd_check <- function(x, digits = 4, ...) {
       cat("  reason  : ", paste(x$note, collapse = " "), "\n", sep = "")
     } else {
       v <- x$witness
-      cat(sprintf("  margin  : B = %.*g  (B_upper = %.*g < 0)\n",
-                  digits, x$margin, digits, x$b_upper))
+      cat(sprintf(
+        "  margin  : B = %.*g  (B_upper = %.*g < 0)\n",
+        digits,
+        x$margin,
+        digits,
+        x$b_upper
+      ))
       cat("  witness : v =", .fmt_vec(v, digits), "\n")
-      cat(sprintf("  certificate: v'Rv + delta*(||v||_1^2 - ||v||_2^2) = %.*g < 0\n",
-                  digits, x$margin))
-      if (length(x$note)) cat("  note    : ", paste(x$note, collapse = " "), "\n", sep = "")
+      cat(sprintf(
+        "  certificate: v'Rv + delta*(||v||_1^2 - ||v||_2^2) = %.*g < 0\n",
+        digits,
+        x$margin
+      ))
+      if (length(x$note)) {
+        cat("  note    : ", paste(x$note, collapse = " "), "\n", sep = "")
+      }
     }
-    cat("  caution : pairwise deletion, polychoric estimation, meta-analytic\n",
-        "            assembly, or upstream disattenuation can legitimately\n",
-        "            produce non-PSD reported matrices; see README.\n", sep = "")
+    cat(
+      "  caution : pairwise deletion, polychoric estimation, meta-analytic\n",
+      "            assembly, or upstream disattenuation can legitimately\n",
+      "            produce non-PSD reported matrices; see README.\n",
+      sep = ""
+    )
   } else {
     if (!is.na(x$b_upper)) {
-      cat(sprintf("  margin  : B_upper = %.*g  (>= 0: no inconsistency certificate)\n",
-                  digits, x$b_upper))
+      cat(sprintf(
+        "  margin  : B_upper = %.*g  (>= 0: no inconsistency certificate)\n",
+        digits,
+        x$b_upper
+      ))
     }
     if (!is.null(x$certified_matrix)) {
-      cat("  evidence: ", paste(x$note %||% "an in-box PSD matrix was verified",
-                                collapse = " "), "\n", sep = "")
+      cat(
+        "  evidence: ",
+        paste(x$note %||% "an in-box PSD matrix was verified", collapse = " "),
+        "\n",
+        sep = ""
+      )
     } else if (!is.null(x$note)) {
       cat("  note    : ", paste(x$note, collapse = " "), "\n", sep = "")
     }
@@ -56,7 +89,11 @@ print.corr_psd_check <- function(x, digits = 4, ...) {
 
 # Compact vector formatter for printing certificates.
 .fmt_vec <- function(v, digits = 4) {
-  paste0("(", paste(formatC(v, digits = digits, format = "g"), collapse = ", "), ")")
+  paste0(
+    "(",
+    paste(formatC(v, digits = digits, format = "g"), collapse = ", "),
+    ")"
+  )
 }
 
 #' Extract the inconsistency certificate from a `corr_psd_check`
@@ -86,6 +123,6 @@ certificate.corr_psd_check <- function(x) {
 }
 
 #' @export
-certificate.default = function(x) {
+certificate.default <- function(x) {
   stop("`certificate()` expects a <corr_psd_check> object.", call. = FALSE)
 }

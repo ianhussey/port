@@ -1,15 +1,17 @@
 # Tests for reliability disattenuation.
 
-R3 <- matrix(c(1, 0.60, 0.55,
-               0.60, 1, 0.50,
-               0.55, 0.50, 1), 3, 3)
+R3 <- matrix(c(1, 0.60, 0.55, 0.60, 1, 0.50, 0.55, 0.50, 1), 3, 3)
 
-equicorr <- function(p, rho) { M <- matrix(rho, p, p); diag(M) <- 1; M }
+equicorr <- function(p, rho) {
+  M <- matrix(rho, p, p)
+  diag(M) <- 1
+  M
+}
 
 test_that("disattenuate applies the Spearman correction", {
   D <- disattenuate(R3, 0.8)
   expect_equal(diag(D), rep(1, 3))
-  expect_equal(D[1, 2], 0.60 / 0.8)                     # common rho: /rho
+  expect_equal(D[1, 2], 0.60 / 0.8) # common rho: /rho
   # per-variable
   Dv <- disattenuate(R3, c(0.7, 0.8, 0.9))
   expect_equal(Dv[1, 2], 0.60 / sqrt(0.7 * 0.8))
@@ -33,7 +35,12 @@ test_that("critical reliability matches the closed form rho* = 1 - lambda_min", 
 })
 
 test_that("low reliability drives a corrected correlation above 1 -> inconsistent", {
-  res <- check_disattenuated_psd(R3, reliability = 0.34, decimals = 2, max_plausible_r = 0.9)
+  res <- check_disattenuated_psd(
+    R3,
+    reliability = 0.34,
+    decimals = 2,
+    max_plausible_r = 0.9
+  )
   expect_equal(res$verdict, "inconsistent")
   expect_true(res$forward$range_inconsistent)
   # corrected (1,2) = 0.60/0.34 ~ 1.76
@@ -41,55 +48,100 @@ test_that("low reliability drives a corrected correlation above 1 -> inconsisten
 })
 
 test_that("a plausibility cutoff yields an 'consistent but implausible' verdict", {
-  res <- check_disattenuated_psd(R3, reliability = 0.62, decimals = 2, max_plausible_r = 0.9)
+  res <- check_disattenuated_psd(
+    R3,
+    reliability = 0.62,
+    decimals = 2,
+    max_plausible_r = 0.9
+  )
   expect_equal(res$verdict, "consistent but implausible")
   expect_gt(res$max_disattenuated, 0.9)
   expect_lt(res$max_disattenuated, 1)
 })
 
 test_that("cutoff of 1 disables the consistent but implausible level", {
-  res <- check_disattenuated_psd(R3, reliability = 0.62, decimals = 2, max_plausible_r = 1)
+  res <- check_disattenuated_psd(
+    R3,
+    reliability = 0.62,
+    decimals = 2,
+    max_plausible_r = 1
+  )
   expect_true(res$verdict %in% c("consistent", "inconsistent", "undecided"))
   expect_false(identical(res$verdict, "consistent but implausible"))
 })
 
 test_that("high reliability keeps the disattenuated matrix consistent", {
-  res <- check_disattenuated_psd(R3, reliability = 0.95, decimals = 2, max_plausible_r = 0.9)
+  res <- check_disattenuated_psd(
+    R3,
+    reliability = 0.95,
+    decimals = 2,
+    max_plausible_r = 0.9
+  )
   expect_equal(res$verdict, "consistent")
   expect_true(res$headroom > 0)
 })
 
 test_that("verdict severity is monotone as reliability falls", {
-  sev <- c(consistent = 0L, `consistent but implausible` = 1L, inconsistent = 2L)
+  sev <- c(
+    consistent = 0L,
+    `consistent but implausible` = 1L,
+    inconsistent = 2L
+  )
   rhos <- c(0.98, 0.85, 0.70, 0.55, 0.40)
-  v <- vapply(rhos, function(r)
-    check_disattenuated_psd(R3, reliability = r, decimals = 2, max_plausible_r = 0.9)$verdict,
-    character(1))
+  v <- vapply(
+    rhos,
+    function(r) {
+      check_disattenuated_psd(
+        R3,
+        reliability = r,
+        decimals = 2,
+        max_plausible_r = 0.9
+      )$verdict
+    },
+    character(1)
+  )
   s <- sev[v]
-  expect_false(any(diff(s) < 0))       # non-decreasing severity as rho decreases
+  expect_false(any(diff(s) < 0)) # non-decreasing severity as rho decreases
 })
 
 test_that("inconsistency can bind on PSD rather than range", {
   # near-boundary matrix: PSD fails before any corrected |r| exceeds 1
   R2 <- matrix(c(1, 0.5, 0.5, 0.5, 1, -0.4, 0.5, -0.4, 1), 3, 3)
-  res <- check_disattenuated_psd(R2, reliability = 0.7, decimals = 2, max_plausible_r = 0.9)
+  res <- check_disattenuated_psd(
+    R2,
+    reliability = 0.7,
+    decimals = 2,
+    max_plausible_r = 0.9
+  )
   expect_equal(res$verdict, "inconsistent")
   expect_true(res$forward$psd_inconsistent)
   expect_false(res$forward$range_inconsistent)
   expect_equal(res$thresholds$inconsistent_binds, "PSD")
   # the disattenuated centre is genuinely indefinite
-  expect_lt(min(eigen(res$disattenuated, symmetric = TRUE, only.values = TRUE)$values), 0)
+  expect_lt(
+    min(eigen(res$disattenuated, symmetric = TRUE, only.values = TRUE)$values),
+    0
+  )
 })
 
 test_that("critical mode reports thresholds and an optional floor narrative", {
-  reachable <- check_disattenuated_psd(R3, reliability = NULL, decimals = 2,
-                                       max_plausible_r = 0.9, plausible_floor = 0.3)
+  reachable <- check_disattenuated_psd(
+    R3,
+    reliability = NULL,
+    decimals = 2,
+    max_plausible_r = 0.9,
+    plausible_floor = 0.3
+  )
   expect_equal(reachable$mode, "critical")
-  expect_true(reachable$thresholds$rho_inconsistent > 0.3)   # floor below -> reachable
+  expect_true(reachable$thresholds$rho_inconsistent > 0.3) # floor below -> reachable
   expect_output(print(reachable), "INCONSISTENT construct matrix")
 
-  safe <- check_disattenuated_psd(R3, reliability = NULL, decimals = 2,
-                                  plausible_floor = 0.95)
+  safe <- check_disattenuated_psd(
+    R3,
+    reliability = NULL,
+    decimals = 2,
+    plausible_floor = 0.95
+  )
   expect_output(print(safe), "no reachable reliability")
 })
 
@@ -97,10 +149,20 @@ test_that("rounded reliabilities widen the disattenuated intervals", {
   # exact reliabilities vs rounded to 1 dp: the boxed version is at least as
   # willing to reach a verdict of inconsistent (wider box on the correlations side
   # only matters via the reliability box here)
-  exact <- check_disattenuated_psd(R3, reliability = 0.50, decimals = 2,
-                                   reliability_decimals = Inf, max_plausible_r = 0.9)
-  rounded <- check_disattenuated_psd(R3, reliability = 0.50, decimals = 2,
-                                     reliability_decimals = 1, max_plausible_r = 0.9)
+  exact <- check_disattenuated_psd(
+    R3,
+    reliability = 0.50,
+    decimals = 2,
+    reliability_decimals = Inf,
+    max_plausible_r = 0.9
+  )
+  rounded <- check_disattenuated_psd(
+    R3,
+    reliability = 0.50,
+    decimals = 2,
+    reliability_decimals = 1,
+    max_plausible_r = 0.9
+  )
   expect_s3_class(exact, "disattenuation_check")
   expect_s3_class(rounded, "disattenuation_check")
   # the point disattenuated matrix is identical; only the box differs
@@ -108,13 +170,26 @@ test_that("rounded reliabilities widen the disattenuated intervals", {
 })
 
 test_that("max_plausible_r is validated", {
-  expect_error(check_disattenuated_psd(R3, 0.7, max_plausible_r = 1.5), "\\(0, 1\\]")
-  expect_error(check_disattenuated_psd(R3, 0.7, max_plausible_r = 0), "\\(0, 1\\]")
+  expect_error(
+    check_disattenuated_psd(R3, 0.7, max_plausible_r = 1.5),
+    "\\(0, 1\\]"
+  )
+  expect_error(
+    check_disattenuated_psd(R3, 0.7, max_plausible_r = 0),
+    "\\(0, 1\\]"
+  )
 })
 
 test_that("per-variable reliabilities give a forward verdict", {
-  res <- check_disattenuated_psd(R3, reliability = c(0.4, 0.5, 0.9), decimals = 2,
-                                 max_plausible_r = 0.9)
+  res <- check_disattenuated_psd(
+    R3,
+    reliability = c(0.4, 0.5, 0.9),
+    decimals = 2,
+    max_plausible_r = 0.9
+  )
   expect_equal(res$mode, "per_variable")
-  expect_true(res$verdict %in% c("inconsistent", "consistent but implausible", "consistent", "undecided"))
+  expect_true(
+    res$verdict %in%
+      c("inconsistent", "consistent but implausible", "consistent", "undecided")
+  )
 })

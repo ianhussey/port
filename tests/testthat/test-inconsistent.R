@@ -1,7 +1,5 @@
 test_that("classic 3x3 (r12=r13=0.9, r23=-0.9) is inconsistent via witness", {
-  R <- matrix(c(1, 0.9, 0.9,
-                0.9, 1, -0.9,
-                0.9, -0.9, 1), 3, 3)
+  R <- matrix(c(1, 0.9, 0.9, 0.9, 1, -0.9, 0.9, -0.9, 1), 3, 3)
   res <- check_corr_psd(R, decimals = 2)
   expect_equal(res$verdict, "inconsistent")
   expect_equal(res$tier, "witness")
@@ -11,9 +9,7 @@ test_that("classic 3x3 (r12=r13=0.9, r23=-0.9) is inconsistent via witness", {
 })
 
 test_that("the witness vector actually certifies inconsistency (independent recompute)", {
-  R <- matrix(c(1, 0.9, 0.9,
-                0.9, 1, -0.9,
-                0.9, -0.9, 1), 3, 3)
+  R <- matrix(c(1, 0.9, 0.9, 0.9, 1, -0.9, 0.9, -0.9, 1), 3, 3)
   res <- check_corr_psd(R, decimals = 2)
   v <- res$witness
   delta <- res$delta
@@ -25,9 +21,7 @@ test_that("the witness vector actually certifies inconsistency (independent reco
 
 test_that("inconsistency is robust to the 2dp rounding radius", {
   # The 3x3 determinant is strongly negative; it should stay inconsistent.
-  R <- matrix(c(1, 0.9, 0.9,
-                0.9, 1, -0.9,
-                0.9, -0.9, 1), 3, 3)
+  R <- matrix(c(1, 0.9, 0.9, 0.9, 1, -0.9, 0.9, -0.9, 1), 3, 3)
   # det = 1 + 2*.9*.9*(-.9) - .9^2*3 = 1 - 1.458 - 2.43 < 0
   expect_lt(det(R), 0)
   expect_equal(check_corr_psd(R, decimals = 2)$verdict, "inconsistent")

@@ -30,59 +30,74 @@
 #'
 #' @seealso [check_corr_psd()]
 #' @export
-check_corr_psd_batch <- function(mats, decimals = 2, delta = NULL, tau = NULL,
-                                 on_error = c("row", "stop"), quiet = FALSE) {
+check_corr_psd_batch <- function(
+  mats,
+  decimals = 2,
+  delta = NULL,
+  tau = NULL,
+  on_error = c("row", "stop"),
+  quiet = FALSE
+) {
   on_error <- match.arg(on_error)
   if (!is.list(mats)) {
     stop("`mats` must be a list of matrices.", call. = FALSE)
   }
   n <- length(mats)
   ids <- names(mats)
-  if (is.null(ids)) ids <- as.character(seq_len(n))
+  if (is.null(ids)) {
+    ids <- as.character(seq_len(n))
+  }
   ids[ids == "" | is.na(ids)] <- as.character(which(ids == "" | is.na(ids)))
 
   verdict <- character(n)
-  tier    <- character(n)
+  tier <- character(n)
   certified <- rep(NA, n)
-  margin  <- rep(NA_real_, n)
+  margin <- rep(NA_real_, n)
   b_upper <- rep(NA_real_, n)
-  del     <- rep(NA_real_, n)
-  pp      <- rep(NA_integer_, n)
-  r_min   <- rep(NA_real_, n)
-  r_max   <- rep(NA_real_, n)
-  r_mean  <- rep(NA_real_, n)
-  r_sd    <- rep(NA_real_, n)
-  msg     <- rep(NA_character_, n)
+  del <- rep(NA_real_, n)
+  pp <- rep(NA_integer_, n)
+  r_min <- rep(NA_real_, n)
+  r_max <- rep(NA_real_, n)
+  r_mean <- rep(NA_real_, n)
+  r_sd <- rep(NA_real_, n)
+  msg <- rep(NA_character_, n)
 
   for (i in seq_len(n)) {
     res <- tryCatch(
       check_corr_psd(mats[[i]], decimals = decimals, delta = delta, tau = tau),
-      error = function(e) e)
+      error = function(e) e
+    )
     if (inherits(res, "error")) {
-      if (on_error == "stop") stop(res)
+      if (on_error == "stop") {
+        stop(res)
+      }
       verdict[i] <- "error"
-      tier[i]    <- NA_character_
-      msg[i]     <- conditionMessage(res)
+      tier[i] <- NA_character_
+      msg[i] <- conditionMessage(res)
       next
     }
     verdict[i] <- res$verdict
-    tier[i]    <- res$tier
+    tier[i] <- res$tier
     certified[i] <- res$certified
-    margin[i]  <- res$margin
+    margin[i] <- res$margin
     b_upper[i] <- res$b_upper
-    del[i]     <- res$delta
-    pp[i]      <- res$p
-    r_min[i]   <- res$r_min
-    r_max[i]   <- res$r_max
-    r_mean[i]  <- res$r_mean
-    r_sd[i]    <- res$r_sd
-    msg[i]     <- paste(res$note %||% NA_character_, collapse = " ")
+    del[i] <- res$delta
+    pp[i] <- res$p
+    r_min[i] <- res$r_min
+    r_max[i] <- res$r_max
+    r_mean[i] <- res$r_mean
+    r_sd[i] <- res$r_sd
+    msg[i] <- paste(res$note %||% NA_character_, collapse = " ")
   }
 
   n_pocs <- sum(tier == "pocs", na.rm = TRUE)
   if (!quiet && n > 0L) {
-    message(sprintf("POCS escalation tier fired on %d of %d matrices (%.1f%%).",
-                    n_pocs, n, 100 * n_pocs / n))
+    message(sprintf(
+      "POCS escalation tier fired on %d of %d matrices (%.1f%%).",
+      n_pocs,
+      n,
+      100 * n_pocs / n
+    ))
   }
 
   tibble::tibble(

@@ -20,7 +20,11 @@
 .max_det_p3 <- function(lo, hi) {
   fval <- function(v) 1 + 2 * v[1] * v[2] * v[3] - sum(v^2)
   clamp1 <- function(t, k) min(max(t, lo[k]), hi[k])
-  corners <- as.matrix(expand.grid(c(lo[1], hi[1]), c(lo[2], hi[2]), c(lo[3], hi[3])))
+  corners <- as.matrix(expand.grid(
+    c(lo[1], hi[1]),
+    c(lo[2], hi[2]),
+    c(lo[3], hi[3])
+  ))
   starts <- rbind(corners, (lo + hi) / 2)
   best <- -Inf
   for (r in seq_len(nrow(starts))) {
@@ -34,7 +38,9 @@
     }
     best <- max(best, fval(v))
   }
-  for (r in seq_len(nrow(corners))) best <- max(best, fval(as.numeric(corners[r, ])))
+  for (r in seq_len(nrow(corners))) {
+    best <- max(best, fval(as.numeric(corners[r, ])))
+  }
   best
 }
 

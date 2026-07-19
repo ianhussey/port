@@ -39,12 +39,16 @@
     dec <- if (is.matrix(decimals)) decimals else matrix(decimals, p, p)
     w <- 10^(-dec)
     if (identical(rounding, "nearest")) {
-      lo_raw <- R - w / 2; hi_raw <- R + w / 2
+      lo_raw <- R - w / 2
+      hi_raw <- R + w / 2
     } else if (identical(rounding, "floor")) {
-      lo_raw <- R; hi_raw <- R + w
+      lo_raw <- R
+      hi_raw <- R + w
     } else if (identical(rounding, "ceiling")) {
-      lo_raw <- R - w; hi_raw <- R
-    } else {  # truncate (toward zero)
+      lo_raw <- R - w
+      hi_raw <- R
+    } else {
+      # truncate (toward zero)
       lo_raw <- ifelse(R > 0, R, R - w)
       hi_raw <- ifelse(R < 0, R, R + w)
     }
@@ -53,14 +57,24 @@
   hi_raw[na_mask] <- 1
 
   empty <- off & !na_mask & (lo_raw > 1 | hi_raw < -1)
-  lo <- pmax(lo_raw, -1); hi <- pmin(hi_raw, 1)
-  diag(lo) <- 1; diag(hi) <- 1
+  lo <- pmax(lo_raw, -1)
+  hi <- pmin(hi_raw, 1)
+  diag(lo) <- 1
+  diag(hi) <- 1
   # reporting half-width: over the REPORTED cells (freed NA cells excluded)
   reported <- off & !na_mask
   half_max <- if (any(reported)) max((hi_raw - lo_raw)[reported]) / 2 else 1
 
-  list(lo = lo, hi = hi, lo_raw = lo_raw, hi_raw = hi_raw, off = off,
-       na_mask = na_mask, empty = empty, half_max = half_max)
+  list(
+    lo = lo,
+    hi = hi,
+    lo_raw = lo_raw,
+    hi_raw = hi_raw,
+    off = off,
+    na_mask = na_mask,
+    empty = empty,
+    half_max = half_max
+  )
 }
 
 # Off-diagonal bounds for the uniform rounding box around R.
@@ -76,7 +90,9 @@
 
 # Is X inside the (heterogeneous) box? Unit diagonal, off-diagonals in [lo, hi].
 .in_box_generic <- function(X, lo, hi, off, tol = 1e-9) {
-  if (any(abs(diag(X) - 1) > tol)) return(FALSE)
+  if (any(abs(diag(X) - 1) > tol)) {
+    return(FALSE)
+  }
   x <- X[off]
   all(x >= lo[off] - tol & x <= hi[off] + tol)
 }
@@ -84,9 +100,14 @@
 # POCS search for an in-box PSD matrix in a heterogeneous box. Returns a
 # Rump-verified in-box matrix (list with X, mu) or NULL. NULL means "not found",
 # NOT "infeasible"; infeasibility must be established by .box_inconsistent().
-.pocs_feasible <- function(lo, hi, off,
-                           mus = c(1e-2, 1e-3, 1e-4, 1e-6),
-                           max_iter = 1000L, tol = 1e-13) {
+.pocs_feasible <- function(
+  lo,
+  hi,
+  off,
+  mus = c(1e-2, 1e-3, 1e-4, 1e-6),
+  max_iter = 1000L,
+  tol = 1e-13
+) {
   p <- nrow(lo)
   start <- matrix(0, p, p)
   start[off] <- (lo[off] + hi[off]) / 2
@@ -114,11 +135,11 @@
 .witness_box_bound <- function(lo, hi, off, v) {
   p <- length(v)
   u <- .unit_roundoff()
-  vv <- outer(v, v)                       # v_s v_t
-  best <- ifelse(vv >= 0, hi, lo)         # box-optimal entry per pair
+  vv <- outer(v, v) # v_s v_t
+  best <- ifelse(vv >= 0, hi, lo) # box-optimal entry per pair
   best[!off] <- 0
-  diag_term <- sum(v * v)                 # sum_i v_i^2 (diagonal = 1)
-  cross <- sum(vv[off] * best[off])       # sum over ALL ordered off pairs = 2 * sum_{s<t}
+  diag_term <- sum(v * v) # sum_i v_i^2 (diagonal = 1)
+  cross <- sum(vv[off] * best[off]) # sum over ALL ordered off pairs = 2 * sum_{s<t}
   M_hat <- diag_term + cross
   # Magnitude scaffold for the error bound.
   P <- sum(v * v) + sum(abs(vv[off]) * abs(best[off]))
@@ -165,18 +186,25 @@
 
   cands <- list()
   eg <- eigen(mid, symmetric = TRUE)
-  for (j in seq_len(min(p, 4L))) cands[[length(cands) + 1L]] <- eg$vectors[, p - j + 1L]
-  for (i in seq_len(p - 1L)) for (j in (i + 1L):p) {
-    s <- if (mid[i, j] >= 0) 1 else -1
-    vv <- numeric(p); vv[i] <- 1 / sqrt(2); vv[j] <- -s / sqrt(2)
-    cands[[length(cands) + 1L]] <- vv
+  for (j in seq_len(min(p, 4L))) {
+    cands[[length(cands) + 1L]] <- eg$vectors[, p - j + 1L]
+  }
+  for (i in seq_len(p - 1L)) {
+    for (j in (i + 1L):p) {
+      s <- if (mid[i, j] >= 0) 1 else -1
+      vv <- numeric(p)
+      vv[i] <- 1 / sqrt(2)
+      vv[j] <- -s / sqrt(2)
+      cands[[length(cands) + 1L]] <- vv
+    }
   }
   if (p >= 3L && p <= triples_max_p) {
     combs <- utils::combn(p, 3L)
     for (c in seq_len(ncol(combs))) {
       S <- combs[, c]
       es <- eigen(mid[S, S, drop = FALSE], symmetric = TRUE)
-      vv <- numeric(p); vv[S] <- es$vectors[, 3L]
+      vv <- numeric(p)
+      vv[S] <- es$vectors[, 3L]
       cands[[length(cands) + 1L]] <- vv
     }
   }
@@ -187,7 +215,9 @@
 
   best <- NULL
   for (v in cands) {
-    if (all(v == 0)) next
+    if (all(v == 0)) {
+      next
+    }
     wb <- .witness_box_bound(lo, hi, off, v)
     if (is.null(best) || wb$B_upper < best$B_upper) best <- wb
   }
@@ -195,10 +225,12 @@
     pol <- .polish_witness_box(lo, hi, off, best$v)
     if (pol$B_upper < best$B_upper) best <- pol
   }
-  list(inconsistent = !is.null(best) && best$B_upper < 0,
-       witness = if (is.null(best)) NULL else best$v,
-       b_upper = if (is.null(best)) NA_real_ else best$B_upper,
-       margin  = if (is.null(best)) NA_real_ else best$M_hat)
+  list(
+    inconsistent = !is.null(best) && best$B_upper < 0,
+    witness = if (is.null(best)) NULL else best$v,
+    b_upper = if (is.null(best)) NA_real_ else best$B_upper,
+    margin = if (is.null(best)) NA_real_ else best$M_hat
+  )
 }
 
 # Feasibility oracle used by the bisection localizers. Combines the two sound
@@ -212,19 +244,30 @@
   # bisection localizers reject infeasible pins without a full POCS search.
   imp <- .box_inconsistent(lo, hi, off)
   if (isTRUE(imp$inconsistent)) {
-    return(list(status = "infeasible", witness = imp$witness,
-                b_upper = imp$b_upper, certified = TRUE))
+    return(list(
+      status = "infeasible",
+      witness = imp$witness,
+      b_upper = imp$b_upper,
+      certified = TRUE
+    ))
   }
   hit <- .pocs_feasible(lo, hi, off)
-  if (!is.null(hit)) return(list(status = "feasible", X = hit$X, certified = TRUE))
+  if (!is.null(hit)) {
+    return(list(status = "feasible", X = hit$X, certified = TRUE))
+  }
   if (!verify) {
     # Last-resort unverified search: a single low-margin POCS pass.
     p <- nrow(lo)
-    start <- matrix(0, p, p); start[off] <- (lo[off] + hi[off]) / 2; diag(start) <- 1
+    start <- matrix(0, p, p)
+    start[off] <- (lo[off] + hi[off]) / 2
+    diag(start) <- 1
     X <- start
     for (k in seq_len(2000L)) {
       Xn <- .proj_box(.proj_psd_margin(X, 0), lo, hi, off)
-      if (max(abs(Xn - X)) < 1e-13) { X <- Xn; break }
+      if (max(abs(Xn - X)) < 1e-13) {
+        X <- Xn
+        break
+      }
       X <- Xn
     }
     gap <- max(abs(.proj_psd_margin(X, 0) - X))

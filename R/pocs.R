@@ -37,9 +37,13 @@
 # verified in-box PSD matrix, or NULL. `mus` is a decreasing sequence of PD
 # margins: a larger feasible margin yields a comfortably-verifiable point, and
 # smaller margins are tried when the box only just reaches the PSD cone.
-.pocs_consistent <- function(R, delta,
-                           mus = c(1e-2, 1e-3, 1e-4, 1e-6),
-                           max_iter = 1000L, tol = 1e-12) {
+.pocs_consistent <- function(
+  R,
+  delta,
+  mus = c(1e-2, 1e-3, 1e-4, 1e-6),
+  max_iter = 1000L,
+  tol = 1e-12
+) {
   p <- nrow(R)
   off <- upper.tri(R) | lower.tri(R)
   lo <- matrix(0, p, p)
@@ -59,9 +63,16 @@
     # matrix it certifies PSD is accepted as a consistency certificate.
     if (.in_box(X, R, delta) && .verify_psd(X)) {
       return(list(
-        X = X, mu = mu,
-        how = sprintf(paste("alternating projections found an in-box matrix",
-                            "(PD margin mu = %g), independently verified PSD"), mu)))
+        X = X,
+        mu = mu,
+        how = sprintf(
+          paste(
+            "alternating projections found an in-box matrix",
+            "(PD margin mu = %g), independently verified PSD"
+          ),
+          mu
+        )
+      ))
     }
   }
   NULL

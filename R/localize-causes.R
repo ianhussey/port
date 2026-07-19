@@ -24,40 +24,61 @@
 # These are conservative, clearly-labelled heuristics, never a verdict on intent.
 # -----------------------------------------------------------------------------
 
-.structural_diagnosis <- function(R, delta, severity_max,
-                                  active_frac = 0.25) {
+.structural_diagnosis <- function(R, delta, severity_max, active_frac = 0.25) {
   p <- nrow(R)
   eg <- eigen(R, symmetric = TRUE)
   lam_min <- eg$values[p]
   v <- eg$vectors[, p]
-  if (v[which.max(abs(v))] < 0) v <- -v      # sign convention
+  if (v[which.max(abs(v))] < 0) {
+    v <- -v
+  } # sign convention
   amax <- max(abs(v))
   active <- which(abs(v) >= active_frac * amax)
   n_active <- length(active)
 
-  ratio <- if (is.finite(severity_max) && delta > 0) severity_max / delta else NA_real_
-  severity_class <- if (is.na(ratio)) "unknown"
-                    else if (ratio > 10) "substantive"
-                    else if (ratio <= 3) "near-boundary"
-                    else "moderate"
+  ratio <- if (is.finite(severity_max) && delta > 0) {
+    severity_max / delta
+  } else {
+    NA_real_
+  }
+  severity_class <- if (is.na(ratio)) {
+    "unknown"
+  } else if (ratio > 10) {
+    "substantive"
+  } else if (ratio <= 3) {
+    "near-boundary"
+  } else {
+    "moderate"
+  }
 
   va <- v[active]
   same_sign <- all(sign(va) == sign(va[1]))
   pattern <- if (n_active <= 2L) {
-    "localized"                              # a single cell / pair
+    "localized" # a single cell / pair
   } else if (same_sign) {
-    "ipsative"                               # same-sign combo ~ sums to a constant
+    "ipsative" # same-sign combo ~ sums to a constant
   } else if (n_active == 3L) {
-    "localized"                              # mixed-sign triple ~ a triad
+    "localized" # mixed-sign triple ~ a triad
   } else {
     ord <- order(abs(va), decreasing = TRUE)
     top_sign <- sign(va[ord[1]])
     rest_sign <- sign(va[ord[-1]])
-    if (top_sign != 0 && mean(rest_sign == -top_sign) >= 0.6) "composite" else "diffuse"
+    if (top_sign != 0 && mean(rest_sign == -top_sign) >= 0.6) {
+      "composite"
+    } else {
+      "diffuse"
+    }
   }
 
-  list(lambda_min = lam_min, direction = v, active = active, n_active = n_active,
-       severity_ratio = ratio, severity_class = severity_class, pattern = pattern)
+  list(
+    lambda_min = lam_min,
+    direction = v,
+    active = active,
+    n_active = n_active,
+    severity_ratio = ratio,
+    severity_class = severity_class,
+    pattern = pattern
+  )
 }
 
 # One-sentence, honest interpretation of the diagnosis, benign explanations first.
@@ -69,35 +90,49 @@
   if (identical(sc, "substantive")) {
     return(paste0(
       "Substantive: no correlation matrix lies within rounding of the reported ",
-      "values (smallest correction is ~", signif(diag$severity_ratio, 2),
+      "values (smallest correction is ~",
+      signif(diag$severity_ratio, 2),
       "x the rounding step), so it is not explained by rounding of a structural ",
-      "dependency."))
+      "dependency."
+    ))
   }
 
   benign_tail <- paste0(
     " Structural rank-deficiency of this kind is often a benign modelling ",
     "artifact, not evidence of a data problem (van Tilburg & van Tilburg 2023; ",
-    "Lorenzo-Seva & Ferrando 2021).")
-  scale <- if (identical(sc, "near-boundary"))
+    "Lorenzo-Seva & Ferrando 2021)."
+  )
+  scale <- if (identical(sc, "near-boundary")) {
     "The matrix sits within rounding of a singular (boundary) correlation matrix. "
-  else
+  } else {
     "The matrix is modestly beyond the rounding boundary. "
+  }
 
-  gen <- switch(pat,
+  gen <- switch(
+    pat,
     ipsative = paste0(
-      "The near-dependency is a same-sign combination of variables {", vars,
+      "The near-dependency is a same-sign combination of variables {",
+      vars,
       "}, consistent with an ipsative / full set-of-dummies structure (they ~sum ",
-      "to a constant)."),
+      "to a constant)."
+    ),
     composite = paste0(
-      "The near-dependency has one variable opposite a cluster of {", vars,
-      "}, consistent with a composite built from its subscores."),
+      "The near-dependency has one variable opposite a cluster of {",
+      vars,
+      "}, consistent with a composite built from its subscores."
+    ),
     localized = paste0(
-      "The near-dependency is localized to variables {", vars,
+      "The near-dependency is localized to variables {",
+      vars,
       "}, i.e. a small-set (cellular) violation rather than a recognizable ",
-      "structural dependency."),
+      "structural dependency."
+    ),
     diffuse = paste0(
-      "The near-dependency is spread across variables {", vars,
-      "} with no recognizable structural pattern."))
+      "The near-dependency is spread across variables {",
+      vars,
+      "} with no recognizable structural pattern."
+    )
+  )
 
   benign <- pat %in% c("ipsative", "composite")
   paste0(scale, gen, if (benign) benign_tail else "")

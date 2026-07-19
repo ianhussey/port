@@ -24,11 +24,16 @@
   others <- setdiff(seq_len(p), i)
   M <- R[others, others, drop = FALSE]
   ci <- R[others, i]
-  w <- tryCatch(solve(M, ci), error = function(e)
-    tryCatch(solve(M + 1e-8 * diag(nrow(M)), ci), error = function(e2) NULL))
-  if (is.null(w) || any(!is.finite(w))) return(NULL)
-  r2 <- sum(ci * w)                         # R^2_i = c_i' M_{-i}^{-1} c_i
-  v <- numeric(p); v[i] <- -1; v[others] <- w
+  w <- tryCatch(solve(M, ci), error = function(e) {
+    tryCatch(solve(M + 1e-8 * diag(nrow(M)), ci), error = function(e2) NULL)
+  })
+  if (is.null(w) || any(!is.finite(w))) {
+    return(NULL)
+  }
+  r2 <- sum(ci * w) # R^2_i = c_i' M_{-i}^{-1} c_i
+  v <- numeric(p)
+  v[i] <- -1
+  v[others] <- w
   nrm <- sqrt(sum(v * v))
   list(v = v / nrm, r2 = r2, complement_pd = .verify_psd(M))
 }
@@ -42,15 +47,26 @@
   for (i in seq_len(p)) {
     d <- .rsquared_direction(R, i)
     if (is.null(d)) {
-      recs[[i]] <- list(variable = i, r2 = NA_real_, vif = NA_real_,
-                        complement_pd = FALSE, box_inconsistent = NA, b_upper = NA_real_)
+      recs[[i]] <- list(
+        variable = i,
+        r2 = NA_real_,
+        vif = NA_real_,
+        complement_pd = FALSE,
+        box_inconsistent = NA,
+        b_upper = NA_real_
+      )
       next
     }
     wb <- .witness_box_bound(bnd$lo, bnd$hi, bnd$off, d$v)
     vif <- if (is.finite(d$r2) && d$r2 != 1) 1 / (1 - d$r2) else Inf
-    recs[[i]] <- list(variable = i, r2 = d$r2, vif = vif,
-                      complement_pd = isTRUE(d$complement_pd),
-                      box_inconsistent = isTRUE(wb$B_upper < 0), b_upper = wb$B_upper)
+    recs[[i]] <- list(
+      variable = i,
+      r2 = d$r2,
+      vif = vif,
+      complement_pd = isTRUE(d$complement_pd),
+      box_inconsistent = isTRUE(wb$B_upper < 0),
+      b_upper = wb$B_upper
+    )
   }
   recs
 }
@@ -58,8 +74,11 @@
 # Variables that the R^2 localizer cleanly blames: the residual direction is a
 # rigorous box witness AND the complementary submatrix is PD (V6).
 .rsquared_blamed <- function(rsq) {
-  vapply(rsq, function(z) isTRUE(z$box_inconsistent) && isTRUE(z$complement_pd),
-         logical(1))
+  vapply(
+    rsq,
+    function(z) isTRUE(z$box_inconsistent) && isTRUE(z$complement_pd),
+    logical(1)
+  )
 }
 
 # Plausibility gradient (V4): for a CONSISTENT matrix, per-variable reported-point
@@ -67,15 +86,25 @@
 # complement give a meaningful R^2.
 .plausibility_gradient <- function(R, delta, ceiling = 0.95) {
   rsq <- .rsquared_evidence(R, delta)
-  ok <- vapply(rsq, function(z) isTRUE(z$complement_pd) && is.finite(z$r2), logical(1))
+  ok <- vapply(
+    rsq,
+    function(z) isTRUE(z$complement_pd) && is.finite(z$r2),
+    logical(1)
+  )
   if (any(ok)) {
     idx <- which(ok)
     r2s <- vapply(rsq[idx], function(z) z$r2, numeric(1))
     m <- which.max(r2s)
-    max_var <- idx[m]; max_r2 <- r2s[m]
+    max_var <- idx[m]
+    max_r2 <- r2s[m]
   } else {
-    max_var <- NA_integer_; max_r2 <- NA_real_
+    max_var <- NA_integer_
+    max_r2 <- NA_real_
   }
-  list(rsquared = rsq, max_var = max_var, max_r2 = max_r2,
-       near_ceiling = is.finite(max_r2) && max_r2 >= ceiling)
+  list(
+    rsquared = rsq,
+    max_var = max_var,
+    max_r2 = max_r2,
+    near_ceiling = is.finite(max_r2) && max_r2 >= ceiling
+  )
 }

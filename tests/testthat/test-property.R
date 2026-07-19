@@ -19,12 +19,16 @@ test_that("genuine PSD matrices rounded to 2dp are never inconsistent", {
     d <- sqrt(diag(S))
     S <- S / outer(d, d)
     diag(S) <- 1
-    stopifnot(min(eigen(S, symmetric = TRUE, only.values = TRUE)$values) > -1e-10)
+    stopifnot(
+      min(eigen(S, symmetric = TRUE, only.values = TRUE)$values) > -1e-10
+    )
     Rr <- round(S, 2)
     res <- check_corr_psd(Rr, decimals = 2)
     seen[res$verdict] <- seen[res$verdict] + 1L
-    expect_false(identical(res$verdict, "inconsistent"),
-                 info = paste("false positive at trial", t))
+    expect_false(
+      identical(res$verdict, "inconsistent"),
+      info = paste("false positive at trial", t)
+    )
   }
   # sanity: the overwhelming majority resolve to a definite "consistent"
   expect_gt(seen["consistent"], 0.9 * n_trials)
@@ -37,13 +41,16 @@ test_that("rounding-induced near-boundary cases are handled without false incons
   for (t in seq_len(n_reps(400))) {
     p <- sample(3:6, 1)
     A <- matrix(rnorm(p * p), p, p)
-    A <- crossprod(A)                       # PSD
+    A <- crossprod(A) # PSD
     eg <- eigen(A, symmetric = TRUE)
-    eg$values[p] <- 0                       # force exact singularity
+    eg$values[p] <- 0 # force exact singularity
     S <- eg$vectors %*% (eg$values * t(eg$vectors))
     dd <- diag(S)
-    if (any(dd <= 1e-8)) next
-    S <- S / outer(sqrt(dd), sqrt(dd)); diag(S) <- 1
+    if (any(dd <= 1e-8)) {
+      next
+    }
+    S <- S / outer(sqrt(dd), sqrt(dd))
+    diag(S) <- 1
     res <- check_corr_psd(round(S, 2), decimals = 2)
     expect_false(identical(res$verdict, "inconsistent"))
   }

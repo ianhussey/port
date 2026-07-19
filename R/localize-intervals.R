@@ -22,14 +22,16 @@
 # -----------------------------------------------------------------------------
 
 .cell_free_box <- function(bnd, i, j) {
-  lo <- bnd$lo; hi <- bnd$hi
+  lo <- bnd$lo
+  hi <- bnd$hi
   lo[i, j] <- lo[j, i] <- -1
-  hi[i, j] <- hi[j, i] <-  1
+  hi[i, j] <- hi[j, i] <- 1
   list(lo = lo, hi = hi, off = bnd$off)
 }
 
 .cell_pin_box <- function(bnd, i, j, x) {
-  lo <- bnd$lo; hi <- bnd$hi
+  lo <- bnd$lo
+  hi <- bnd$hi
   lo[i, j] <- lo[j, i] <- x
   hi[i, j] <- hi[j, i] <- x
   list(lo = lo, hi = hi, off = bnd$off)
@@ -43,10 +45,20 @@
 # Bisect for the feasibility boundary between a known-infeasible x and a
 # known-feasible x; returns the certified-feasible endpoint (undecided treated
 # as the infeasible side, so the interval stays a subset of the true one).
-.bisect_boundary <- function(bnd, i, j, x_infeas, x_feas, verify,
-                             tol = 1e-6, max_it = 40L) {
+.bisect_boundary <- function(
+  bnd,
+  i,
+  j,
+  x_infeas,
+  x_feas,
+  verify,
+  tol = 1e-6,
+  max_it = 40L
+) {
   for (it in seq_len(max_it)) {
-    if (abs(x_feas - x_infeas) < tol) break
+    if (abs(x_feas - x_infeas) < tol) {
+      break
+    }
     m <- (x_infeas + x_feas) / 2
     if (identical(.feasible_status_at(bnd, i, j, m, verify), "feasible")) {
       x_feas <- m
@@ -60,8 +72,12 @@
 # Signed distance from box [box_lo, box_hi] to interval [lo, hi] (0 if overlap;
 # positive if the interval lies above the box, negative if below).
 .signed_gap <- function(box_lo, box_hi, lo, hi) {
-  if (lo > box_hi) return(lo - box_hi)
-  if (hi < box_lo) return(hi - box_lo)
+  if (lo > box_hi) {
+    return(lo - box_hi)
+  }
+  if (hi < box_lo) {
+    return(hi - box_lo)
+  }
   0
 }
 
@@ -73,13 +89,19 @@
   cells <- which(upper.tri(R), arr.ind = TRUE)
   out <- vector("list", nrow(cells))
   for (r in seq_len(nrow(cells))) {
-    i <- cells[r, 1]; j <- cells[r, 2]
+    i <- cells[r, 1]
+    j <- cells[r, 2]
     fb <- .cell_free_box(bnd, i, j)
     fo <- .box_feasible(fb$lo, fb$hi, fb$off, verify = verify)
 
     if (identical(fo$status, "infeasible")) {
-      out[[r]] <- list(i = i, j = j, empty = TRUE, sole = FALSE,
-                       certified = fo$certified)
+      out[[r]] <- list(
+        i = i,
+        j = j,
+        empty = TRUE,
+        sole = FALSE,
+        certified = fo$certified
+      )
       next
     }
     if (identical(fo$status, "undecided")) {
@@ -89,25 +111,52 @@
 
     # Feasible: the interval is nonempty. Locate its endpoints.
     x_feas <- fo$X[i, j]
-    lo_ij <- if (identical(.feasible_status_at(bnd, i, j, -1, verify), "feasible")) {
+    lo_ij <- if (
+      identical(.feasible_status_at(bnd, i, j, -1, verify), "feasible")
+    ) {
       -1
     } else {
-      .bisect_boundary(bnd, i, j, x_infeas = -1, x_feas = x_feas, verify = verify)
+      .bisect_boundary(
+        bnd,
+        i,
+        j,
+        x_infeas = -1,
+        x_feas = x_feas,
+        verify = verify
+      )
     }
-    hi_ij <- if (identical(.feasible_status_at(bnd, i, j, 1, verify), "feasible")) {
+    hi_ij <- if (
+      identical(.feasible_status_at(bnd, i, j, 1, verify), "feasible")
+    ) {
       1
     } else {
-      .bisect_boundary(bnd, i, j, x_infeas = 1, x_feas = x_feas, verify = verify)
+      .bisect_boundary(
+        bnd,
+        i,
+        j,
+        x_infeas = 1,
+        x_feas = x_feas,
+        verify = verify
+      )
     }
 
     box_lo <- R[i, j] - delta
     box_hi <- R[i, j] + delta
     edit <- .signed_gap(box_lo, box_hi, lo_ij, hi_ij)
     implied <- min(max(R[i, j], lo_ij), hi_ij)
-    out[[r]] <- list(i = i, j = j, empty = FALSE, sole = TRUE,
-                     lo = lo_ij, hi = hi_ij, required_edit = edit,
-                     implied = implied, reported = R[i, j],
-                     witness_matrix = fo$X, certified = fo$certified)
+    out[[r]] <- list(
+      i = i,
+      j = j,
+      empty = FALSE,
+      sole = TRUE,
+      lo = lo_ij,
+      hi = hi_ij,
+      required_edit = edit,
+      implied = implied,
+      reported = R[i, j],
+      witness_matrix = fo$X,
+      certified = fo$certified
+    )
   }
   out
 }

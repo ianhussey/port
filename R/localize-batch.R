@@ -6,10 +6,19 @@
   cells <- lf$implicated$cells
   var <- lf$implicated$variable
   parts <- character(0)
-  if (!is.null(var)) parts <- c(parts, sprintf("var %d", var))
+  if (!is.null(var)) {
+    parts <- c(parts, sprintf("var %d", var))
+  }
   if (!is.null(cells) && nrow(cells) > 0L) {
-    parts <- c(parts, paste(apply(cells, 1L, function(rw)
-      sprintf("(%d,%d)", rw[1], rw[2])), collapse = " "))
+    parts <- c(
+      parts,
+      paste(
+        apply(cells, 1L, function(rw) {
+          sprintf("(%d,%d)", rw[1], rw[2])
+        }),
+        collapse = " "
+      )
+    )
   }
   if (length(parts) == 0L) NA_character_ else paste(parts, collapse = "; ")
 }
@@ -31,25 +40,45 @@
 #' localize_psd_fault_batch(list(triad = triad, ok = diag(3)))
 #' @seealso [localize_psd_fault()]
 #' @export
-localize_psd_fault_batch <- function(mats, decimals = 2, delta = NULL,
-                                     verify = TRUE, sparse_k = 3L,
-                                     quiet = FALSE) {
-  if (!is.list(mats)) stop("`mats` must be a list of matrices.", call. = FALSE)
+localize_psd_fault_batch <- function(
+  mats,
+  decimals = 2,
+  delta = NULL,
+  verify = TRUE,
+  sparse_k = 3L,
+  quiet = FALSE
+) {
+  if (!is.list(mats)) {
+    stop("`mats` must be a list of matrices.", call. = FALSE)
+  }
   n <- length(mats)
   ids <- names(mats)
-  if (is.null(ids)) ids <- as.character(seq_len(n))
+  if (is.null(ids)) {
+    ids <- as.character(seq_len(n))
+  }
   ids[ids == "" | is.na(ids)] <- as.character(which(ids == "" | is.na(ids)))
 
-  verdict <- character(n); implicated <- character(n)
-  smax <- rep(NA_real_, n); sfrob <- rep(NA_real_, n); msg <- rep(NA_character_, n)
+  verdict <- character(n)
+  implicated <- character(n)
+  smax <- rep(NA_real_, n)
+  sfrob <- rep(NA_real_, n)
+  msg <- rep(NA_character_, n)
 
   for (i in seq_len(n)) {
     lf <- tryCatch(
-      localize_psd_fault(mats[[i]], decimals = decimals, delta = delta,
-                         verify = verify, sparse_k = sparse_k),
-      error = function(e) e)
+      localize_psd_fault(
+        mats[[i]],
+        decimals = decimals,
+        delta = delta,
+        verify = verify,
+        sparse_k = sparse_k
+      ),
+      error = function(e) e
+    )
     if (inherits(lf, "error")) {
-      verdict[i] <- "error"; msg[i] <- conditionMessage(lf); next
+      verdict[i] <- "error"
+      msg[i] <- conditionMessage(lf)
+      next
     }
     verdict[i] <- lf$localization_verdict
     implicated[i] <- .implicated_str(lf)
@@ -60,8 +89,10 @@ localize_psd_fault_batch <- function(mats, decimals = 2, delta = NULL,
 
   if (!quiet && n > 0L) {
     tab <- table(verdict)
-    message("Localization verdict classes: ",
-            paste(sprintf("%s=%d", names(tab), as.integer(tab)), collapse = ", "))
+    message(
+      "Localization verdict classes: ",
+      paste(sprintf("%s=%d", names(tab), as.integer(tab)), collapse = ", ")
+    )
   }
 
   tibble::tibble(
@@ -70,5 +101,6 @@ localize_psd_fault_batch <- function(mats, decimals = 2, delta = NULL,
     implicated = implicated,
     severity_max = smax,
     severity_frob = sfrob,
-    message = msg)
+    message = msg
+  )
 }

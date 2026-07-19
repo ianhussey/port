@@ -33,14 +33,14 @@
   u <- .unit_roundoff()
 
   Rv <- as.numeric(R %*% v)
-  a  <- sum(v * Rv)          # a = v'Rv (quadratic form)
+  a <- sum(v * Rv) # a = v'Rv (quadratic form)
   av <- abs(v)
   # P = |v|' |R| |v|: the magnitude scaffold that bounds the error of a.
-  P    <- sum(av * as.numeric(abs(R) %*% av))
-  L1   <- sum(av)            # ||v||_1
-  n2   <- sum(v * v)         # ||v||_2^2
+  P <- sum(av * as.numeric(abs(R) %*% av))
+  L1 <- sum(av) # ||v||_1
+  n2 <- sum(v * v) # ||v||_2^2
   L1sq <- L1 * L1
-  Dterm <- L1sq - n2         # ||v||_1^2 - ||v||_2^2  (>= 0)
+  Dterm <- L1sq - n2 # ||v||_1^2 - ||v||_2^2  (>= 0)
   M_hat <- a + delta * Dterm
 
   # Rigorous forward-error bound. Each coefficient below strictly dominates the
@@ -50,9 +50,9 @@
   #     representation error of the stored box centres R_ij.
   #   * L1^2, n2: squarings/sums of p terms, dominated by gamma_{2p+2}, gamma_{p+2}.
   #   * the final few combining flops (subtract, scale by delta, add): gamma_8.
-  Ea    <- (.gamma(2L * p + 2L) + u) * P
+  Ea <- (.gamma(2L * p + 2L) + u) * P
   EL1sq <- .gamma(2L * p + 2L) * L1sq
-  En2   <- .gamma(p + 2L) * n2
+  En2 <- .gamma(p + 2L) * n2
   Ecomb <- .gamma(8L) * (abs(a) + delta * (L1sq + n2))
   E <- Ea + delta * (EL1sq + En2) + Ecomb
   # Inflate to cover the (tiny) rounding incurred while computing E itself. The
@@ -60,8 +60,15 @@
   # fl(E * 1.000001) rigorously exceeds the true error bound.
   E <- E * 1.000001
 
-  list(v = v, M_hat = M_hat, E = E, B_upper = M_hat + E,
-       a = a, L1 = L1, n2 = n2)
+  list(
+    v = v,
+    M_hat = M_hat,
+    E = E,
+    B_upper = M_hat + E,
+    a = a,
+    L1 = L1,
+    n2 = n2
+  )
 }
 
 # Fast O(p^2) precheck: if any reported off-diagonal is out of range even at the
@@ -70,13 +77,20 @@
 .precheck_range <- function(R, delta) {
   p <- nrow(R)
   off <- which(upper.tri(R), arr.ind = TRUE)
-  if (nrow(off) == 0L) return(NULL)
+  if (nrow(off) == 0L) {
+    return(NULL)
+  }
   vals <- R[off]
   viol <- abs(vals) - delta > 1
-  if (!any(viol)) return(NULL)
+  if (!any(viol)) {
+    return(NULL)
+  }
   k <- which(viol)[1L]
-  list(i = as.integer(off[k, 1L]), j = as.integer(off[k, 2L]),
-       value = as.numeric(vals[k]))
+  list(
+    i = as.integer(off[k, 1L]),
+    j = as.integer(off[k, 2L]),
+    value = as.numeric(vals[k])
+  )
 }
 
 # Improve a witness direction by a fixed-point "polish": given v, form the most
@@ -153,7 +167,9 @@
 
   best <- NULL
   for (v in cands) {
-    if (all(v == 0)) next
+    if (all(v == 0)) {
+      next
+    }
     wb <- .witness_bound(R, v, delta)
     if (is.null(best) || wb$B_upper < best$B_upper) best <- wb
   }

@@ -50,7 +50,10 @@ disattenuate <- function(R, reliability) {
     stop("`reliability` must be numeric and non-missing.", call. = FALSE)
   }
   if (!(length(reliability) %in% c(1L, p))) {
-    stop(sprintf("`reliability` must have length 1 or p = %d.", p), call. = FALSE)
+    stop(
+      sprintf("`reliability` must have length 1 or p = %d.", p),
+      call. = FALSE
+    )
   }
   if (any(reliability <= 0) || any(reliability > 1)) {
     stop("`reliability` values must lie in (0, 1].", call. = FALSE)
@@ -62,30 +65,48 @@ disattenuate <- function(R, reliability) {
 # reliabilities (sound interval arithmetic; denominators are strictly positive).
 # Returns clipped [lo, hi] for the PSD box, the unclipped minimum achievable
 # magnitude per cell (for the range / plausibility flags), and the point centre.
-.disattenuated_intervals <- function(R, reliability, delta_R, delta_rel,
-                                     eps = 1e-6) {
+.disattenuated_intervals <- function(
+  R,
+  reliability,
+  delta_R,
+  delta_rel,
+  eps = 1e-6
+) {
   p <- nrow(R)
   rel <- .check_reliability(reliability, p)
   rel_lo <- pmax(rel - delta_rel, eps)
   rel_hi <- pmin(rel + delta_rel, 1)
-  s_lo <- 1 / sqrt(rel_hi)             # s = 1/sqrt(rho) decreases in rho
+  s_lo <- 1 / sqrt(rel_hi) # s = 1/sqrt(rho) decreases in rho
   s_hi <- 1 / sqrt(rel_lo)
 
   off <- upper.tri(R) | lower.tri(R)
-  loD <- matrix(0, p, p); hiD <- matrix(0, p, p); min_abs <- matrix(0, p, p)
-  for (i in seq_len(p - 1L)) for (j in (i + 1L):p) {
-    ss_lo <- s_lo[i] * s_lo[j]; ss_hi <- s_hi[i] * s_hi[j]   # positive
-    rlo <- R[i, j] - delta_R; rhi <- R[i, j] + delta_R
-    prods <- c(ss_lo * rlo, ss_lo * rhi, ss_hi * rlo, ss_hi * rhi)
-    dlo <- min(prods); dhi <- max(prods)
-    ma <- if (dlo <= 0 && dhi >= 0) 0 else min(abs(dlo), abs(dhi))
-    loD[i, j] <- loD[j, i] <- max(dlo, -1)
-    hiD[i, j] <- hiD[j, i] <- min(dhi, 1)
-    min_abs[i, j] <- min_abs[j, i] <- ma
+  loD <- matrix(0, p, p)
+  hiD <- matrix(0, p, p)
+  min_abs <- matrix(0, p, p)
+  for (i in seq_len(p - 1L)) {
+    for (j in (i + 1L):p) {
+      ss_lo <- s_lo[i] * s_lo[j]
+      ss_hi <- s_hi[i] * s_hi[j] # positive
+      rlo <- R[i, j] - delta_R
+      rhi <- R[i, j] + delta_R
+      prods <- c(ss_lo * rlo, ss_lo * rhi, ss_hi * rlo, ss_hi * rhi)
+      dlo <- min(prods)
+      dhi <- max(prods)
+      ma <- if (dlo <= 0 && dhi >= 0) 0 else min(abs(dlo), abs(dhi))
+      loD[i, j] <- loD[j, i] <- max(dlo, -1)
+      hiD[i, j] <- hiD[j, i] <- min(dhi, 1)
+      min_abs[i, j] <- min_abs[j, i] <- ma
+    }
   }
-  diag(loD) <- 1; diag(hiD) <- 1
-  list(lo = loD, hi = hiD, off = off, min_abs = min_abs,
-       center = disattenuate(R, reliability))
+  diag(loD) <- 1
+  diag(hiD) <- 1
+  list(
+    lo = loD,
+    hi = hiD,
+    off = off,
+    min_abs = min_abs,
+    center = disattenuate(R, reliability)
+  )
 }
 
 # Forward verdict on a disattenuated box: inconsistent / consistent but implausible / consistent /
@@ -103,15 +124,25 @@ disattenuate <- function(R, reliability) {
   psd_inconsistent <- identical(fe$status, "infeasible")
   inconsistent <- range_inconsistent || psd_inconsistent
 
-  any_implausible <- any(ma > cutoff)       # includes >1 cells, but those imply inconsistent
-  verdict <- if (inconsistent) "inconsistent"
-             else if (any_implausible) "consistent but implausible"
-             else if (identical(fe$status, "feasible")) "consistent"
-             else "undecided"
+  any_implausible <- any(ma > cutoff) # includes >1 cells, but those imply inconsistent
+  verdict <- if (inconsistent) {
+    "inconsistent"
+  } else if (any_implausible) {
+    "consistent but implausible"
+  } else if (identical(fe$status, "feasible")) {
+    "consistent"
+  } else {
+    "undecided"
+  }
 
-  list(verdict = verdict, psd_status = fe$status,
-       range_inconsistent = range_inconsistent, psd_inconsistent = psd_inconsistent,
-       inconsistent_cells = imp_rows, implausible_cells = impl_rows)
+  list(
+    verdict = verdict,
+    psd_status = fe$status,
+    range_inconsistent = range_inconsistent,
+    psd_inconsistent = psd_inconsistent,
+    inconsistent_cells = imp_rows,
+    implausible_cells = impl_rows
+  )
 }
 
 .new_disattenuation_check <- function(...) {
@@ -123,13 +154,25 @@ disattenuate <- function(R, reliability) {
 .rho_thresholds <- function(R, cutoff) {
   lam_min <- min(eigen(R, symmetric = TRUE, only.values = TRUE)$values)
   max_r <- max(abs(R[upper.tri(R)]))
-  rho_inconsistent <- max(1 - lam_min, max_r)                 # below -> inconsistent
-  rho_plausible <- if (cutoff < 1) max(1 - lam_min, max_r / cutoff) else rho_inconsistent
-  list(lambda_min = lam_min, max_r = max_r,
-       rho_inconsistent = rho_inconsistent, rho_plausible = rho_plausible,
-       # which constraint sets each boundary
-       inconsistent_binds = if ((1 - lam_min) >= max_r) "PSD" else "range",
-       plausible_binds = if (cutoff < 1 && (max_r / cutoff) > (1 - lam_min)) "range" else "PSD")
+  rho_inconsistent <- max(1 - lam_min, max_r) # below -> inconsistent
+  rho_plausible <- if (cutoff < 1) {
+    max(1 - lam_min, max_r / cutoff)
+  } else {
+    rho_inconsistent
+  }
+  list(
+    lambda_min = lam_min,
+    max_r = max_r,
+    rho_inconsistent = rho_inconsistent,
+    rho_plausible = rho_plausible,
+    # which constraint sets each boundary
+    inconsistent_binds = if ((1 - lam_min) >= max_r) "PSD" else "range",
+    plausible_binds = if (cutoff < 1 && (max_r / cutoff) > (1 - lam_min)) {
+      "range"
+    } else {
+      "PSD"
+    }
+  )
 }
 
 # Box-sound critical reliability: the largest common rho at which the
@@ -142,18 +185,33 @@ disattenuate <- function(R, reliability) {
 # inconsistent region is an interval (0, rho*]).
 # Returns 0 when no reliability >= floor_rho is certifiably inconsistent
 # ("vacuous"), and NA when the observed box is itself inconsistent at rho = 1.
-.rho_inconsistent_box <- function(R, delta_R, observed_inconsistent,
-                                floor_rho = 0.01, tol = 1e-4, max_it = 30L) {
-  if (isTRUE(observed_inconsistent)) return(NA_real_)
+.rho_inconsistent_box <- function(
+  R,
+  delta_R,
+  observed_inconsistent,
+  floor_rho = 0.01,
+  tol = 1e-4,
+  max_it = 30L
+) {
+  if (isTRUE(observed_inconsistent)) {
+    return(NA_real_)
+  }
   cert_imp <- function(rho) {
     iv <- .disattenuated_intervals(R, rho, delta_R, delta_rel = 0)
-    if (any(iv$min_abs[upper.tri(iv$min_abs)] > 1)) return(TRUE)   # range precheck
+    if (any(iv$min_abs[upper.tri(iv$min_abs)] > 1)) {
+      return(TRUE)
+    } # range precheck
     isTRUE(.box_inconsistent(iv$lo, iv$hi, iv$off)$inconsistent)
   }
-  if (!cert_imp(floor_rho)) return(0)
-  lo <- floor_rho; hi <- 1
+  if (!cert_imp(floor_rho)) {
+    return(0)
+  }
+  lo <- floor_rho
+  hi <- 1
   for (it in seq_len(max_it)) {
-    if (hi - lo < tol) break
+    if (hi - lo < tol) {
+      break
+    }
     m <- (lo + hi) / 2
     if (cert_imp(m)) lo <- m else hi <- m
   }
@@ -200,33 +258,66 @@ disattenuate <- function(R, reliability) {
 #' check_disattenuated_psd(R, reliability = NULL, decimals = 2, max_plausible_r = 0.9)
 #' @seealso [disattenuate()], [check_corr_psd()]
 #' @export
-check_disattenuated_psd <- function(R, reliability = NULL, decimals = 2,
-                                    reliability_decimals = 2, max_plausible_r = 1,
-                                    plausible_floor = NULL) {
+check_disattenuated_psd <- function(
+  R,
+  reliability = NULL,
+  decimals = 2,
+  reliability_decimals = 2,
+  max_plausible_r = 1,
+  plausible_floor = NULL
+) {
   R <- .validate_corr(R)
   p <- nrow(R)
-  if (!is.numeric(max_plausible_r) || length(max_plausible_r) != 1L ||
-      max_plausible_r <= 0 || max_plausible_r > 1) {
+  if (
+    !is.numeric(max_plausible_r) ||
+      length(max_plausible_r) != 1L ||
+      max_plausible_r <= 0 ||
+      max_plausible_r > 1
+  ) {
     stop("`max_plausible_r` must be a single number in (0, 1].", call. = FALSE)
   }
   delta_R <- 0.5 * 10^(-decimals)
-  delta_rel <- if (is.infinite(reliability_decimals)) 0 else 0.5 * 10^(-reliability_decimals)
+  delta_rel <- if (is.infinite(reliability_decimals)) {
+    0
+  } else {
+    0.5 * 10^(-reliability_decimals)
+  }
   cutoff <- max_plausible_r
 
   observed <- check_corr_psd(R, decimals = decimals)$verdict
   thr <- .rho_thresholds(R, cutoff)
   thr$rho_inconsistent_box <- .rho_inconsistent_box(
-    R, delta_R, observed_inconsistent = identical(observed, "inconsistent"))
+    R,
+    delta_R,
+    observed_inconsistent = identical(observed, "inconsistent")
+  )
 
-  common <- list(observed_verdict = observed, thresholds = thr,
-                 max_plausible_r = cutoff, decimals = decimals,
-                 reliability_decimals = reliability_decimals,
-                 plausible_floor = plausible_floor, p = p, R = R)
+  common <- list(
+    observed_verdict = observed,
+    thresholds = thr,
+    max_plausible_r = cutoff,
+    decimals = decimals,
+    reliability_decimals = reliability_decimals,
+    plausible_floor = plausible_floor,
+    p = p,
+    R = R
+  )
 
   if (is.null(reliability)) {
-    return(do.call(.new_disattenuation_check,
-      c(list(mode = "critical", reliability = NULL, verdict = NA_character_,
-             disattenuated = NULL, forward = NULL, headroom = NA_real_), common)))
+    return(do.call(
+      .new_disattenuation_check,
+      c(
+        list(
+          mode = "critical",
+          reliability = NULL,
+          verdict = NA_character_,
+          disattenuated = NULL,
+          forward = NULL,
+          headroom = NA_real_
+        ),
+        common
+      )
+    ))
   }
 
   rel <- .check_reliability(reliability, p)
@@ -235,8 +326,10 @@ check_disattenuated_psd <- function(R, reliability = NULL, decimals = 2,
   reported_rho <- if (length(reliability) == 1L) reliability else NA_real_
   # headroom is measured against the box-sound boundary (falls back to the point
   # closed form only when the box bisection is unavailable)
-  rho_anchor <- if (is.finite(thr$rho_inconsistent_box %||% NA_real_) &&
-                    (thr$rho_inconsistent_box %||% 0) > 0) {
+  rho_anchor <- if (
+    is.finite(thr$rho_inconsistent_box %||% NA_real_) &&
+      (thr$rho_inconsistent_box %||% 0) > 0
+  ) {
     thr$rho_inconsistent_box
   } else {
     thr$rho_inconsistent
@@ -244,9 +337,20 @@ check_disattenuated_psd <- function(R, reliability = NULL, decimals = 2,
   headroom <- if (!is.na(reported_rho)) reported_rho - rho_anchor else NA_real_
   max_disattenuated <- max(abs(iv$center[upper.tri(iv$center)]))
 
-  do.call(.new_disattenuation_check,
-    c(list(mode = if (length(reliability) == 1L) "common" else "per_variable",
-           reliability = reliability, verdict = fwd$verdict,
-           disattenuated = iv$center, forward = fwd, headroom = headroom,
-           max_disattenuated = max_disattenuated, reported_rho = reported_rho), common))
+  do.call(
+    .new_disattenuation_check,
+    c(
+      list(
+        mode = if (length(reliability) == 1L) "common" else "per_variable",
+        reliability = reliability,
+        verdict = fwd$verdict,
+        disattenuated = iv$center,
+        forward = fwd,
+        headroom = headroom,
+        max_disattenuated = max_disattenuated,
+        reported_rho = reported_rho
+      ),
+      common
+    )
+  )
 }

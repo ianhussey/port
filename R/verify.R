@@ -31,8 +31,11 @@
   # Inflate c to cover rounding while forming c and the PSD-vs-PD gap.
   c <- c * 1.0001 + 2 * u * trA
   B <- A - diag(c, n)
-  isTRUE(tryCatch({
-    chol(B)  # errors on a non-(numerically-)PD matrix
-    TRUE
-  }, error = function(e) FALSE))
+  isTRUE(tryCatch(
+    {
+      chol(B) # errors on a non-(numerically-)PD matrix
+      TRUE
+    },
+    error = function(e) FALSE
+  ))
 }
