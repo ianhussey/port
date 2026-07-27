@@ -1,5 +1,5 @@
 Package: port
-Title: Positive-semi-definiteness Of Rounded correlation Tables
+Title: Positive-Semi-Definiteness of Rounded Correlation Tables
 Version: 0.1.0
 Authors@R:
     person("Ian", "Hussey", email = "ian.hussey@unibe.ch", role = c("aut", "cre"))
