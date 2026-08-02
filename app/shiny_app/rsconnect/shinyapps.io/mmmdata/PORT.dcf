@@ -10,4 +10,4 @@ url: https://mmmdata.shinyapps.io/PORT/
 version: 1
 asMultiple: FALSE
 asStatic: FALSE
-ignoredFiles: www/logo old.png
+ignoredFiles: 
