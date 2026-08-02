@@ -1,0 +1,12 @@
+name: port
+title: port
+username: errors
+account: errors
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 17660662
+bundleId: 12354699
+url: https://errors.shinyapps.io/port/
+version: 1
+asMultiple: FALSE
+asStatic: FALSE
