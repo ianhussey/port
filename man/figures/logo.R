@@ -15,7 +15,7 @@ quay <- "#c8b08c"
 coping <- "#8c6e4f"
 cream <- "#f4ede0"
 ink <- "#23272e"
-cargo <- c("#e8955a", "#c8553d", "#d9a43c")
+cargo <- c("#d9a43c", "#e8955a", "#c8553d")
 
 r <- matrix(
   c(
@@ -50,13 +50,18 @@ deck <- 330
 sea <- 362
 
 # One container, its top left corner at (x, y), with ribs and a label. The
-# diagonal is cream; the others take turns in the warm colors.
+# diagonal is cream; the others shade from yellow through orange to red as the
+# correlation rises from the lowest in the table to the highest.
 cw <- 66
+off <- r[lower.tri(r)]
+heat <- function(v) {
+  rgb(colorRamp(cargo)((v - min(off)) / diff(range(off))), maxColorValue = 255)
+}
 ch <- 44
 container <- function(i, j) {
   x <- 128 + (j - 1) * cw
   y <- deck - (5 - i) * ch
-  fill <- if (i == j) cream else cargo[(i + j) %% 3 + 1]
+  fill <- if (i == j) cream else heat(r[i, j])
   label <- if (i == j) "1" else sub("0\\.", ".", sprintf("%.2f", r[i, j]))
   ribs <- x + seq(8, cw - 8, length.out = 6)
   c(
