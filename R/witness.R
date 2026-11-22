@@ -12,6 +12,9 @@
 # and each off-diagonal is chosen to maximise 2 v_i v_j X_ij, i.e.
 # X_ij = R_ij + delta*sign(v_i v_j), giving the extra term
 #     2*delta*sum_{i<j}|v_i||v_j| = delta*(||v||_1^2 - ||v||_2^2).
+# This is the interval-matrix bound x'Ax >= x'Ac x - |x|' Delta |x| of Rohn
+# (1994, SIAM J. Matrix Anal. Appl. 15:175-184, proof of Theorem 1) with the
+# sign reversed; the maximising X is his vertex matrix with the opposite sign.
 # Clipping the box to [-1, 1] can only shrink it, so ignoring that clip keeps
 # this an UPPER bound on the achievable quadratic form -- sound for
 # inconsistency. If this maximum is < 0 then no in-box matrix is PSD (a PSD

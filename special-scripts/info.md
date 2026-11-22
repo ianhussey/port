@@ -12,3 +12,5 @@ https://sites.stat.washington.edu/people/mdperlma/542%20Multivariate%20Analysis%
 https://www.math.utoronto.ca/mccann/assignments/477/LatalaMatlak17.pdf
 - royen2014.pdf
 https://arxiv.org/pdf/1408.1028
+- rohn1994.pdf (publisher page; the PDF needs access)
+https://doi.org/10.1137/S0895479891219216
