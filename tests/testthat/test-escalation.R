@@ -46,9 +46,10 @@ test_that("POCS resolves the ambiguous case to a certified consistent", {
   expect_true(port:::.verify_psd(res$certified_matrix))
 })
 
-test_that("a genuinely boundary-only case is honestly undecided, not guessed", {
-  # b_upper ~ 6e-5: the box only grazes the PSD cone, so no strictly-PD in-box
-  # point exists for the one-sided Cholesky test to certify.
+test_that("a near-boundary case the dense witness search missed is certified", {
+  # The dense directions leave b_upper ~ 6e-5 > 0 and no strictly-PD in-box
+  # point exists, so this was once "undecided". The greedy sparse search finds a
+  # witness on variables 1-4 (exact integer check: max_box v'Xv < 0).
   R <- matrix(
     c(
       1,
@@ -82,9 +83,24 @@ test_that("a genuinely boundary-only case is honestly undecided, not guessed", {
     byrow = TRUE
   )
   res <- check_corr_psd(R, decimals = 2)
+  expect_equal(res$verdict, "inconsistent")
+  expect_equal(res$tier, "witness")
+  expect_equal(res$witness[5], 0)
+})
+
+test_that("an unresolved near-boundary case is honestly undecided, not guessed", {
+  # Neither a witness (b_upper ~ 2e-4) nor an in-box PSD matrix is found.
+  R <- matrix(c(
+    1, 0.57, -0.51, -0.95, 0.98,
+    0.57, 1, 0.34, -0.3, 0.53,
+    -0.51, 0.34, 1, 0.72, -0.6,
+    -0.95, -0.3, 0.72, 1, -0.97,
+    0.98, 0.53, -0.6, -0.97, 1
+  ), 5, 5)
+  res <- check_corr_psd(R, decimals = 2)
   expect_equal(res$verdict, "undecided")
   expect_equal(res$tier, "pocs")
-  expect_false(identical(res$verdict, "inconsistent")) # never a false inconsistent
+  expect_false(res$certified)
 })
 
 test_that(".pocs_consistent returns a verified in-box matrix when one exists", {

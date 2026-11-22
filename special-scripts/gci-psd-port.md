@@ -4,13 +4,15 @@
 
 The Gaussian correlation inequality (GCI) and positive semidefiniteness (PSD) of correlation matrices are connected, but only in one direction. PSD is a *precondition* of the GCI and the main tool in Royen's (2014) proof. The GCI itself produces no new constraint on correlation matrices, so it offers no new test of the kind `port` performs.
 
-Working through the proof does bring out a block-level structure that is useful for `port`:
+Working through the proof brings out a block-level structure that looks useful for `port`. On closer examination, and in simulation (Section 6), the three proposals it suggests do not pay off:
 
-1. A **block witness** built from canonical correlations. Its single-variable special case gives the same criterion as `port`'s R² localizer.
-2. A possible **`block` localization class**.
-3. A cheap **block-shrinkage construction** for certifying consistency.
+1. A **block witness** built from canonical correlations (Section 3). It is a valid certificate, but at the reported point it fires for *every* partition, so it carries no partition-specific information. Its extra detection power comes from adding more test directions, not from the block structure, and a simpler family does much better.
+2. A **`block` localization class** (Section 4). It is close to a tautology and adds little to the existing localizer.
+3. A **block-shrinkage construction** (Section 5). The supporting bound does not describe the construction, and in simulation it certified no case the existing tiers missed.
 
-None of these depend on the GCI. They are classical multivariate analysis (Schur complements; Hotelling, 1936), which Royen's proof happens to put on display.
+The simulation did turn up a real improvement, which has been implemented: a **sparse witness search by greedy backward elimination over principal submatrices** (Section 6). It certifies most of the cases the previous witness search left undecided, at polynomial cost.
+
+None of this depends on the GCI. The block material is classical multivariate analysis (Schur complements; Hotelling, 1936), which Royen's proof happens to put on display.
 
 ---
 
@@ -30,7 +32,7 @@ $$
 P\big(|X_i| \le t_i \;\; \forall i \le n\big) \;\ge\; P\big(|X_i| \le t_i \;\; \forall i \le n_1\big)\; P\big(|X_i| \le t_i \;\; \forall\, n_1 < i \le n\big).
 $$
 
-The general statement for symmetric convex sets $K, L$, $\mu(K \cap L) \ge \mu(K)\,\mu(L)$, follows by approximation: every closed symmetric convex set is a countable intersection of symmetric strips $\{x : |\langle x, v\rangle| \le t\}$ (Latała & Matlak, 2017). Without loss of generality, $C$ is positive definite.
+The general statement for symmetric convex sets $K, L$, $\mu(K \cap L) \ge \mu(K)\,\mu(L)$, follows by approximation: every closed symmetric convex set is a countable intersection of symmetric strips $\{x : |\langle x, v\rangle| \le t\}$ (Latała & Matlak, 2017; Panchenko, 2020). Without loss of generality, $C$ is positive definite.
 
 ### Step 1: Interpolation
 
@@ -109,11 +111,27 @@ There are two cases.
    \big|C(\tau)_J\big| = |C_{J_1}|\,|C_{J_2}| \prod_k \big(1 - \tau^2 \rho_k^2\big).
    $$
 
-4. Every factor $1 - \tau^2 \rho_k^2$ lies in $[0, 1]$ and is nonincreasing in $\tau \in [0, 1]$. So $|C(\tau)_J|$ is **nonincreasing in $\tau$**.
+4. Every factor $1 - \tau^2 \rho_k^2$ lies in $[0, 1]$ and is nonincreasing in $\tau \in [0, 1]$. So $|C(\tau)_J|$ is **nonincreasing in $\tau$**, that is, $a_J(\tau) := -\partial_\tau |C(\tau)_J| \ge 0$.
 
 **Interpretation.** Royen's interpolation turns down every canonical correlation between the two blocks by the factor $\tau$. At $\tau = 0$ they are all zero (independent blocks); at $\tau = 1$ they take their actual values.
 
-Latała and Matlak (2017) use the same $B^\top B \succeq 0$ structure. The remaining steps of the proof turn these sign facts into a formula for $\partial f / \partial \tau$, the $\tau$-derivative of the multivariate gamma density. That formula is a sum of mixed partial derivatives $\partial^{|J|} / \partial x_J$ with nonnegative coefficients $a_J(\tau) \ge 0$. Integrating over the rectangle then shows that the probability is nondecreasing in $\tau$.
+### Step 4: From sign facts to probabilities
+
+This step is where the multivariate gamma structure, rather than PSD alone, does the work. Write $f(\cdot, \tau)$ for the density of $Z(\tau) = \tfrac12 X(\tau)^2$ (coordinatewise).
+
+1. Differentiating the Laplace transform $|I + \Lambda C(\tau)|^{-1/2}$ in $\tau$ gives
+
+   $$
+   \tfrac12 \sum_{J \ne \emptyset} a_J(\tau)\, \big|I + \Lambda C(\tau)\big|^{-3/2} \prod_{j \in J} \lambda_j .
+   $$
+
+2. $|I + \Lambda C(\tau)|^{-3/2}$ is itself the Laplace transform of a **different** density $h$: the multivariate gamma density with shape $3/2$ and the same $C(\tau)$. Multiplying a Laplace transform by $\prod_{j \in J} \lambda_j$ corresponds to taking the mixed partial derivative $\partial^{|J|} h / \partial x_J$ (Latała & Matlak, 2017, Lemmas 7–8). Hence
+
+   $$
+   \frac{\partial f}{\partial \tau}(x, \tau) = \tfrac12 \sum_{J \ne \emptyset} a_J(\tau)\, \frac{\partial^{|J|} h}{\partial x_J}(x).
+   $$
+
+3. Integrating over the rectangle $\prod_i [0, s_i]$ turns each mixed partial into an integral of $h$ over a face of the rectangle, because the boundary terms at $x_i = 0$ vanish. These integrals are nonnegative, and so are the $a_J(\tau)$, so the probability is nondecreasing in $\tau$.
 
 ### What PSD does in the proof
 
@@ -163,11 +181,11 @@ $$
 P\big(|X_i| \le t_i \;\forall i\big) \;\ge\; \prod_i P\big(|X_i| \le t_i\big)
 $$
 
-is already **Šidák's (1967) inequality**. Royen's contribution is the version where *each side is a block* of several coordinates, or more generally any pair of symmetric convex sets.
+is already the **Khatri–Šidák inequality** (Khatri, 1967; Šidák, 1967). Royen's contribution is the version where *each side is a block* of several coordinates, or more generally any pair of symmetric convex sets.
 
 ---
 
-## 3. Where the overlap is useful for `port`: a block witness
+## 3. A block witness
 
 ### Proposition (block PSD criterion)
 
@@ -188,6 +206,8 @@ $$
 1. Since $R_{11}$ is positive definite, $R$ is PSD if and only if its Schur complement $R_{22} - R_{21} R_{11}^{-1} R_{12}$ is PSD.
 2. Multiplying on both sides by $R_{22}^{-1/2}$ preserves this property. Since $R_{22}^{-1/2} R_{21} R_{11}^{-1} R_{12} R_{22}^{-1/2} = K^\top K$, the condition becomes $I - K^\top K \succeq 0$.
 3. The eigenvalues of $K^\top K$ are the squared singular values of $K$, so $I - K^\top K \succeq 0$ holds if and only if $\sigma_{\max}(K) \le 1$. $\square$
+
+**Consequence: the criterion does not depend on the partition.** The right-hand side of the equivalence does not mention the partition. So if $R$ is not PSD, *every* partition whose diagonal blocks are positive definite has $\rho_1 > 1$. At the reported point, "the canonical correlation between blocks A and B exceeds 1" says nothing about A and B in particular; it only restates that $R$ is not PSD.
 
 ### Witness vector
 
@@ -210,6 +230,8 @@ If $\rho_1 > 1$, then $v^\top R v < 0$. This $v$ can be used directly as a test 
 $$
 v^\top R\, v + \delta\big(\|v\|_1^2 - \|v\|_2^2\big) < 0.
 $$
+
+It is still a single vector, so it is a certificate of the same kind `port` already produces. Since every partition yields one, its value lies only in which *direction* it supplies to the box bound. Section 6 shows that this is worth something, but much less than sparse directions are.
 
 ### Special case: one variable versus the rest
 
@@ -235,7 +257,7 @@ $$
 - With $s = 1$ this is $1 - R_i^2$ (`port`'s choice).
 - With $s = \rho_1 = R_i$ it is $2R_i^2(1 - R_i)$.
 
-Both are negative exactly when $R_i > 1$, so they certify the same thing when rounding is ignored. With rounding taken into account, the penalty $\delta\big(\|v\|_1^2 - \|v\|_2^2\big)$ depends on the direction. Choosing $s$ to make the bound as negative as possible could therefore give slightly sharper verdicts near the boundary. This is a cheap one-dimensional optimization.
+Both are negative exactly when $R_i > 1$, so they certify the same thing when rounding is ignored. The raw values cannot be compared to rank the directions, because the box bound is homogeneous of degree 2 in $v$ and $\|v_s\|$ depends on $s$. With rounding taken into account, the penalty $\delta\big(\|v\|_1^2 - \|v\|_2^2\big)$ depends on the direction, so a one-dimensional search over $s$ could in principle sharpen verdicts near the boundary. In simulation it almost never mattered (2 of 202 undecided cases; Section 6), so it has not been implemented.
 
 ### Precondition
 
@@ -243,27 +265,26 @@ The Proposition requires $R_{11}$ and $R_{22}$ to be positive definite. This mat
 
 ---
 
-## 4. A proposed `block` localization class
+## 4. A `block` localization class (not recommended)
 
-`port`'s current verdict classes are `cell`, `cell_tentative`, `triad`, `variable`, `joint`, `diffuse`, and `none`. A `block` class would sit naturally between `variable` and `joint` / `diffuse`. It would describe the following situation:
+`port`'s current verdict classes are `cell`, `cell_tentative`, `triad`, `variable`, `joint`, `diffuse`, and `none`. A `block` class would sit between `variable` and `joint` / `diffuse` and describe this situation:
 
 > Instrument A's items are internally consistent, and instrument B's items are internally consistent, but the reported cross-correlations imply a canonical correlation above 1.
 
-In terms of the Proposition: $R_{11}$ and $R_{22}$ are each PSD within their rounding boxes, but the block witness certifies $\rho_1 > 1$ in the full rounding box.
+In box terms: the rounding boxes of $R_{11}$ and $R_{22}$ each contain a PSD matrix, but the full box does not.
 
-**Choosing the partition.** Searching over all partitions grows exponentially with the number of variables, so the partitions would come from the paper's design, for example:
+**Why it adds little.**
 
-- two questionnaires or scales (items of A versus items of B),
-- predictors versus outcomes,
-- time point 1 versus time point 2 in a longitudinal design.
+1. *Detection is unaffected.* Whether the full box is inconsistent is decided by the witness search, whatever the partition.
+2. *The canonical correlation is not needed.* Both premises can be checked by running `check_corr_psd()` on the two diagonal submatrices.
+3. *The conclusion is close to a tautology.* If both diagonal blocks are consistent, setting every cross-block cell to 0 gives a PSD block-diagonal matrix. So freeing the cross-block cells always restores consistency, and "the fault lies in the cross-block cells" follows automatically. The existing localizer already tries to narrow the fault further, to cells, triads or variables.
+4. *Partitions are costly.* There are $2^{p-1} - 1$ bipartitions, so they would have to come from the paper's design (two scales, predictors versus outcomes, two time points), adding an argument to `localize_psd_fault()`.
 
-`localize_psd_fault()` could accept an optional variable partition, or a list of partitions, and report a block-level fault when the within-block checks pass but the block witness certifies inconsistency.
+**What might be worth keeping.** As a *reporting* device, a sentence such as "the reported correlations imply a canonical correlation of 1.04 between scale A and scale B" is a vivid, effect-size-style description in the spirit of van Tilburg and van Tilburg's R² > 1. If added, it should be descriptive output for a user-supplied partition, not a verdict class. It is low priority.
 
 ---
 
-## 5. Block shrinkage for certifying consistency
-
-The interpolation identity from Section 1 also gives a bound useful on the consistency side.
+## 5. Block shrinkage for certifying consistency (not recommended)
 
 **Claim.** For $R(\tau) = \tau R + (1 - \tau)\operatorname{diag}(R_{11}, R_{22})$,
 
@@ -277,9 +298,72 @@ $$
    $\lambda_{\min}\big(\tau A + (1-\tau) B\big) \ge \tau\, \lambda_{\min}(A) + (1-\tau)\, \lambda_{\min}(B)$.
 2. The eigenvalues of a block-diagonal matrix are those of its blocks, so $\lambda_{\min}\big(\operatorname{diag}(R_{11}, R_{22})\big) = \min\{\lambda_{\min}(R_{11}), \lambda_{\min}(R_{22})\}$. $\square$
 
-**Use.** When the diagonal blocks are well conditioned, shrinking only the **cross-block** cells toward zero, as far as their rounding boxes allow, is a cheap way to construct a candidate PSD matrix inside the box. The candidate can then be verified with Rump's (2006) one-sided Cholesky test, as in `port`'s existing certification path.
+**Why it does not support the proposed construction.** The proposal was to shrink only the cross-block cells toward zero, as far as their rounding boxes allow, and verify the result with Rump's (2006) one-sided Cholesky test.
 
-`port`'s existing construction, which shrinks the box-edge matrix toward the diagonal, is the special case where every block is a single variable. Block shrinkage keeps the within-block entries fixed, so it searches a different family of candidates.
+1. Shrinking within the box subtracts up to $\delta$ from each cell's absolute value. $R(\tau)$ instead *scales* every cross-block cell by $\tau$. The two coincide only by accident, so the bound says nothing about the matrix actually constructed.
+2. In the interesting case, $\lambda_{\min}(R) < 0$, the bound is weak exactly where it would be needed.
+3. Behind the existing constructions, `port` already runs a POCS search for an in-box PSD matrix.
+
+In simulation, cross-block shrinkage over *all* bipartitions certified none of the 202 undecided cases (Section 6).
+
+---
+
+## 6. Simulation, and what was implemented
+
+### Design
+
+The script `special-scripts/gci-psd-simulation.R` (seed 2026, about 2 minutes) generates near-boundary rounded matrices:
+
+1. a correlation matrix of rank 2 to $p - 2$ plus small diagonal noise,
+2. one off-diagonal cell perturbed by up to ±0.08,
+3. rounding to 2 decimals ($\delta = 0.005$).
+
+A case counts as **undecided** if `port`'s original witness search finds no certificate and neither the constructions nor POCS certify consistency. On each undecided case the script tries the candidate families below. Every candidate goes through the rigorous box bound, so every count is a genuine certificate.
+
+### Results
+
+| | p = 5 | p = 6 | p = 8 | p = 10 |
+|---|---|---|---|---|
+| Matrices | 2436 | 2457 | 2473 | 1488 |
+| Inconsistent (original search) | 466 | 483 | 507 | 282 |
+| Consistent (construction or POCS) | 1960 | 1941 | 1880 | 1133 |
+| **Undecided (original search)** | **10** | **33** | **86** | **73** |
+| … certified by *s*-optimised R² direction | 0 | 2 | 0 | 0 |
+| … certified by block witness, all bipartitions | 3 | 16 | 25 | – |
+| … certified consistent by cross-block shrinkage | 0 | 0 | 0 | 0 |
+| … certified by submatrix eigenvectors, sizes 3–4 | 7 | 26 | 48 | 20 |
+| … certified by submatrix eigenvectors, all sizes | 7 | 30 | 76 | 67 |
+| … certified by greedy elimination (implemented) | 7 | 30 | 75 | 66 |
+
+The block witness was not run at $p = 10$ (511 bipartitions per case).
+
+### Interpretation
+
+The block witness helps only because it adds directions. What matters is **sparsity**. The rounding penalty $\delta\big(\|v\|_1^2 - \|v\|_2^2\big)$ grows with the spread of $v$ across coordinates, so directions supported on few variables pay less of it. The bottom eigenvectors of principal submatrices are such directions. `port` already used submatrices of size 3, but only those, and only for $p \le 12$. Restricting to sizes 3–4 loses much of the gain as $p$ grows, so the useful subsets are of intermediate size.
+
+### Implementation
+
+Exhaustive search over subsets costs $O(2^p)$. `greedy_subset_witness()` (`R/witness.R`) approximates it by backward elimination:
+
+1. Start from all $p$ variables.
+2. For each variable in the current set, form the bottom eigenvector of the submatrix without it and evaluate the rigorous box bound.
+3. Drop the variable whose removal gives the most negative bound; stop at the first certificate, or at size 3 (size 2 is covered by the coordinate pairs).
+
+This costs $O(p^2)$ small eigendecompositions and recovered 178 of the 180 certificates (99%) that exhaustive search found. It runs only when the existing directions (eigenvectors, pairs, triples, residual directions, polishing) certify nothing, so verdicts and witnesses that were already decided are unchanged. The best greedy direction is then polished. Both the uniform path (`.witness_search()`) and the heterogeneous-box path (`.box_inconsistent()`, used by the localizers and the disattenuation checks) use it.
+
+With greedy elimination in place, dropping the triples family lost no certificate in any run. The triples are kept anyway as a cheap first pass, since `.box_inconsistent()` sits inside the localizers' feasibility oracle.
+
+**A corrected regression test.** `tests/testthat/test-escalation.R` contained a 5 × 5 matrix described as "genuinely boundary-only", expected to stay `undecided`. The new search certifies it as inconsistent with a witness supported on variables 1–4. An exact integer-arithmetic check confirms the certificate: the maximum of $v^\top X v$ over the rounding box is $-2.27 \times 10^{-5}\, \|v\|_2^2 < 0$. The original description was wrong; the old search simply could not find the sparse witness. The test now expects `inconsistent`, and a new test uses a matrix that remains undecided.
+
+### What remains undecided
+
+The undecided rate after the change was 0.1–0.5% of generated matrices. Some of these may be consistent with POCS failing to find a point. Others may be inconsistent but beyond any single-vector witness. In general, the box is inconsistent if and only if some PSD matrix $W \ne 0$ satisfies
+
+$$
+\max_{X \in \text{box}} \langle W, X \rangle = \langle W, R \rangle + \delta \sum_{i \ne j} |W_{ij}| < 0
+$$
+
+(separation of the compact box from the closed PSD cone; uniform unclipped box shown). Single vectors are the rank-one case $W = v v^\top$. A sum of rank-one terms can succeed where each term fails, because the off-diagonal absolute values can cancel. Finding the best $W$ is a semidefinite program. That would make the inconsistency test complete, at the cost of an SDP solver, which `port` deliberately avoids. It would be worth revisiting only if undecided verdicts turn out to matter in practice.
 
 ---
 
@@ -287,7 +371,9 @@ $$
 
 - Hotelling, H. (1936). Relations between two sets of variates. *Biometrika*, 28(3/4), 321–377.
 - Hussey, I. (2026). *port: Positive-semi-definiteness Of Rounded correlation Tables* [Computer software]. https://github.com/ianhussey/port. doi:10.5281/zenodo.21434236
+- Khatri, C. G. (1967). On certain inequalities for normal distributions and their applications to simultaneous confidence bounds. *Annals of Mathematical Statistics*, 38(6), 1853–1867.
 - Latała, R., & Matlak, D. (2017). Royen's proof of the Gaussian correlation inequality. In B. Klartag & E. Milman (Eds.), *Geometric Aspects of Functional Analysis* (Lecture Notes in Mathematics, Vol. 2169, pp. 265–275). Springer. Preprint: arXiv:1512.08776
+- Panchenko, D. (2020). *Gaussian correlation inequality* [Lecture notes]. https://sites.stat.washington.edu/people/mdperlma/542%20Multivariate%20Analysis%20Material/Panchenko%20re%20Royen.pdf
 - Royen, T. (2014). A simple proof of the Gaussian correlation conjecture extended to some multivariate gamma distributions. *Far East Journal of Theoretical Statistics*, 48(2), 139–145. arXiv:1408.1028
 - Rump, S. M. (2006). Verification of positive definiteness. *BIT Numerical Mathematics*, 46(2), 433–452.
 - Šidák, Z. (1967). Rectangular confidence regions for the means of multivariate normal distributions. *Journal of the American Statistical Association*, 62(318), 626–633.

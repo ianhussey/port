@@ -177,7 +177,8 @@
 # b_upper, margin). Directions: bottom eigenvectors of the box midpoint, all
 # coordinate pairs, (small p) 3x3 submatrix eigenvectors, and the p regression-
 # residual directions of the midpoint -- the same family that powers the base
-# checker, all evaluated with the rigorous box bound, then polished.
+# checker, all evaluated with the rigorous box bound, then polished; if none
+# certifies, the sparse greedy-subset search of the midpoint is tried as well.
 .box_inconsistent <- function(lo, hi, off, triples_max_p = 12L) {
   p <- nrow(lo)
   mid <- matrix(0, p, p)
@@ -224,6 +225,14 @@
   if (!is.null(best)) {
     pol <- .polish_witness_box(lo, hi, off, best$v)
     if (pol$B_upper < best$B_upper) best <- pol
+  }
+  if (is.null(best) || best$B_upper >= 0) {
+    g <- greedy_subset_witness(mid, function(v) {
+      .witness_box_bound(lo, hi, off, v)
+    })
+    if (!is.null(g) && (is.null(best) || g$B_upper < best$B_upper)) {
+      best <- .polish_witness_box(lo, hi, off, g$v)
+    }
   }
   list(
     inconsistent = !is.null(best) && best$B_upper < 0,

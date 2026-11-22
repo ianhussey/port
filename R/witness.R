@@ -128,7 +128,9 @@
 #      (connects to the exact 3x3 determinant condition);
 #   4. the p regression-residual directions v = (M_{-i}^{-1} c_i ; -1), for which
 #      v'Rv = (1 - R^2_i): the van Tilburg R^2 > 1 criterion as witness seeds.
-# The best candidate is then polished by the fixed-point iteration above.
+# The best candidate is then polished by the fixed-point iteration above. If
+# that still certifies nothing, the sparse greedy-subset search
+# (greedy_subset_witness, below) supplies further candidates, also polished.
 .witness_search <- function(R, delta, triples_max_p = 12L) {
   p <- nrow(R)
   cands <- vector("list", 0L)
@@ -176,6 +178,50 @@
   if (!is.null(best)) {
     pol <- .polish_witness(R, delta, best$v)
     if (pol$B_upper < best$B_upper) best <- pol
+  }
+  if (is.null(best) || best$B_upper >= 0) {
+    g <- greedy_subset_witness(R, function(v) .witness_bound(R, v, delta))
+    if (!is.null(g) && (is.null(best) || g$B_upper < best$B_upper)) {
+      best <- .polish_witness(R, delta, g$v)
+    }
+  }
+  best
+}
+
+# Bottom eigenvector of the principal submatrix M[S, S], zero-padded to length p.
+subset_bottom_eigvec <- function(M, S) {
+  v <- numeric(nrow(M))
+  v[S] <- eigen(M[S, S, drop = FALSE], symmetric = TRUE)$vectors[, length(S)]
+  v
+}
+
+# Sparse witness search by greedy backward elimination. The rounding penalty in
+# the box bound grows with ||v||_1^2 - ||v||_2^2, so directions supported on few
+# variables pay less of it; the bottom eigenvectors of principal submatrices are
+# such directions. Exhaustive search over subsets is O(2^p), so we drop one
+# variable at a time, each time the one whose removal gives the most negative
+# bound, down to size 3 (size 2 is covered by the coordinate pairs). This costs
+# O(p^2) small eigendecompositions and, in simulation, recovers nearly every
+# certificate the exhaustive search finds (special-scripts/gci-psd-simulation.R).
+# `bound(v)` must return a rigorous bound record with element `B_upper`; every
+# candidate passes through it, so the search cannot affect soundness. Stops at
+# the first certificate. Returns the best record, or NULL for p <= 3.
+greedy_subset_witness <- function(M, bound) {
+  S <- seq_len(nrow(M))
+  best <- NULL
+  while (length(S) > 3L) {
+    trials <- lapply(seq_along(S), function(k) {
+      bound(subset_bottom_eigvec(M, S[-k]))
+    })
+    scores <- vapply(trials, function(t) t$B_upper, numeric(1))
+    k <- which.min(scores)
+    if (is.null(best) || scores[k] < best$B_upper) {
+      best <- trials[[k]]
+    }
+    if (best$B_upper < 0) {
+      break
+    }
+    S <- S[-k]
   }
   best
 }
