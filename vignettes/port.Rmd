@@ -28,7 +28,7 @@ A correlation matrix is only valid if it is positive semidefinite (PSD). Reporte
 
 - `inconsistent`: no PSD matrix fits the box, so the reported values cannot be a genuine (complete-data, single-sample Pearson) correlation matrix (a rigorous certificate; this is the payload). The label follows the convention of other forensic tools such as GRIM;
 - `consistent`: a PSD matrix in the box is exhibited (or none was ruled out);
-- `undecided`: precision-limited; the box grazes the PSD boundary.
+- `undecided`: neither could be shown. The table may be inconsistent with a witness the search missed, or the box may only graze the PSD boundary.
 
 ## Checking a matrix
 

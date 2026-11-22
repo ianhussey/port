@@ -304,14 +304,48 @@ test_that("inconsistent verdicts surface the benign-generator caution", {
 test_that("greedy subset elimination certifies a case the dense search missed", {
   # From special-scripts/sparse-witness-simulation.R: undecided before the greedy
   # search was added (no dense witness, no in-box PSD matrix found).
-  R <- matrix(c(
-    1, -0.83, 0.36, 0.4, 0.67, 0.3,
-    -0.83, 1, -0.09, -0.45, -0.33, -0.11,
-    0.36, -0.09, 1, 0.85, 0.55, -0.09,
-    0.4, -0.45, 0.85, 1, 0.29, -0.29,
-    0.67, -0.33, 0.55, 0.29, 1, 0.72,
-    0.3, -0.11, -0.09, -0.29, 0.72, 1
-  ), 6, 6)
+  R <- matrix(
+    c(
+      1,
+      -0.83,
+      0.36,
+      0.4,
+      0.67,
+      0.3,
+      -0.83,
+      1,
+      -0.09,
+      -0.45,
+      -0.33,
+      -0.11,
+      0.36,
+      -0.09,
+      1,
+      0.85,
+      0.55,
+      -0.09,
+      0.4,
+      -0.45,
+      0.85,
+      1,
+      0.29,
+      -0.29,
+      0.67,
+      -0.33,
+      0.55,
+      0.29,
+      1,
+      0.72,
+      0.3,
+      -0.11,
+      -0.09,
+      -0.29,
+      0.72,
+      1
+    ),
+    6,
+    6
+  )
   res <- check_corr_psd(R, decimals = 2)
   expect_equal(res$verdict, "inconsistent")
   expect_true(res$certified)

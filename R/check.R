@@ -72,16 +72,19 @@
 #' \describe{
 #'   \item{`inconsistent`}{No PSD matrix exists in the rounding box. Reached at
 #'     tier `precheck` (a reported entry is out of range even at its nearest box
-#'     edge) or `witness` (a test vector `v` gives a rigorously-negative upper
-#'     bound `B_upper < 0`). Always certified.}
+#'     edge), `witness` (a test vector `v` gives a rigorously-negative upper
+#'     bound `B_upper < 0`), or `pocs` (the same bound, for a test vector that
+#'     only the alternating-projection escalation found). Always certified.}
 #'   \item{`consistent`}{`certified = TRUE` when an explicit in-box matrix was
 #'     verified PSD (Rump 2006) -- a rigorous existence certificate.
 #'     `certified = FALSE` marks a *presumed* consistent: the witness margin is
 #'     comfortably positive but no in-box PSD matrix was exhibited, so the
 #'     verdict means only "not shown inconsistent".}
-#'   \item{`undecided`}{The witness margin sits in the precision-limited
-#'     ambiguous zone `[0, tau]` and no in-box PSD matrix could be certified,
-#'     including by the alternating-projection escalation.}
+#'   \item{`undecided`}{Neither proof was found: the witness margin sits in
+#'     the ambiguous zone `[0, tau]`, no in-box PSD matrix could be certified,
+#'     and the alternating-projection escalation produced neither such a matrix
+#'     nor a witness. The table may be inconsistent with a witness the search
+#'     missed, or consistent only on the boundary of the PSD cone.}
 #' }
 #'
 #' @section Rigor guarantee (and what it does not prove):
@@ -111,11 +114,12 @@
 #' @param delta Optional absolute half-width(s) of the rounding box: a scalar or
 #'   a `p x p` symmetric matrix. Overrides `decimals`; requires
 #'   `rounding = "nearest"`.
-#' @param tau Non-negative width of the precision-limited ambiguous zone. When
-#'   the witness upper bound lies in `[0, tau]` and no in-box PSD matrix is
-#'   certified by the cheap constructions, the result escalates to the
-#'   self-contained alternating-projection search, and is reported `undecided`
-#'   if that too fails. Defaults to `10 *` the (maximum) box half-width.
+#' @param tau Non-negative width of the ambiguous zone. When the witness upper
+#'   bound lies in `[0, tau]` and no in-box PSD matrix is certified by the cheap
+#'   constructions, the result escalates to the self-contained
+#'   alternating-projection search, which looks for an in-box PSD matrix and
+#'   then for a witness direction, and is reported `undecided` if both fail.
+#'   Defaults to `10 *` the (maximum) box half-width.
 #' @param rounding The rule that produced the reported values: `"nearest"`
 #'   (default; symmetric box of half-width `0.5 * 10^(-decimals)`),
 #'   `"truncate"` (toward zero), `"floor"`, or `"ceiling"` (asymmetric boxes of
@@ -357,15 +361,13 @@ check_corr_psd <- function(
     # Last resort before "undecided": if the projections cannot bring the box
     # and the PSD cone together, try the direction that separates them.
     bb <- .box_bounds(R, delta)
-    wp <- .witness_bound(
-      R,
-      .pocs_witness_direction(bb$lo, bb$hi, bb$off),
-      delta
-    )
+    wp <- .pocs_witness(bb$lo, bb$hi, bb$off, function(v) {
+      .witness_bound(R, v, delta)
+    })
     if (wp$B_upper < 0) {
       return(.new_corr_psd_check(
         verdict = "inconsistent",
-        tier = "witness",
+        tier = "pocs",
         delta = delta,
         p = p,
         certified = TRUE,
@@ -507,16 +509,13 @@ check_corr_psd <- function(
   }
 
   # Last resort before "undecided", as in the uniform path.
-  wp <- .witness_box_bound(
-    bx$lo,
-    bx$hi,
-    bx$off,
-    .pocs_witness_direction(bx$lo, bx$hi, bx$off)
-  )
+  wp <- .pocs_witness(bx$lo, bx$hi, bx$off, function(v) {
+    .witness_box_bound(bx$lo, bx$hi, bx$off, v)
+  })
   if (wp$B_upper < 0) {
     return(.new_corr_psd_check(
       verdict = "inconsistent",
-      tier = "witness",
+      tier = "pocs",
       delta = bx$half_max,
       p = p,
       certified = TRUE,

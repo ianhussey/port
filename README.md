@@ -31,7 +31,7 @@ Question: Does there exist a symmetric `X` in this box that is PSD?
 |---|---|
 | no such `X` | **`inconsistent`** (a genuine correlation matrix cannot round to `R`) |
 | some `X` exists | **`consistent`** |
-| can't tell at this precision | **`undecided`** |
+| neither could be shown | **`undecided`** |
 
 ## The method
 
@@ -47,13 +47,13 @@ Clipping the box to `[−1, 1]` only shrinks it, so ignoring that clip keeps thi
 vᵀRv + δ·(‖v‖₁² − ‖v‖₂²) < 0   ⟹   INCONSISTENT.
 ```
 
-The algorithm takes `v` from the smallest eigenvector of `R` (plus cheap coordinate-pair and 3×3-submatrix directions that connect to the exact minor conditions), and reports the most inconsistency-favourable one. `v` need not be an exact eigenvector: it is only a *test direction*, so its inaccuracy never invalidates the certificate.
+The algorithm takes `v` from the smallest eigenvectors of `R` (plus cheap coordinate-pair, 3×3-submatrix and regression-residual directions that connect to the exact minor conditions), polishes the best one, and reports the most inconsistency-favourable. If none of these certifies anything and no in-box PSD matrix is found, it searches for a sparse `v` by greedy elimination over principal submatrices. `v` need not be an exact eigenvector: it is only a *test direction*, so its inaccuracy never invalidates the certificate.
 
 ### Tiers
 
 1. `precheck`: if any reported `|R_ij| − δ > 1`, the entry is out of range even at its nearest box edge: immediately inconsistent. `O(p²)`, no eigendecomposition.
 2. `witness`: the rigorous bound above (primary path, all `p`).
-3. `pocs`: a self-contained escalation (alternating projections onto the box and the PSD cone) used only in the precision-limited ambiguous zone; see below.
+3. `pocs`: a self-contained escalation (alternating projections onto the box and the PSD cone) used only in the ambiguous zone, where the first two tiers prove nothing either way. It can end in `consistent`, `inconsistent` or `undecided`; see below.
 
 ## The rigor guarantee
 
@@ -100,7 +100,7 @@ Every result carries a `certified` flag. `inconsistent` is always certified (a w
 
 Consistency is certified constructively: the tool exhibits an explicit in-box matrix (the reported matrix itself; the box-edge matrix shrunk toward the diagonal; the box-clipped PSD projection of `R`) and verifies it PSD with a one-sided Cholesky test (Rump, *Verification of positive definiteness*, BIT 46:433–452, 2006): `A` is provably PSD if `chol(A − c·I)` completes, where `c` rigorously bounds the Cholesky backward error. Any success is a rigorous proof that a PSD matrix exists in the box.
 
-When no cheap construction succeeds and the witness margin sits in the precision-limited zone `[0, τ]` (default `τ = 10·δ`), the result escalates to a self-contained projections-onto-convex-sets (POCS) search: alternating Euclidean projections onto the box and onto the PSD cone (tightened by a small margin `μ` for a strictly positive-definite result). For two closed convex sets this converges to a point in their intersection whenever one exists; the recovered in-box matrix is then independently Rump-verified before a `consistent` verdict is accepted. A failure to find a verifiable point is inconclusive (`undecided`), never a rigorous inconsistency. This tier needs no external solver.
+When no cheap construction succeeds and the witness margin sits in the ambiguous zone `[0, τ]` (default `τ = 10·δ`), the result escalates to a self-contained projections-onto-convex-sets (POCS) search: alternating Euclidean projections onto the box and onto the PSD cone (tightened by a small margin `μ` for a strictly positive-definite result). For two closed convex sets this converges to a point in their intersection whenever one exists; the recovered in-box matrix is then independently Rump-verified before a `consistent` verdict is accepted. A failure to find a verifiable point is inconclusive, never a rigorous inconsistency. Before the verdict becomes `undecided`, the same projections are run without the margin. If the box misses the cone, the iterates approach the closest pair of points, and the bottom eigenvector of the in-box one is tried as a witness `v` through the rigorous bound; a negative bound gives `inconsistent` at this tier. `undecided` therefore means that neither proof was found. The table may be inconsistent with a witness the search missed, or consistent only on the boundary of the cone, where no strictly positive-definite in-box matrix exists for the Cholesky test. This tier needs no external solver.
 
 ## Installation
 
@@ -232,7 +232,7 @@ This package assembles established results from verified numerical computing; th
 
 **What this means, for readers outside numerical linear algebra.** Correlations computed from one complete dataset obey a rule that follows from the arithmetic alone: every weighted sum of the standardized variables has a variance of zero or more. In matrix terms, `v'Rv ≥ 0` for every vector of weights `v`. A printed table is rounded, so each true correlation is only known to lie within `±δ` of the printed value. The expression `v'Rv + δ(‖v‖₁²−‖v‖₂²)` is the largest variance the weighted sum `v` could have under *any* choice of true values within those ranges. If it is negative for even one `v`, some weighted sum would need a negative variance however the rounding went, so no dataset can have produced the table. That one vector is the whole proof. Anyone can check it with a few lines of arithmetic, without trusting this package, a solver, or a tolerance.
 
-**What follows for `port`.** An `inconsistent` verdict is a proof and not a numerical judgment. The search for `v` (eigenvectors, polishing, greedy elimination, alternating projections) can be as heuristic as it likes, because a poor guess only fails to prove something; it cannot prove something false. The reverse does not hold: failing to find such a vector proves nothing. That is why `consistent` needs a certificate of its own (an explicit valid matrix inside the ranges), and why `undecided` exists. Finding the *best* `v` is not a convex problem, and exact search over all supports and sign patterns costs on the order of `3ᵖ`, so heuristics are unavoidable for larger tables. A complete test does exist, as a semidefinite program. The matrix it returns could be checked with the same kind of arithmetic as a single vector, so the proof would not rest on the solver's tolerances. But the search would need a solver, and this package is built to run without one. In a simulation of tables near the boundary, every case the simpler heuristics left `undecided` had a single-vector proof, and greedy elimination and alternating projections between them found one each time (`special-scripts/sparse-witness.md`).
+**What follows for `port`.** An `inconsistent` verdict is a proof and not a numerical judgment. The search for `v` (eigenvectors, polishing, greedy elimination, alternating projections) can be as heuristic as it likes, because a poor guess only fails to prove something; it cannot prove something false. The reverse does not hold: failing to find such a vector proves nothing. That is why `consistent` needs a certificate of its own (an explicit valid matrix inside the ranges), and why `undecided` exists. Finding the *best* `v` is not a convex problem, and exact search over all supports and sign patterns costs on the order of `3ᵖ`, so heuristics are unavoidable for larger tables. A complete test does exist, as a semidefinite program. The matrix it returns could be checked with the same kind of arithmetic as a single vector, so the proof would not rest on the solver's tolerances. But the search would need a solver, and this package is built to run without one. In a simulation of tables near the boundary, each of the 202 cases the simpler heuristics left `undecided` had a single-vector proof, and greedy elimination and alternating projections between them found one each time. The two searches were chosen on those same cases. On 546 fresh cases with up to 20 variables, six stayed `undecided` (`special-scripts/sparse-witness.md`).
 
 **Beyond `port`.** The same reasoning applies to any symmetric matrix reported with a margin of error in each cell, such as covariance matrices, similarity or kernel matrices, and correlation tables assembled from several sources, whenever the question is whether the reported numbers can be valid at all.
 

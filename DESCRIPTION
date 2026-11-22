@@ -1,6 +1,6 @@
 Package: port
 Title: Positive-Semi-Definiteness of Rounded Correlation Tables
-Version: 0.1.0
+Version: 0.1.0.9000
 Authors@R:
     person("Ian", "Hussey", email = "ian.hussey@unibe.ch", role = c("aut", "cre"))
 Description: Forensic meta-science tools for auditing reported correlation

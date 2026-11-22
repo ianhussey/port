@@ -100,7 +100,7 @@ print.corr_psd_check <- function(x, digits = 4, ...) {
 #'
 #' @param x A `corr_psd_check` object.
 #' @return A list with `witness` (the certificate vector `v`, or `NULL` when the
-#'   verdict is not `inconsistent` via the witness tier), `margin` (the value
+#'   verdict is not `inconsistent` by a witness vector), `margin` (the value
 #'   `B = v'Rv + delta*(||v||_1^2 - ||v||_2^2)`), `b_upper` (the rigorous upper
 #'   bound `B_upper`), `verdict` and `tier`.
 #' @examples

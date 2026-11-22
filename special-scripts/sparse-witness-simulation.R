@@ -10,8 +10,11 @@
 # certificate (B_upper >= 0) and neither the constructions nor POCS certify
 # consistency. The original search is .witness_search(sparse = FALSE).
 #
+# The search was tuned on these matrices, so a second part (holdout(), at the
+# end) asks how much of the result carries over to fresh matrices and larger p.
+#
 # Run from the package root:  Rscript special-scripts/sparse-witness-simulation.R
-# Takes about 6 minutes.
+# Takes about 8 minutes.
 
 suppressMessages(pkgload::load_all(".", quiet = TRUE))
 
@@ -98,6 +101,20 @@ cross_shrink <- function(R, S, d) {
   X
 }
 
+# One matrix from the generator, or NULL if the perturbed cell left [-1, 1].
+draw <- function(p) {
+  r <- sample(2:max(2, p - 2), 1)
+  L <- matrix(rnorm(p * r), p)
+  S0 <- cov2cor(tcrossprod(L) + diag(runif(p, 0.001, 0.05)))
+  ij <- sample(p, 2)
+  S0[ij[1], ij[2]] <- S0[ij[2], ij[1]] <- S0[ij[1], ij[2]] +
+    runif(1, -0.08, 0.08)
+  if (any(abs(S0[upper.tri(S0)]) > 1)) {
+    return(NULL)
+  }
+  round(S0, 2)
+}
+
 simulate <- function(p, n, d = 0.005) {
   verdicts <- character(0)
   undec <- NULL
@@ -105,16 +122,10 @@ simulate <- function(p, n, d = 0.005) {
   secs <- c(greedy = 0, greedy_all = 0)
   example <- NULL
   for (k in seq_len(n)) {
-    r <- sample(2:max(2, p - 2), 1)
-    L <- matrix(rnorm(p * r), p)
-    S0 <- cov2cor(tcrossprod(L) + diag(runif(p, 0.001, 0.05)))
-    ij <- sample(p, 2)
-    S0[ij[1], ij[2]] <- S0[ij[2], ij[1]] <- S0[ij[1], ij[2]] +
-      runif(1, -0.08, 0.08)
-    if (any(abs(S0[upper.tri(S0)]) > 1)) {
+    R <- draw(p)
+    if (is.null(R)) {
       next
     }
-    R <- round(S0, 2)
 
     old_inc <- .witness_search(R, d, sparse = FALSE)$B_upper < 0
     if (old_inc) {
@@ -177,8 +188,9 @@ simulate <- function(p, n, d = 0.005) {
     ))
     # greedy elimination without polishing, then as implemented (each round's
     # winner polished on its support), then with every trial polished, then the
-    # margin-free POCS direction (.pocs_witness_direction(), the last resort of
-    # check_corr_psd()), then the single-vector optimum
+    # margin-free POCS direction (.pocs_witness(), the last resort of
+    # check_corr_psd()) with a cap of 1000 iterations and as implemented, then
+    # the single-vector optimum
     raw <- function(v) .witness_bound(R, v, d)
     pol <- function(v) .polish_witness(R, d, v, on_support = TRUE)
     greedy_raw <- isTRUE(.greedy_subset_witness(R, raw, raw)$B_upper < 0)
@@ -189,7 +201,8 @@ simulate <- function(p, n, d = 0.005) {
       system.time(g <- .greedy_subset_witness(R, pol, pol))[["elapsed"]]
     greedy_all <- isTRUE(g$B_upper < 0)
     bb <- .box_bounds(R, d)
-    pocs <- neg(.pocs_witness_direction(bb$lo, bb$hi, bb$off))
+    pocs_1000 <- .pocs_witness(bb$lo, bb$hi, bb$off, raw, 1000L)$B_upper < 0
+    pocs <- .pocs_witness(bb$lo, bb$hi, bb$off, raw)$B_upper < 0
     global <- neg(global_dir(R, d))
     new_inc <- check_corr_psd(R, delta = d)$verdict == "inconsistent"
     if (new_inc && is.null(example)) {
@@ -207,6 +220,7 @@ simulate <- function(p, n, d = 0.005) {
         greedy_raw,
         greedy,
         greedy_all,
+        pocs_1000,
         pocs,
         pocs_only = pocs && !greedy, # where greedy elimination fails
         global,
@@ -243,3 +257,51 @@ for (p in c(5, 6, 8, 10)) {
     dput(res$example)
   }
 }
+
+# Held-out check. The searches were chosen on the matrices above, so "all
+# decided" is an in-sample result. On fresh matrices from the same generator,
+# larger p included: of the cases the original search leaves open (no
+# certificate either way), how many does check_corr_psd() certify, by which
+# search, and how many stay undecided? `pocs_over_1000` counts the POCS
+# certificates that a cap of 1000 iterations would have missed.
+holdout <- function(p, n, d = 0.005) {
+  out <- c(open = 0, sparse = 0, pocs = 0, pocs_over_1000 = 0, undecided = 0)
+  for (k in seq_len(n)) {
+    R <- draw(p)
+    if (is.null(R) || .witness_search(R, d, sparse = FALSE)$B_upper < 0) {
+      next
+    }
+    res <- check_corr_psd(R, delta = d)
+    # "presumed consistent" (margin above tau) skips POCS; run it as simulate()
+    # does, so that "open" means the same thing in both parts
+    if (
+      res$verdict == "consistent" &&
+        (res$certified || !is.null(.pocs_consistent(R, d)))
+    ) {
+      next
+    }
+    out["open"] <- out["open"] + 1
+    if (res$verdict != "inconsistent") {
+      out["undecided"] <- out["undecided"] + 1
+    } else if (res$tier == "witness") {
+      out["sparse"] <- out["sparse"] + 1
+    } else {
+      out["pocs"] <- out["pocs"] + 1
+      bb <- .box_bounds(R, d)
+      raw <- function(v) .witness_bound(R, v, d)
+      if (.pocs_witness(bb$lo, bb$hi, bb$off, raw, 1000L)$B_upper >= 0) {
+        out["pocs_over_1000"] <- out["pocs_over_1000"] + 1
+      }
+    }
+  }
+  out
+}
+
+set.seed(2027)
+cat("\n=== Held-out matrices ===\n")
+print(vapply(
+  c("p = 8" = 8, "p = 10" = 10, "p = 15" = 15, "p = 20" = 20),
+  holdout,
+  numeric(5),
+  n = 2000
+))

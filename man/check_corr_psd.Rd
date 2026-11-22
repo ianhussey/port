@@ -27,11 +27,12 @@ integer, or a \verb{p x p} symmetric matrix for mixed-precision tables.}
 a \verb{p x p} symmetric matrix. Overrides \code{decimals}; requires
 \code{rounding = "nearest"}.}
 
-\item{tau}{Non-negative width of the precision-limited ambiguous zone. When
-the witness upper bound lies in \verb{[0, tau]} and no in-box PSD matrix is
-certified by the cheap constructions, the result escalates to the
-self-contained alternating-projection search, and is reported \code{undecided}
-if that too fails. Defaults to \verb{10 *} the (maximum) box half-width.}
+\item{tau}{Non-negative width of the ambiguous zone. When the witness upper
+bound lies in \verb{[0, tau]} and no in-box PSD matrix is certified by the cheap
+constructions, the result escalates to the self-contained
+alternating-projection search, which looks for an in-box PSD matrix and
+then for a witness direction, and is reported \code{undecided} if both fail.
+Defaults to \verb{10 *} the (maximum) box half-width.}
 
 \item{rounding}{The rule that produced the reported values: \code{"nearest"}
 (default; symmetric box of half-width \code{0.5 * 10^(-decimals)}),
@@ -72,16 +73,19 @@ depend on any solver tolerance.
 \describe{
 \item{\code{inconsistent}}{No PSD matrix exists in the rounding box. Reached at
 tier \code{precheck} (a reported entry is out of range even at its nearest box
-edge) or \code{witness} (a test vector \code{v} gives a rigorously-negative upper
-bound \code{B_upper < 0}). Always certified.}
+edge), \code{witness} (a test vector \code{v} gives a rigorously-negative upper
+bound \code{B_upper < 0}), or \code{pocs} (the same bound, for a test vector that
+only the alternating-projection escalation found). Always certified.}
 \item{\code{consistent}}{\code{certified = TRUE} when an explicit in-box matrix was
 verified PSD (Rump 2006) -- a rigorous existence certificate.
 \code{certified = FALSE} marks a \emph{presumed} consistent: the witness margin is
 comfortably positive but no in-box PSD matrix was exhibited, so the
 verdict means only "not shown inconsistent".}
-\item{\code{undecided}}{The witness margin sits in the precision-limited
-ambiguous zone \verb{[0, tau]} and no in-box PSD matrix could be certified,
-including by the alternating-projection escalation.}
+\item{\code{undecided}}{Neither proof was found: the witness margin sits in
+the ambiguous zone \verb{[0, tau]}, no in-box PSD matrix could be certified,
+and the alternating-projection escalation produced neither such a matrix
+nor a witness. The table may be inconsistent with a witness the search
+missed, or consistent only on the boundary of the PSD cone.}
 }
 }
 

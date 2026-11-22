@@ -94,8 +94,6 @@ test_that("a near-boundary case the dense witness search missed is certified", {
   )
   res <- check_corr_psd(R, decimals = 2)
   expect_equal(res$verdict, "inconsistent")
-  expect_equal(res$tier, "witness")
-  expect_equal(res$witness[5], 0)
   expect_lt(exact_box_max(R, res$witness), 0)
 })
 
@@ -111,17 +109,25 @@ test_that("a sparse witness that needs polishing on its support is found", {
     -0.95, -0.30,  0.72,  1.00, -0.97,
      0.98,  0.53, -0.60, -0.97,  1.00
   ), 5, 5, byrow = TRUE)
+  v0 <- port:::.subset_bottom_eigvec(R, 2:5)
+  expect_gt(port:::.witness_bound(R, v0, 0.005)$B_upper, 0)
+  expect_gt(port:::.polish_witness(R, 0.005, v0)$B_upper, 0)
+  pol <- port:::.polish_witness(R, 0.005, v0, on_support = TRUE)
+  expect_lt(pol$B_upper, 0)
+  expect_equal(pol$v[1], 0)
+  expect_lt(exact_box_max(R, pol$v), 0)
   res <- check_corr_psd(R, decimals = 2)
   expect_equal(res$verdict, "inconsistent")
-  expect_equal(res$witness[1], 0)
   expect_lt(exact_box_max(R, res$witness), 0)
 })
 
 test_that("the POCS direction certifies a case the sparse search misses", {
-  # From special-scripts/sparse-witness-simulation.R. Greedy elimination leaves
-  # b_upper ~ 7e-4 > 0 and no in-box PSD matrix is found. The bottom
-  # eigenvector of the box-side limit of margin-free alternating projections
-  # gives -8e-4.
+  # From special-scripts/sparse-witness-simulation.R. When this was added,
+  # greedy elimination left b_upper ~ 7e-4 > 0 and no in-box PSD matrix was
+  # found. The bottom eigenvector of the box-side iterate of margin-free
+  # alternating projections certifies it (about -3e-4 at the first check that
+  # succeeds). The search is called directly, so the test does not depend on
+  # the greedy search missing this matrix.
   # fmt: skip
   R <- matrix(c(
      1.00,  0.83,  0.33, -0.17, -0.88, -0.99,  0.14, -0.83,
@@ -133,10 +139,14 @@ test_that("the POCS direction certifies a case the sparse search misses", {
      0.14,  0.65, -0.55,  0.87,  0.03, -0.02,  1.00, -0.16,
     -0.83, -0.77,  0.10, -0.09,  0.96,  0.84, -0.16,  1.00
   ), 8, 8, byrow = TRUE)
-  expect_gte(port:::.witness_search(R, 0.005)$B_upper, 0)
+  bb <- port:::.box_bounds(R, 0.005)
+  wp <- port:::.pocs_witness(bb$lo, bb$hi, bb$off, function(v) {
+    port:::.witness_bound(R, v, 0.005)
+  })
+  expect_lt(wp$B_upper, 0)
+  expect_lt(exact_box_max(R, wp$v), 0)
   res <- check_corr_psd(R, decimals = 2)
   expect_equal(res$verdict, "inconsistent")
-  expect_equal(res$tier, "witness")
   expect_true(res$certified)
   expect_lt(exact_box_max(R, res$witness), 0)
   # same verdict through the heterogeneous-box path
