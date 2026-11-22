@@ -1,3 +1,7 @@
+# port (development version)
+
+* `check_corr_psd()` certifies more near-boundary tables as `inconsistent`. When the existing witness directions certify nothing and no in-box PSD matrix is constructed, a greedy backward elimination over principal submatrices searches for a sparse witness and polishes it on its own support. Some tables that were `undecided` are now `inconsistent`, and `b_upper` can be smaller than before. The localizers and `check_disattenuated_psd()` use the same search.
+
 # port 0.1.0
 
 First release.

@@ -302,7 +302,7 @@ test_that("inconsistent verdicts surface the benign-generator caution", {
 # ---- sparse witness by greedy subset elimination ------------------------------
 
 test_that("greedy subset elimination certifies a case the dense search missed", {
-  # From special-scripts/gci-psd-simulation.R: undecided before the greedy
+  # From special-scripts/sparse-witness-simulation.R: undecided before the greedy
   # search was added (no dense witness, no in-box PSD matrix found).
   R <- matrix(c(
     1, -0.83, 0.36, 0.4, 0.67, 0.3,

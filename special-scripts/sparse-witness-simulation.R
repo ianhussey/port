@@ -1,4 +1,4 @@
-# Simulation behind Section 6 of gci-psd-port.md.
+# Simulation behind sparse-witness.md.
 #
 # Question: on rounded correlation matrices that port's original witness search
 # leaves undecided, which extra families of test directions (or constructions)
@@ -10,8 +10,8 @@
 # certificate (B_upper >= 0) and neither the constructions nor POCS certify
 # consistency. The original search is .witness_search(sparse = FALSE).
 #
-# Run from the package root:  Rscript special-scripts/gci-psd-simulation.R
-# Takes about 5 minutes.
+# Run from the package root:  Rscript special-scripts/sparse-witness-simulation.R
+# Takes about 6 minutes.
 
 suppressMessages(pkgload::load_all(".", quiet = TRUE))
 
@@ -90,6 +90,22 @@ subsets <- function(p, max_size = p) {
   )
 }
 
+# Bottom eigenvector of the box-side limit point of alternating projections
+# between the box and the PSD cone, run without a margin. For an inconsistent
+# box the two limit points are a closest pair, and their difference separates
+# the box from the cone.
+pocs_dir <- function(R, d, max_iter = 1000L) {
+  b <- .box_bounds(R, d)
+  X <- R
+  for (k in seq_len(max_iter)) {
+    Xn <- .proj_box(.proj_psd_margin(X, 0), b$lo, b$hi, b$off)
+    done <- max(abs(Xn - X)) < 1e-13
+    X <- Xn
+    if (done) break
+  }
+  .subset_bottom_eigvec(X, seq_len(nrow(R)))
+}
+
 cross_shrink <- function(R, S, d) {
   X <- R
   Tt <- setdiff(seq_len(nrow(R)), S)
@@ -102,6 +118,7 @@ simulate <- function(p, n, d = 0.005) {
   verdicts <- character(0)
   undec <- NULL
   triples_lost <- 0L
+  secs <- c(greedy = 0, greedy_all = 0)
   example <- NULL
   for (k in seq_len(n)) {
     r <- sample(2:max(2, p - 2), 1)
@@ -152,11 +169,11 @@ simulate <- function(p, n, d = 0.005) {
       },
       logical(1)
     ))
-    block <- if (p <= 8) {
-      any(vapply(bipartitions(p), function(S) neg(block_dir(R, S)), logical(1)))
-    } else {
-      NA
-    }
+    block <- any(vapply(
+      bipartitions(p),
+      function(S) neg(block_dir(R, S)),
+      logical(1)
+    ))
     shrink <- any(vapply(
       bipartitions(p),
       function(S) {
@@ -175,11 +192,18 @@ simulate <- function(p, n, d = 0.005) {
       logical(1)
     ))
     # greedy elimination without polishing, then as implemented (each round's
-    # winner polished on its support), then the single-vector optimum
+    # winner polished on its support), then with every trial polished, then the
+    # margin-free POCS direction, then the single-vector optimum
     raw <- function(v) .witness_bound(R, v, d)
     pol <- function(v) .polish_witness(R, d, v, on_support = TRUE)
     greedy_raw <- isTRUE(.greedy_subset_witness(R, raw, raw)$B_upper < 0)
-    greedy <- isTRUE(.greedy_subset_witness(R, raw, pol)$B_upper < 0)
+    secs["greedy"] <- secs["greedy"] +
+      system.time(g <- .greedy_subset_witness(R, raw, pol))[["elapsed"]]
+    greedy <- isTRUE(g$B_upper < 0)
+    secs["greedy_all"] <- secs["greedy_all"] +
+      system.time(g <- .greedy_subset_witness(R, pol, pol))[["elapsed"]]
+    greedy_all <- isTRUE(g$B_upper < 0)
+    pocs <- neg(pocs_dir(R, d))
     global <- neg(global_dir(R, d))
     new_inc <- check_corr_psd(R, delta = d)$verdict == "inconsistent"
     if (new_inc && is.null(example)) {
@@ -196,6 +220,9 @@ simulate <- function(p, n, d = 0.005) {
         sub_all,
         greedy_raw,
         greedy,
+        greedy_all,
+        pocs,
+        pocs_only = pocs && !greedy, # certified where the implemented search fails
         global,
         new_inc
       )
@@ -205,6 +232,7 @@ simulate <- function(p, n, d = 0.005) {
     verdicts = table(verdicts),
     undec = undec,
     triples_lost = triples_lost,
+    secs = secs,
     example = example
   )
 }
@@ -215,8 +243,10 @@ for (p in c(5, 6, 8, 10)) {
   cat("\n=== p =", p, "===\n")
   print(res$verdicts)
   cat("Undecided cases certified inconsistent by:\n")
-  print(colSums(res$undec, na.rm = TRUE))
-  cat("(block = NA when p > 8; shrink counts consistency certificates)\n")
+  print(colSums(res$undec))
+  cat("(shrink counts consistency certificates)\n")
+  cat("Seconds in greedy elimination, winner / every trial polished:\n")
+  print(res$secs)
   cat(
     "Original certificates lost if triples are dropped (greedy kept):",
     res$triples_lost,

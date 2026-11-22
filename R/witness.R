@@ -218,10 +218,10 @@
 # second at p = 80.
 # The bottom eigenvector of M[S, S] ignores the rounding penalty, so each
 # round's winner is then polished on its own support; without that step a tenth
-# of the certificates are missed. (Polishing every trial instead triples the
+# of the certificates are missed. (Polishing every trial instead doubles the
 # cost for one more certificate in 202.) In simulation the search certifies 198
 # of 202 cases the dense search leaves undecided, all of which some single
-# vector certifies (special-scripts/gci-psd-simulation.R).
+# vector certifies (special-scripts/sparse-witness-simulation.R).
 # `bound(v)` and `polish(v)` must return rigorous bound records with element
 # `B_upper` (and `v`); every candidate passes through them, so the search cannot
 # affect soundness. Stops at the first certificate. Returns the best record, or

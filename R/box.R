@@ -268,8 +268,12 @@
 # When verify = FALSE, a POCS point that fails Rump is still reported feasible
 # (labelled solver/search-based) so callers can run cheaply.
 .box_feasible <- function(lo, hi, off, verify = TRUE) {
-  # Witness first: a sound refutation is cheap (O(p^2) directions) and lets the
-  # bisection localizers reject infeasible pins without a full POCS search.
+  # Witness first, sparse search included, so the bisection localizers can
+  # reject infeasible pins without a full POCS search. check_corr_psd() defers
+  # the O(p^5) sparse search until after the consistency search; doing that here
+  # is slower, because bisection asks about many boxes that are only just
+  # infeasible, and a failed POCS run costs far more than the sparse search
+  # (localize_psd_fault() took 2.4 times as long over eight tables, p = 8 to 30).
   imp <- .box_inconsistent(lo, hi, off)
   if (isTRUE(imp$inconsistent)) {
     return(list(
