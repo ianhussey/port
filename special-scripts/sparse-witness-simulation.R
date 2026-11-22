@@ -262,10 +262,18 @@ for (p in c(5, 6, 8, 10)) {
 # decided" is an in-sample result. On fresh matrices from the same generator,
 # larger p included: of the cases the original search leaves open (no
 # certificate either way), how many does check_corr_psd() certify, by which
-# search, and how many stay undecided? `pocs_over_1000` counts the POCS
+# search, and how many stay undecided (or presumed consistent: margin above
+# tau, so the POCS witness search never ran)? `pocs_over_1000` counts the POCS
 # certificates that a cap of 1000 iterations would have missed.
 holdout <- function(p, n, d = 0.005) {
-  out <- c(open = 0, sparse = 0, pocs = 0, pocs_over_1000 = 0, undecided = 0)
+  out <- c(
+    open = 0,
+    sparse = 0,
+    pocs = 0,
+    pocs_over_1000 = 0,
+    presumed = 0,
+    undecided = 0
+  )
   for (k in seq_len(n)) {
     R <- draw(p)
     if (is.null(R) || .witness_search(R, d, sparse = FALSE)$B_upper < 0) {
@@ -281,7 +289,11 @@ holdout <- function(p, n, d = 0.005) {
       next
     }
     out["open"] <- out["open"] + 1
-    if (res$verdict != "inconsistent") {
+    if (res$verdict == "consistent") {
+      # presumed consistent: margin above tau, so check_corr_psd() never ran
+      # the POCS witness search; not the same as "undecided"
+      out["presumed"] <- out["presumed"] + 1
+    } else if (res$verdict == "undecided") {
       out["undecided"] <- out["undecided"] + 1
     } else if (res$tier == "witness") {
       out["sparse"] <- out["sparse"] + 1
@@ -302,6 +314,6 @@ cat("\n=== Held-out matrices ===\n")
 print(vapply(
   c("p = 8" = 8, "p = 10" = 10, "p = 15" = 15, "p = 20" = 20),
   holdout,
-  numeric(5),
+  numeric(6),
   n = 2000
 ))

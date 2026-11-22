@@ -1,9 +1,9 @@
 # -----------------------------------------------------------------------------
 # Self-contained consistency search by projections onto convex sets (POCS).
 #
-# Escalation tier used only in the precision-limited ambiguous zone, when the
-# cheap constructions in construct.R did not settle consistency. It is fully
-# self-contained: no external solver or optional dependency.
+# Escalation tier used only in the ambiguous zone, when neither the witness
+# search nor the cheap constructions in construct.R settled the verdict. It is
+# fully self-contained: no external solver or optional dependency.
 #
 # The feasible set is the intersection of two closed convex sets:
 #   * the box  B = { X symmetric : X_ii = 1, X_ij in [lo_ij, hi_ij] };
@@ -14,8 +14,9 @@
 # strictly positive definite, so the one-sided Cholesky test of verify.R can
 # certify it. The witness path remains the source of truth: POCS is used only to
 # *find* a candidate, which is then independently Rump-verified. A failure to
-# find a verifiable point is inconclusive (undecided), never an inconsistency
-# certificate.
+# find a verifiable point is inconclusive, never an inconsistency certificate
+# by itself. .pocs_witness() (below) can still certify inconsistency, but only
+# through the rigorous witness bound, like any other test direction.
 # -----------------------------------------------------------------------------
 
 # Euclidean projection onto the box (unit diagonal; off-diagonals clipped).

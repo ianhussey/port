@@ -26,7 +26,7 @@ Two properties of the bound matter for the search.
 
 **Sparse directions pay less.** The penalty equals $2\delta \sum_{i<j} |v_i|\,|v_j|$. For a unit vector spread evenly over $k$ coordinates it is $\delta\,(k - 1)$. A direction supported on few variables therefore pays less of it. The price is a less negative $v^\top R\, v$, because the smallest eigenvalue of a principal submatrix $R_S$ is never below that of $R$. The best witness balances the two, and near the boundary it is usually supported on a subset of intermediate size.
 
-**The best direction on a given support is an eigenvector of a shifted matrix.** For a fixed support $S$ and sign pattern $s$, the bound is the quadratic form of $R_S + \delta\,(s s^\top - I)$, and the best direction is the bottom eigenvector of *that* matrix, provided its signs match $s$. (These are the vertex matrices $A_c - T_z \Delta T_z$ of Rohn, 1994, restricted to $S$ and with the sign of $\Delta$ reversed.) The bottom eigenvector of $R_S$ itself minimises $v^\top R\, v$ and ignores the penalty. `port`'s polishing iteration alternates between the sign pattern and the eigenvector, so it finds the better direction if it is restricted to $S$. Run on the full matrix, it turns a sparse direction dense again.
+**The best direction on a given support is an eigenvector of a shifted matrix.** For a fixed support $S$ and sign pattern $s$, the bound is the quadratic form of $R_S + \delta\,(s s^\top - I)$, and the best direction with that support and those signs is an eigenvector of *that* matrix whose signs match $s$, unless the best is approached only at the edge of the sign pattern, on a smaller support. (These are the vertex matrices $A_c - T_z \Delta T_z$ of Rohn, 1994, restricted to $S$ and with the sign of $\Delta$ reversed.) The bottom eigenvector of $R_S$ itself minimises $v^\top R\, v$ and ignores the penalty. `port`'s polishing iteration alternates between the sign pattern and the eigenvector, so it finds the better direction if it is restricted to $S$. Run on the full matrix, it turns a sparse direction dense again.
 
 ---
 
@@ -114,6 +114,7 @@ Near the boundary the iteration converges slowly, so the number of iterations ma
 | … certified by greedy elimination | 70 | 103 | 152 | 200 |
 | … certified by the POCS direction | 0 | 2 | 6 | 7 |
 | … … of which after more than 1000 iterations | 0 | 0 | 2 | 1 |
+| Presumed consistent (margin above `tau`, so the POCS direction is never tried) | 0 | 0 | 0 | 0 |
 | **Still undecided** | **0** | **1** | **1** | **4** |
 
 `check_corr_psd()` decides 540 of the 546 open cases (98.9%), 525 of them by greedy elimination. Six stay undecided, four of them at $p = 20$, so a remainder exists and it grows with $p$. The script does not establish whether these six are inconsistent; the enumeration of Section 2 is out of reach beyond $p \approx 10$.

@@ -103,6 +103,14 @@
 #' over-estimate, a rounding box that contains any PSD matrix can never be
 #' reported `inconsistent`.
 #'
+#' @section Running time:
+#' Most tables take well under a second. When neither the dense witness
+#' directions nor a cheap construction settle the verdict, a sparse witness
+#' search runs whose cost grows like `p^5`: about 1.5 s at `p = 80`, 4 s at
+#' `p = 100` and 20 s at `p = 150`. If a verdict is still `undecided` after
+#' that, the alternating-projection witness search can add up to about 17 s at
+#' `p = 100`.
+#'
 #' @param R A symmetric numeric `p x p` matrix with unit diagonal (the reported
 #'   correlation matrix). Small asymmetries are symmetrized with a warning;
 #'   large ones error. `p >= 2` is required. Off-diagonal `NA` entries
@@ -387,8 +395,8 @@ check_corr_psd <- function(
       margin = margin,
       b_upper = b_upper,
       note = paste(
-        "witness margin within the precision-limited zone [0, tau]",
-        "and no in-box PSD matrix could be constructed or found by",
+        "witness margin within the ambiguous zone [0, tau]; neither an",
+        "in-box PSD matrix nor a witness was found, including by",
         "alternating projections"
       )
     )
@@ -538,9 +546,9 @@ check_corr_psd <- function(
     b_upper = imp$b_upper,
     note = c(
       paste(
-        "witness margin within the precision-limited zone [0, tau]",
-        "and no in-box PSD matrix could be found by alternating",
-        "projections"
+        "witness margin within the ambiguous zone [0, tau]; neither an",
+        "in-box PSD matrix nor a witness was found, including by",
+        "alternating projections"
       ),
       na_note
     )

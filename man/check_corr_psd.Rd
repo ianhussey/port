@@ -107,6 +107,16 @@ over-estimate, a rounding box that contains any PSD matrix can never be
 reported \code{inconsistent}.
 }
 
+\section{Running time}{
+
+Most tables take well under a second. When neither the dense witness
+directions nor a cheap construction settle the verdict, a sparse witness
+search runs whose cost grows like \code{p^5}: about 1.5 s at \code{p = 80}, 4 s at
+\code{p = 100} and 20 s at \code{p = 150}. If a verdict is still \code{undecided} after
+that, the alternating-projection witness search can add up to about 17 s at
+\code{p = 100}.
+}
+
 \examples{
 # Strongly inconsistent 3x3: r12 = r13 = 0.9, r23 = -0.9.
 R <- matrix(c(1, 0.9, 0.9,
