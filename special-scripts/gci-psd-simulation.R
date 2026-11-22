@@ -8,18 +8,50 @@
 # boundary), one cell perturbed by up to +-0.08, rounded to 2 decimals
 # (delta = 0.005). "Undecided" = the ORIGINAL witness search finds no
 # certificate (B_upper >= 0) and neither the constructions nor POCS certify
-# consistency. The original search is recovered by stubbing out
-# greedy_subset_witness(); it is restored afterwards.
+# consistency. The original search is .witness_search(sparse = FALSE).
 #
 # Run from the package root:  Rscript special-scripts/gci-psd-simulation.R
-# Takes about 2-4 minutes.
+# Takes about 5 minutes.
 
 suppressMessages(pkgload::load_all(".", quiet = TRUE))
 
-greedy_real <- greedy_subset_witness
-use_greedy <- function(on) {
-  f <- if (on) greedy_real else function(...) NULL
-  utils::assignInNamespace("greedy_subset_witness", f, "port")
+# Best single test direction, to numerical precision. Within one cell (support
+# T, sign pattern s) the box bound is the quadratic form of X_s = R + d * s s'
+# (unit diagonal) on T, so a minimiser is an eigenvector of X_s[T, T] whose
+# signs match s. Enumerating all (3^p - 1) / 2 cells therefore finds the global
+# minimum; the result still goes through the rigorous bound like any direction.
+global_dir <- function(R, d) {
+  p <- nrow(R)
+  best <- Inf
+  best_v <- NULL
+  for (m in seq_len(2^p - 1)) {
+    S <- which(bitwAnd(m, 2^(0:(p - 1))) > 0)
+    k <- length(S)
+    if (k < 2) {
+      next
+    }
+    for (sg in 0:(2^(k - 1) - 1)) {
+      s <- c(1, ifelse(bitwAnd(sg, 2^(seq_len(k - 1) - 1)) > 0, -1, 1))
+      X <- R[S, S] + d * outer(s, s)
+      diag(X) <- 1
+      e <- eigen(X, symmetric = TRUE)
+      for (j in k:1) {
+        if (e$values[j] >= best) {
+          break
+        }
+        v <- e$vectors[, j]
+        if (v[1] < 0) {
+          v <- -v
+        }
+        if (all(v * s > -1e-12)) {
+          best <- e$values[j]
+          best_v <- replace(numeric(p), S, v)
+          break
+        }
+      }
+    }
+  }
+  best_v
 }
 
 msqrt_inv <- function(A) {
@@ -83,9 +115,7 @@ simulate <- function(p, n, d = 0.005) {
     }
     R <- round(S0, 2)
 
-    use_greedy(FALSE)
-    old_inc <- .witness_search(R, d)$B_upper < 0
-    use_greedy(TRUE)
+    old_inc <- .witness_search(R, d, sparse = FALSE)$B_upper < 0
     if (old_inc) {
       verdicts <- c(verdicts, "inconsistent")
       # Is the triples family redundant once greedy elimination is added?
@@ -136,17 +166,21 @@ simulate <- function(p, n, d = 0.005) {
     ))
     sub_le4 <- any(vapply(
       subsets(p, 4),
-      function(S) neg(subset_bottom_eigvec(R, S)),
+      function(S) neg(.subset_bottom_eigvec(R, S)),
       logical(1)
     ))
     sub_all <- any(vapply(
       subsets(p),
-      function(S) neg(subset_bottom_eigvec(R, S)),
+      function(S) neg(.subset_bottom_eigvec(R, S)),
       logical(1)
     ))
-    greedy <- isTRUE(
-      greedy_subset_witness(R, function(v) .witness_bound(R, v, d))$B_upper < 0
-    )
+    # greedy elimination without polishing, then as implemented (each round's
+    # winner polished on its support), then the single-vector optimum
+    raw <- function(v) .witness_bound(R, v, d)
+    pol <- function(v) .polish_witness(R, d, v, on_support = TRUE)
+    greedy_raw <- isTRUE(.greedy_subset_witness(R, raw, raw)$B_upper < 0)
+    greedy <- isTRUE(.greedy_subset_witness(R, raw, pol)$B_upper < 0)
+    global <- neg(global_dir(R, d))
     new_inc <- check_corr_psd(R, delta = d)$verdict == "inconsistent"
     if (new_inc && is.null(example)) {
       example <- R
@@ -160,7 +194,9 @@ simulate <- function(p, n, d = 0.005) {
         shrink,
         sub_le4,
         sub_all,
+        greedy_raw,
         greedy,
+        global,
         new_inc
       )
     )

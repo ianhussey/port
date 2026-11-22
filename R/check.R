@@ -276,8 +276,18 @@ check_corr_psd <- function(
       ))
     }
 
-    # Tier 2: witness-vector bound (primary inconsistency path).
-    w <- .witness_search(R, delta)
+    # Tier 2: witness-vector bound (primary inconsistency path). The dense
+    # directions go first. The O(p^5) sparse search runs only if they certify
+    # nothing and no construction certifies consistency (in which case no
+    # witness can exist).
+    w <- .witness_search(R, delta, sparse = FALSE)
+    cons <- NULL
+    if (is.null(w) || w$B_upper >= 0) {
+      cons <- .construct_consistent(R, delta)
+      # ponytail: repeats the dense search, negligible next to the sparse one;
+      # split .witness_search() if that ever shows up in a profile.
+      if (is.null(cons)) w <- .witness_search(R, delta)
+    }
     if (!is.null(w) && w$B_upper < 0) {
       return(.new_corr_psd_check(
         verdict = "inconsistent",
@@ -294,8 +304,7 @@ check_corr_psd <- function(
     b_upper <- if (is.null(w)) NA_real_ else w$B_upper
     margin <- if (is.null(w)) NA_real_ else w$M_hat
 
-    # Consistency: try to exhibit and verify an in-box PSD matrix.
-    cons <- .construct_consistent(R, delta)
+    # Consistency: an in-box PSD matrix was exhibited and verified.
     if (!is.null(cons)) {
       return(.new_corr_psd_check(
         verdict = "consistent",
@@ -413,8 +422,14 @@ check_corr_psd <- function(
     ))
   }
 
-  # Tier 2: box witness (primary inconsistency path).
-  imp <- .box_inconsistent(bx$lo, bx$hi, bx$off)
+  # Tier 2: box witness (primary inconsistency path). As in the uniform path,
+  # the sparse search is deferred until POCS has failed to certify consistency.
+  imp <- .box_inconsistent(bx$lo, bx$hi, bx$off, sparse = FALSE)
+  hit <- NULL
+  if (!isTRUE(imp$inconsistent)) {
+    hit <- .pocs_feasible(bx$lo, bx$hi, bx$off)
+    if (is.null(hit)) imp <- .box_inconsistent(bx$lo, bx$hi, bx$off)
+  }
   if (isTRUE(imp$inconsistent)) {
     return(.new_corr_psd_check(
       verdict = "inconsistent",
@@ -430,8 +445,7 @@ check_corr_psd <- function(
     ))
   }
 
-  # Consistency: POCS search + Rump verification on the heterogeneous box.
-  hit <- .pocs_feasible(bx$lo, bx$hi, bx$off)
+  # Consistency: POCS found an in-box matrix, Rump-verified.
   if (!is.null(hit)) {
     return(.new_corr_psd_check(
       verdict = "consistent",

@@ -312,7 +312,7 @@ In simulation, cross-block shrinkage over *all* bipartitions certified none of t
 
 ### Design
 
-The script `special-scripts/gci-psd-simulation.R` (seed 2026, about 2 minutes) generates near-boundary rounded matrices:
+The script `special-scripts/gci-psd-simulation.R` (seed 2026, about 5 minutes) generates near-boundary rounded matrices:
 
 1. a correlation matrix of rank 2 to $p - 2$ plus small diagonal noise,
 2. one off-diagonal cell perturbed by up to ±0.08,
@@ -333,7 +333,9 @@ A case counts as **undecided** if `port`'s original witness search finds no cert
 | … certified consistent by cross-block shrinkage | 0 | 0 | 0 | 0 |
 | … certified by submatrix eigenvectors, sizes 3–4 | 7 | 26 | 48 | 20 |
 | … certified by submatrix eigenvectors, all sizes | 7 | 30 | 76 | 67 |
-| … certified by greedy elimination (implemented) | 7 | 30 | 75 | 66 |
+| … certified by greedy elimination, unpolished | 7 | 30 | 75 | 66 |
+| … certified by greedy elimination, winners polished on their support (implemented) | 10 | 33 | 84 | 71 |
+| … certified by the best single vector (enumeration) | 10 | 33 | 86 | 73 |
 
 The block witness was not run at $p = 10$ (511 bipartitions per case).
 
@@ -341,29 +343,40 @@ The block witness was not run at $p = 10$ (511 bipartitions per case).
 
 The block witness helps only because it adds directions. What matters is **sparsity**. The rounding penalty $\delta\big(\|v\|_1^2 - \|v\|_2^2\big)$ grows with the spread of $v$ across coordinates, so directions supported on few variables pay less of it. The bottom eigenvectors of principal submatrices are such directions. `port` already used submatrices of size 3, but only those, and only for $p \le 12$. Restricting to sizes 3–4 loses much of the gain as $p$ grows, so the useful subsets are of intermediate size.
 
+The right support is not enough, though. The bottom eigenvector of $R_S$ minimises $v^\top R v$ and ignores the penalty. For a fixed support $S$ and sign pattern $s$, the box bound is the quadratic form of $R_S + \delta\,(s s^\top - I)$, and the best direction is the bottom eigenvector of *that* matrix. The polishing iteration finds it, provided it is restricted to $S$. Run on the full matrix, as `port` did before, it turns a sparse direction dense again and the gain is lost. Unpolished, greedy elimination misses a tenth of the certificates it finds with polishing (178 against 198).
+
+The last row gives the ceiling for any single test vector. Within one cell (a support and a sign pattern) a minimiser of the bound is an eigenvector of the matrix above whose signs match $s$, so enumerating all $(3^p - 1)/2$ cells finds the global optimum. **All 202 undecided cases have a single-vector certificate.** Every one of them was inconsistent; none was a consistent matrix that POCS failed to reach, and none needed more than one vector.
+
 ### Implementation
 
-Exhaustive search over subsets costs $O(2^p)$. `greedy_subset_witness()` (`R/witness.R`) approximates it by backward elimination:
+Exhaustive search over subsets costs $O(2^p)$, and the enumeration above $O(3^p)$. `.greedy_subset_witness()` (`R/witness.R`) approximates them by backward elimination:
 
 1. Start from all $p$ variables.
 2. For each variable in the current set, form the bottom eigenvector of the submatrix without it and evaluate the rigorous box bound.
-3. Drop the variable whose removal gives the most negative bound; stop at the first certificate, or at size 3 (size 2 is covered by the coordinate pairs).
+3. Polish the best of these directions on its own support.
+4. Drop the variable whose removal gave the most negative bound; stop at the first certificate, or at size 3 (size 2 is covered by the coordinate pairs).
 
-This costs $O(p^2)$ small eigendecompositions and recovered 178 of the 180 certificates (99%) that exhaustive search found. It runs only when the existing directions (eigenvectors, pairs, triples, residual directions, polishing) certify nothing, so verdicts and witnesses that were already decided are unchanged. The best greedy direction is then polished. Both the uniform path (`.witness_search()`) and the heterogeneous-box path (`.box_inconsistent()`, used by the localizers and the disattenuation checks) use it.
+This takes $O(p^2)$ eigendecompositions of size up to $p - 1$, so $O(p^5)$ time: about a second at $p = 80$. It found 198 of the 202 certificates (98%). Polishing every direction in step 2, not only the best, found one more at three times the cost.
+
+Because of that cost, `check_corr_psd()` runs the search only when the existing directions (eigenvectors, pairs, triples, residual directions, polishing) certify nothing *and* no construction (or, for heterogeneous boxes, POCS) certifies consistency. A matrix certified consistent has no witness, so nothing is lost, and ordinary consistent matrices cost what they did before. Verdicts that were already `inconsistent` keep their witnesses. Results that reach the search without a certificate can report a smaller `b_upper` than before. Both the uniform path (`.witness_search()`) and the heterogeneous-box path (`.box_inconsistent()`, used by the localizers and the disattenuation checks) use the search.
 
 With greedy elimination in place, dropping the triples family lost no certificate in any run. The triples are kept anyway as a cheap first pass, since `.box_inconsistent()` sits inside the localizers' feasibility oracle.
 
-**A corrected regression test.** `tests/testthat/test-escalation.R` contained a 5 × 5 matrix described as "genuinely boundary-only", expected to stay `undecided`. The new search certifies it as inconsistent with a witness supported on variables 1–4. An exact integer-arithmetic check confirms the certificate: the maximum of $v^\top X v$ over the rounding box is $-2.27 \times 10^{-5}\, \|v\|_2^2 < 0$. The original description was wrong; the old search simply could not find the sparse witness. The test now expects `inconsistent`, and a new test uses a matrix that remains undecided.
+**A corrected regression test.** `tests/testthat/test-escalation.R` contained a 5 × 5 matrix described as "genuinely boundary-only", expected to stay `undecided`. The new search certifies it as inconsistent with a witness supported on variables 1–4. An exact integer-arithmetic check confirms the certificate: the maximum of $v^\top X v$ over the rounding box is $-2.27 \times 10^{-5}\, \|v\|_2^2 < 0$. The original description was wrong; the old search simply could not find the sparse witness. The test now expects `inconsistent` and repeats the integer check.
+
+A second matrix, first chosen to replace it as the `undecided` example, turned out to be inconsistent as well: its witness on variables 2–5 only appears after polishing on that support. It is now a test of exactly that. The `undecided` path is tested with a box that clips to the single point $r = 1$ in a 2 × 2 matrix. The only in-box matrix is singular, so there is no witness and nothing for the Cholesky test to certify, whatever the search does.
 
 ### What remains undecided
 
-The undecided rate after the change was 0.1–0.5% of generated matrices. Some of these may be consistent with POCS failing to find a point. Others may be inconsistent but beyond any single-vector witness. In general, the box is inconsistent if and only if some PSD matrix $W \ne 0$ satisfies
+After the change, 4 of the 8854 generated matrices stayed undecided (none at $p \le 6$, two each at $p = 8$ and $p = 10$). All four are inconsistent with a single-vector certificate that greedy elimination did not reach, so in this simulation the remaining gap is one of search, not of principle. One cheap direction that was not implemented: alternate projections between the box and the PSD cone without a margin, and take the bottom eigenvector of the box-side limit point. In a side experiment it certified 201 of the 202 cases.
+
+Single vectors need not always suffice. In general, the box is inconsistent if and only if some PSD matrix $W \ne 0$ satisfies
 
 $$
 \max_{X \in \text{box}} \langle W, X \rangle = \langle W, R \rangle + \delta \sum_{i \ne j} |W_{ij}| < 0
 $$
 
-(separation of the compact box from the closed PSD cone; uniform unclipped box shown). Single vectors are the rank-one case $W = v v^\top$. A sum of rank-one terms can succeed where each term fails, because the off-diagonal absolute values can cancel. Finding the best $W$ is a semidefinite program. That would make the inconsistency test complete, at the cost of an SDP solver, which `port` deliberately avoids. It would be worth revisiting only if undecided verdicts turn out to matter in practice.
+(separation of the compact box from the closed PSD cone; uniform unclipped box shown). Single vectors are the rank-one case $W = v v^\top$. A sum of rank-one terms can succeed where each term fails, because the off-diagonal absolute values can cancel. Finding the best $W$ is a semidefinite program. That would make the inconsistency test complete, at the cost of an SDP solver, which `port` deliberately avoids. No case in the simulation needed it.
 
 ---
 

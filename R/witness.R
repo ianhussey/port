@@ -97,14 +97,17 @@
 # PSD-favourable in-box matrix along v, X(v) = R + delta * sign(v v') off the
 # diagonal, and take the bottom eigenvector of X(v) as the next direction. Every
 # iterate is evaluated through the rigorous bound, so polishing can only tighten
-# the certificate, never weaken its soundness.
-.polish_witness <- function(R, delta, v, max_iter = 8L) {
+# the certificate, never weaken its soundness. With `on_support = TRUE` the
+# iteration stays on the nonzero coordinates of v, so a sparse direction stays
+# sparse (on the full matrix it would turn dense and lose its smaller penalty).
+.polish_witness <- function(R, delta, v, max_iter = 8L, on_support = FALSE) {
   best <- .witness_bound(R, v, delta)
-  p <- nrow(R)
+  S <- if (on_support) which(v != 0) else seq_along(v)
   for (k in seq_len(max_iter)) {
-    X <- R + delta * sign(outer(v, v))
+    X <- R[S, S, drop = FALSE] + delta * sign(outer(v[S], v[S]))
     diag(X) <- 1
-    v_new <- eigen(X, symmetric = TRUE)$vectors[, p]
+    v_new <- numeric(length(v))
+    v_new[S] <- eigen(X, symmetric = TRUE)$vectors[, length(S)]
     wb <- .witness_bound(R, v_new, delta)
     if (wb$B_upper < best$B_upper - 1e-15) {
       best <- wb
@@ -129,9 +132,12 @@
 #   4. the p regression-residual directions v = (M_{-i}^{-1} c_i ; -1), for which
 #      v'Rv = (1 - R^2_i): the van Tilburg R^2 > 1 criterion as witness seeds.
 # The best candidate is then polished by the fixed-point iteration above. If
-# that still certifies nothing, the sparse greedy-subset search
-# (greedy_subset_witness, below) supplies further candidates, also polished.
-.witness_search <- function(R, delta, triples_max_p = 12L) {
+# that still certifies nothing and `sparse` is TRUE, the greedy-subset search
+# (.greedy_subset_witness, below) supplies sparse candidates, polished on their
+# own support. That search costs O(p^5), so check_corr_psd() first calls
+# with `sparse = FALSE` and comes back only if no construction certifies
+# consistency.
+.witness_search <- function(R, delta, triples_max_p = 12L, sparse = TRUE) {
   p <- nrow(R)
   cands <- vector("list", 0L)
 
@@ -179,17 +185,21 @@
     pol <- .polish_witness(R, delta, best$v)
     if (pol$B_upper < best$B_upper) best <- pol
   }
-  if (is.null(best) || best$B_upper >= 0) {
-    g <- greedy_subset_witness(R, function(v) .witness_bound(R, v, delta))
+  if (sparse && (is.null(best) || best$B_upper >= 0)) {
+    g <- .greedy_subset_witness(
+      R,
+      function(v) .witness_bound(R, v, delta),
+      function(v) .polish_witness(R, delta, v, on_support = TRUE)
+    )
     if (!is.null(g) && (is.null(best) || g$B_upper < best$B_upper)) {
-      best <- .polish_witness(R, delta, g$v)
+      best <- g
     }
   }
   best
 }
 
 # Bottom eigenvector of the principal submatrix M[S, S], zero-padded to length p.
-subset_bottom_eigvec <- function(M, S) {
+.subset_bottom_eigvec <- function(M, S) {
   v <- numeric(nrow(M))
   v[S] <- eigen(M[S, S, drop = FALSE], symmetric = TRUE)$vectors[, length(S)]
   v
@@ -200,23 +210,30 @@ subset_bottom_eigvec <- function(M, S) {
 # variables pay less of it; the bottom eigenvectors of principal submatrices are
 # such directions. Exhaustive search over subsets is O(2^p), so we drop one
 # variable at a time, each time the one whose removal gives the most negative
-# bound, down to size 3 (size 2 is covered by the coordinate pairs). This costs
-# O(p^2) small eigendecompositions and, in simulation, recovers nearly every
-# certificate the exhaustive search finds (special-scripts/gci-psd-simulation.R).
-# `bound(v)` must return a rigorous bound record with element `B_upper`; every
-# candidate passes through it, so the search cannot affect soundness. Stops at
-# the first certificate. Returns the best record, or NULL for p <= 3.
-greedy_subset_witness <- function(M, bound) {
+# bound, down to size 3 (size 2 is covered by the coordinate pairs). This takes
+# O(p^2) eigendecompositions of size up to p - 1, so O(p^5) time: about a
+# second at p = 80.
+# The bottom eigenvector of M[S, S] ignores the rounding penalty, so each
+# round's winner is then polished on its own support; without that step a tenth
+# of the certificates are missed. (Polishing every trial instead triples the
+# cost for one more certificate in 202.) In simulation the search certifies 198
+# of 202 cases the dense search leaves undecided, all of which some single
+# vector certifies (special-scripts/gci-psd-simulation.R).
+# `bound(v)` and `polish(v)` must return rigorous bound records with element
+# `B_upper` (and `v`); every candidate passes through them, so the search cannot
+# affect soundness. Stops at the first certificate. Returns the best record, or
+# NULL for p <= 3.
+.greedy_subset_witness <- function(M, bound, polish) {
   S <- seq_len(nrow(M))
   best <- NULL
   while (length(S) > 3L) {
     trials <- lapply(seq_along(S), function(k) {
-      bound(subset_bottom_eigvec(M, S[-k]))
+      bound(.subset_bottom_eigvec(M, S[-k]))
     })
-    scores <- vapply(trials, function(t) t$B_upper, numeric(1))
-    k <- which.min(scores)
-    if (is.null(best) || scores[k] < best$B_upper) {
-      best <- trials[[k]]
+    k <- which.min(vapply(trials, function(t) t$B_upper, numeric(1)))
+    cand <- polish(trials[[k]]$v)
+    if (is.null(best) || cand$B_upper < best$B_upper) {
+      best <- cand
     }
     if (best$B_upper < 0) {
       break

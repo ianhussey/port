@@ -46,10 +46,20 @@ test_that("POCS resolves the ambiguous case to a certified consistent", {
   expect_true(port:::.verify_psd(res$certified_matrix))
 })
 
+# 200 * max over the 2-decimal rounding box of w'Xw, for the integer direction
+# w = round(v * 1e5), in exact integer arithmetic (every term is an integer far
+# below 2^53). Negative means inconsistent, independently of the package's
+# floating-point error model. (Clipping at +-1 is ignored, which can only make
+# the value larger; no cell of the matrices below is within delta of +-1.)
+exact_box_max <- function(R, v) {
+  w <- round(v * 1e5)
+  2 * sum(outer(w, w) * round(100 * R)) + sum(abs(w))^2 - sum(w^2)
+}
+
 test_that("a near-boundary case the dense witness search missed is certified", {
   # The dense directions leave b_upper ~ 6e-5 > 0 and no strictly-PD in-box
   # point exists, so this was once "undecided". The greedy sparse search finds a
-  # witness on variables 1-4 (exact integer check: max_box v'Xv < 0).
+  # witness on variables 1-4.
   R <- matrix(
     c(
       1,
@@ -86,18 +96,33 @@ test_that("a near-boundary case the dense witness search missed is certified", {
   expect_equal(res$verdict, "inconsistent")
   expect_equal(res$tier, "witness")
   expect_equal(res$witness[5], 0)
+  expect_lt(exact_box_max(R, res$witness), 0)
 })
 
-test_that("an unresolved near-boundary case is honestly undecided, not guessed", {
-  # Neither a witness (b_upper ~ 2e-4) nor an in-box PSD matrix is found.
+test_that("a sparse witness that needs polishing on its support is found", {
+  # The bottom eigenvector of R[2:5, 2:5] gives b_upper ~ 2e-4 > 0; one polish
+  # step on that support gives -3.4e-5. Polishing on the full matrix turns the
+  # direction dense and finds nothing.
+  # fmt: skip
   R <- matrix(c(
-    1, 0.57, -0.51, -0.95, 0.98,
-    0.57, 1, 0.34, -0.3, 0.53,
-    -0.51, 0.34, 1, 0.72, -0.6,
-    -0.95, -0.3, 0.72, 1, -0.97,
-    0.98, 0.53, -0.6, -0.97, 1
-  ), 5, 5)
+     1.00,  0.57, -0.51, -0.95,  0.98,
+     0.57,  1.00,  0.34, -0.30,  0.53,
+    -0.51,  0.34,  1.00,  0.72, -0.60,
+    -0.95, -0.30,  0.72,  1.00, -0.97,
+     0.98,  0.53, -0.60, -0.97,  1.00
+  ), 5, 5, byrow = TRUE)
   res <- check_corr_psd(R, decimals = 2)
+  expect_equal(res$verdict, "inconsistent")
+  expect_equal(res$witness[1], 0)
+  expect_lt(exact_box_max(R, res$witness), 0)
+})
+
+test_that("a genuinely boundary-only case is honestly undecided, not guessed", {
+  # The box [1, 1 + 2^-6] clips to the single point r = 1, so the only in-box
+  # correlation matrix is singular: it is PSD, so no witness exists, and it is
+  # not positive definite, so the Cholesky test cannot certify it either.
+  R <- matrix(c(1, 1 + 2^-7, 1 + 2^-7, 1), 2)
+  res <- check_corr_psd(R, delta = 2^-7)
   expect_equal(res$verdict, "undecided")
   expect_equal(res$tier, "pocs")
   expect_false(res$certified)

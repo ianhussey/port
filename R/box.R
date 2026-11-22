@@ -151,16 +151,26 @@
 # Fixed-point polish for the heterogeneous box (see .polish_witness in
 # witness.R): X(v) picks the box-optimal entry per pair, the next direction is
 # its bottom eigenvector. Sound by construction (every iterate is evaluated
-# through the rigorous box bound).
-.polish_witness_box <- function(lo, hi, off, v, max_iter = 8L) {
+# through the rigorous box bound). `on_support = TRUE` keeps the iteration on
+# the nonzero coordinates of v.
+.polish_witness_box <- function(
+  lo,
+  hi,
+  off,
+  v,
+  max_iter = 8L,
+  on_support = FALSE
+) {
   best <- .witness_box_bound(lo, hi, off, v)
-  p <- nrow(lo)
+  S <- if (on_support) which(v != 0) else seq_along(v)
   for (k in seq_len(max_iter)) {
     vv <- outer(v, v)
     X <- ifelse(vv >= 0, hi, lo)
     X[!off] <- 0
     diag(X) <- 1
-    v_new <- eigen(X, symmetric = TRUE)$vectors[, p]
+    e <- eigen(X[S, S, drop = FALSE], symmetric = TRUE)
+    v_new <- numeric(length(v))
+    v_new[S] <- e$vectors[, length(S)]
     wb <- .witness_box_bound(lo, hi, off, v_new)
     if (wb$B_upper < best$B_upper - 1e-15) {
       best <- wb
@@ -178,8 +188,15 @@
 # coordinate pairs, (small p) 3x3 submatrix eigenvectors, and the p regression-
 # residual directions of the midpoint -- the same family that powers the base
 # checker, all evaluated with the rigorous box bound, then polished; if none
-# certifies, the sparse greedy-subset search of the midpoint is tried as well.
-.box_inconsistent <- function(lo, hi, off, triples_max_p = 12L) {
+# certifies and `sparse` is TRUE, the greedy-subset search of the midpoint is
+# tried as well (see .witness_search() for why it can be switched off).
+.box_inconsistent <- function(
+  lo,
+  hi,
+  off,
+  triples_max_p = 12L,
+  sparse = TRUE
+) {
   p <- nrow(lo)
   mid <- matrix(0, p, p)
   mid[off] <- (lo[off] + hi[off]) / 2
@@ -226,12 +243,14 @@
     pol <- .polish_witness_box(lo, hi, off, best$v)
     if (pol$B_upper < best$B_upper) best <- pol
   }
-  if (is.null(best) || best$B_upper >= 0) {
-    g <- greedy_subset_witness(mid, function(v) {
-      .witness_box_bound(lo, hi, off, v)
-    })
+  if (sparse && (is.null(best) || best$B_upper >= 0)) {
+    g <- .greedy_subset_witness(
+      mid,
+      function(v) .witness_box_bound(lo, hi, off, v),
+      function(v) .polish_witness_box(lo, hi, off, v, on_support = TRUE)
+    )
     if (!is.null(g) && (is.null(best) || g$B_upper < best$B_upper)) {
-      best <- .polish_witness_box(lo, hi, off, g$v)
+      best <- g
     }
   }
   list(
