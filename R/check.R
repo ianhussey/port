@@ -354,6 +354,28 @@ check_corr_psd <- function(
       ))
     }
 
+    # Last resort before "undecided": if the projections cannot bring the box
+    # and the PSD cone together, try the direction that separates them.
+    bb <- .box_bounds(R, delta)
+    wp <- .witness_bound(
+      R,
+      .pocs_witness_direction(bb$lo, bb$hi, bb$off),
+      delta
+    )
+    if (wp$B_upper < 0) {
+      return(.new_corr_psd_check(
+        verdict = "inconsistent",
+        tier = "witness",
+        delta = delta,
+        p = p,
+        certified = TRUE,
+        witness = wp$v,
+        margin = wp$M_hat,
+        b_upper = wp$B_upper,
+        note = "witness direction found by alternating projections"
+      ))
+    }
+
     .new_corr_psd_check(
       verdict = "undecided",
       tier = "pocs",
@@ -481,6 +503,28 @@ check_corr_psd <- function(
         ),
         na_note
       )
+    ))
+  }
+
+  # Last resort before "undecided", as in the uniform path.
+  wp <- .witness_box_bound(
+    bx$lo,
+    bx$hi,
+    bx$off,
+    .pocs_witness_direction(bx$lo, bx$hi, bx$off)
+  )
+  if (wp$B_upper < 0) {
+    return(.new_corr_psd_check(
+      verdict = "inconsistent",
+      tier = "witness",
+      delta = bx$half_max,
+      p = p,
+      certified = TRUE,
+      rounding = rounding,
+      witness = wp$v,
+      margin = wp$M_hat,
+      b_upper = wp$B_upper,
+      note = c("witness direction found by alternating projections", na_note)
     ))
   }
 

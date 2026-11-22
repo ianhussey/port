@@ -5,7 +5,7 @@
 `port` proves a rounded correlation table inconsistent by exhibiting one test vector whose box bound is negative. Near the boundary of the PSD cone, the directions it used to try (eigenvectors of the full matrix, coordinate pairs, triples, regression residuals) often find nothing, and the verdict stays `undecided`. This note reports a simulation of such cases and the search that came out of it.
 
 1. **Sparse directions certify most of these cases.** The rounding penalty in the bound grows with the number of variables a direction involves. A greedy backward elimination over principal submatrices, with each round's best direction polished on its own support, certifies 198 of the 202 cases the previous search left undecided, at polynomial cost. It is implemented as `.greedy_subset_witness()` (Sections 1 to 3).
-2. **A single vector was always enough.** Enumeration shows that all 202 cases have a single-vector certificate. What remains undecided is a gap in the search, not in the method (Section 4).
+2. **A single vector was always enough.** Enumeration shows that all 202 cases have a single-vector certificate. A second direction, taken from alternating projections, certifies the four cases that greedy elimination misses. It is implemented as `.pocs_witness_direction()`, and `check_corr_psd()` now decides all 202 (Section 4).
 3. **Three block-based ideas did not pay off** (Section 5): a witness built from canonical correlations, a `block` localization class, and a block-shrinkage construction.
 
 The block ideas came from reading Royen's proof of the Gaussian correlation inequality. The inequality itself gives `port` nothing; `gci.md` explains why.
@@ -55,11 +55,12 @@ A case counts as **undecided** if `port`'s original witness search finds no cert
 | … certified by greedy elimination, unpolished | 7 | 30 | 75 | 66 |
 | … certified by greedy elimination, winners polished on their support (implemented) | 10 | 33 | 84 | 71 |
 | … certified by greedy elimination, every trial polished | 10 | 33 | 86 | 70 |
-| … certified by the margin-free POCS direction (Section 4) | 9 | 32 | 83 | 70 |
+| … certified by the margin-free POCS direction (implemented as a last resort, Section 4) | 9 | 32 | 83 | 70 |
 | … certified by the best single vector (enumeration) | 10 | 33 | 86 | 73 |
 | … certified by *s*-optimised R² direction (Section 5.1) | 0 | 2 | 0 | 0 |
 | … certified by block witness, all bipartitions (Section 5.1) | 3 | 16 | 25 | 21 |
 | … certified consistent by cross-block shrinkage (Section 5.3) | 0 | 0 | 0 | 0 |
+| **… certified by `check_corr_psd()` now** | **10** | **33** | **86** | **73** |
 
 ### Interpretation
 
@@ -94,11 +95,13 @@ A second matrix, first chosen to replace it as the `undecided` example, turned o
 
 ---
 
-## 4. What remains undecided
+## 4. The last resort: a direction from alternating projections
 
-After the change, 4 of the 8854 generated matrices stayed undecided (none at $p \le 6$, two each at $p = 8$ and $p = 10$). All four are inconsistent with a single-vector certificate that greedy elimination did not reach, so in this simulation the remaining gap is one of search, not of principle.
+Greedy elimination leaves 4 of the 8854 generated matrices undecided (none at $p \le 6$, two each at $p = 8$ and $p = 10$). All four are inconsistent, with a single-vector certificate that it did not reach.
 
-One cheap direction was not implemented: alternate projections between the box and the PSD cone without a margin, and take the bottom eigenvector of the box-side limit point. For an inconsistent box the two limit points are a closest pair, and their difference separates the box from the cone. On its own it certified 194 of the 202 cases, fewer than greedy elimination. But the 194 include all four cases that greedy elimination misses, so the two together certify all 202.
+A second direction closes that gap. Alternate projections between the box and the PSD cone without a margin, and take the bottom eigenvector of the box-side limit point. For an inconsistent box the two limit points are a closest pair $(X, Y)$, with $X$ in the box and $Y$ in the cone, and $Y - X$ separates the box from the cone. $Y - X$ is the negative eigen-part of $X$ with its sign flipped, so the bottom eigenvector of $X$ is its leading rank-one term. On its own this direction certified 194 of the 202 cases, fewer than greedy elimination. But the 194 include all four cases that greedy elimination misses, so the two together certify all 202.
+
+`.pocs_witness_direction()` (`R/pocs.R`) implements it. It takes up to 1000 eigendecompositions, so `check_corr_psd()` tries it only where the verdict would otherwise be `undecided`, and the localizers' oracle does not use it. With it, none of the generated matrices stays undecided.
 
 Single vectors need not always suffice. In general, the box is inconsistent if and only if some PSD matrix $W \ne 0$ satisfies
 
@@ -106,7 +109,7 @@ $$
 \max_{X \in \text{box}} \langle W, X \rangle = \langle W, R \rangle + \delta \sum_{i \ne j} |W_{ij}| < 0
 $$
 
-(separation of the compact box from the closed PSD cone; uniform unclipped box shown). Single vectors are the rank-one case $W = v v^\top$. A sum of rank-one terms can succeed where each term fails, because the off-diagonal absolute values can cancel. Finding the best $W$ is a semidefinite program. That would make the inconsistency test complete, at the cost of an SDP solver, which `port` deliberately avoids. No case in the simulation needed it.
+(separation of the compact box from the closed PSD cone; uniform unclipped box shown). Single vectors are the rank-one case $W = v v^\top$. A sum of rank-one terms can succeed where each term fails, because the off-diagonal absolute values can cancel. Finding the best $W$ is a semidefinite program. That would make the inconsistency test complete, at the cost of an SDP solver, which `port` deliberately avoids. The matrix $Y - X$ above is such a $W$, so alternating projections could supply matrix certificates without a solver, but `port`'s results hold a single witness vector. No case in the simulation needed more.
 
 ---
 

@@ -117,6 +117,34 @@ test_that("a sparse witness that needs polishing on its support is found", {
   expect_lt(exact_box_max(R, res$witness), 0)
 })
 
+test_that("the POCS direction certifies a case the sparse search misses", {
+  # From special-scripts/sparse-witness-simulation.R. Greedy elimination leaves
+  # b_upper ~ 7e-4 > 0 and no in-box PSD matrix is found. The bottom
+  # eigenvector of the box-side limit of margin-free alternating projections
+  # gives -8e-4.
+  # fmt: skip
+  R <- matrix(c(
+     1.00,  0.83,  0.33, -0.17, -0.88, -0.99,  0.14, -0.83,
+     0.83,  1.00, -0.17,  0.39, -0.70, -0.76,  0.65, -0.77,
+     0.33, -0.17,  1.00, -0.90, -0.11, -0.38, -0.55,  0.10,
+    -0.17,  0.39, -0.90,  1.00,  0.13,  0.26,  0.87, -0.09,
+    -0.88, -0.70, -0.11,  0.13,  1.00,  0.91,  0.03,  0.96,
+    -0.99, -0.76, -0.38,  0.26,  0.91,  1.00, -0.02,  0.84,
+     0.14,  0.65, -0.55,  0.87,  0.03, -0.02,  1.00, -0.16,
+    -0.83, -0.77,  0.10, -0.09,  0.96,  0.84, -0.16,  1.00
+  ), 8, 8, byrow = TRUE)
+  expect_gte(port:::.witness_search(R, 0.005)$B_upper, 0)
+  res <- check_corr_psd(R, decimals = 2)
+  expect_equal(res$verdict, "inconsistent")
+  expect_equal(res$tier, "witness")
+  expect_true(res$certified)
+  expect_lt(exact_box_max(R, res$witness), 0)
+  # same verdict through the heterogeneous-box path
+  res_box <- check_corr_psd(R, decimals = matrix(2, 8, 8))
+  expect_equal(res_box$verdict, "inconsistent")
+  expect_lt(exact_box_max(R, res_box$witness), 0)
+})
+
 test_that("a genuinely boundary-only case is honestly undecided, not guessed", {
   # The box [1, 1 + 2^-6] clips to the single point r = 1, so the only in-box
   # correlation matrix is singular: it is PSD, so no witness exists, and it is

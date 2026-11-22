@@ -77,3 +77,31 @@
   }
   NULL
 }
+
+# Witness direction from alternating projections between the box and the PSD
+# cone, run without a margin. If the box is inconsistent, the iterates approach
+# a closest pair (X in the box, its projection Y on the cone), and Y - X, the
+# negative eigen-part of X with the sign flipped, separates the box from the
+# cone. The bottom eigenvector of X is its leading rank-one term. It is only a
+# test direction: the caller must pass it through the rigorous box bound, and
+# failure to converge costs power, never soundness. In simulation it certifies
+# every case the greedy sparse search misses
+# (special-scripts/sparse-witness-simulation.R).
+# ponytail: up to max_iter eigendecompositions, so check_corr_psd() uses it only
+# where the verdict would otherwise be "undecided", and the localizers' oracle
+# does not use it at all. Add it there if undecided oracle calls turn out to
+# matter. The full matrix Y - X is a stronger certificate than its leading
+# term, but the result object holds a single witness vector.
+.pocs_witness_direction <- function(lo, hi, off, max_iter = 1000L, tol = 1e-13) {
+  p <- nrow(lo)
+  X <- matrix(0, p, p)
+  X[off] <- (lo[off] + hi[off]) / 2
+  diag(X) <- 1
+  for (k in seq_len(max_iter)) {
+    Xn <- .proj_box(.proj_psd_margin(X, 0), lo, hi, off)
+    change <- max(abs(Xn - X))
+    X <- Xn
+    if (change < tol) break
+  }
+  eigen(X, symmetric = TRUE)$vectors[, p]
+}

@@ -90,22 +90,6 @@ subsets <- function(p, max_size = p) {
   )
 }
 
-# Bottom eigenvector of the box-side limit point of alternating projections
-# between the box and the PSD cone, run without a margin. For an inconsistent
-# box the two limit points are a closest pair, and their difference separates
-# the box from the cone.
-pocs_dir <- function(R, d, max_iter = 1000L) {
-  b <- .box_bounds(R, d)
-  X <- R
-  for (k in seq_len(max_iter)) {
-    Xn <- .proj_box(.proj_psd_margin(X, 0), b$lo, b$hi, b$off)
-    done <- max(abs(Xn - X)) < 1e-13
-    X <- Xn
-    if (done) break
-  }
-  .subset_bottom_eigvec(X, seq_len(nrow(R)))
-}
-
 cross_shrink <- function(R, S, d) {
   X <- R
   Tt <- setdiff(seq_len(nrow(R)), S)
@@ -193,7 +177,8 @@ simulate <- function(p, n, d = 0.005) {
     ))
     # greedy elimination without polishing, then as implemented (each round's
     # winner polished on its support), then with every trial polished, then the
-    # margin-free POCS direction, then the single-vector optimum
+    # margin-free POCS direction (.pocs_witness_direction(), the last resort of
+    # check_corr_psd()), then the single-vector optimum
     raw <- function(v) .witness_bound(R, v, d)
     pol <- function(v) .polish_witness(R, d, v, on_support = TRUE)
     greedy_raw <- isTRUE(.greedy_subset_witness(R, raw, raw)$B_upper < 0)
@@ -203,7 +188,8 @@ simulate <- function(p, n, d = 0.005) {
     secs["greedy_all"] <- secs["greedy_all"] +
       system.time(g <- .greedy_subset_witness(R, pol, pol))[["elapsed"]]
     greedy_all <- isTRUE(g$B_upper < 0)
-    pocs <- neg(pocs_dir(R, d))
+    bb <- .box_bounds(R, d)
+    pocs <- neg(.pocs_witness_direction(bb$lo, bb$hi, bb$off))
     global <- neg(global_dir(R, d))
     new_inc <- check_corr_psd(R, delta = d)$verdict == "inconsistent"
     if (new_inc && is.null(example)) {
@@ -222,7 +208,7 @@ simulate <- function(p, n, d = 0.005) {
         greedy,
         greedy_all,
         pocs,
-        pocs_only = pocs && !greedy, # certified where the implemented search fails
+        pocs_only = pocs && !greedy, # where greedy elimination fails
         global,
         new_inc
       )
