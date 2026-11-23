@@ -21,7 +21,7 @@ the mathematics and the rigor guarantee.
 \seealso{
 Useful links:
 \itemize{
-  \item \url{https://github.com/ianhussey/port}
+  \item \doi{10.5281/zenodo.21434236}
   \item Report bugs at \url{https://github.com/ianhussey/port/issues}
 }
 

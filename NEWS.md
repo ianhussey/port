@@ -1,5 +1,9 @@
 # port (development version)
 
+* New `check_witness()` evaluates the bound behind an `inconsistent` verdict for a given witness vector, without any search, so a witness from `check_corr_psd()`, from another source or built by hand can be checked directly.
+
+* port now requires R >= 4.2.0. Its dependencies already required R >= 4.0.
+
 * `check_corr_psd()` certifies more near-boundary tables as `inconsistent`. When the existing witness directions certify nothing and no in-box PSD matrix is constructed, a greedy backward elimination over principal submatrices searches for a sparse witness and polishes it on its own support. If that finds nothing either and no in-box PSD matrix is found, the direction that separates the box from the PSD cone under alternating projections is tried before the verdict is `undecided`; a certificate found this way has `tier = "pocs"`. Some tables that were `undecided` are now `inconsistent`, and `b_upper` can be smaller than before. Because a smaller `b_upper` can fall below `tau`, some tables that were presumed `consistent` (`certified = FALSE`) now reach the alternating-projection search, which in the cases examined certified them `consistent`. The localizers and `check_disattenuated_psd()` use the sparse search.
 
 # port 0.1.0

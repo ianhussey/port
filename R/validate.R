@@ -91,3 +91,69 @@
   dimnames(R) <- NULL
   R
 }
+
+# Validate the precision arguments shared by check_corr_psd() and
+# check_witness(): `decimals` or `delta` (scalar or p x p matrix) and the
+# rounding rule. Errors on invalid input; returns nothing.
+.validate_precision <- function(decimals, delta, rounding, p) {
+  dec_ok <- function(x) {
+    is.numeric(x) &&
+      !anyNA(x) &&
+      all(is.finite(x)) &&
+      all(x >= 0) &&
+      all(x == round(x))
+  }
+  if (is.null(delta)) {
+    if (is.matrix(decimals)) {
+      if (
+        !all(dim(decimals) == p) ||
+          !dec_ok(decimals) ||
+          max(abs(decimals - t(decimals))) > 0
+      ) {
+        stop(
+          "A `decimals` matrix must be p x p, symmetric, with non-negative ",
+          "integer entries.",
+          call. = FALSE
+        )
+      }
+    } else if (!(length(decimals) == 1L && dec_ok(decimals))) {
+      stop(
+        "`decimals` must be a single non-negative integer (or a p x p matrix).",
+        call. = FALSE
+      )
+    }
+  } else {
+    if (!identical(rounding, "nearest")) {
+      stop(
+        "Supply `decimals` (not `delta`) when `rounding` is not \"nearest\": ",
+        "asymmetric boxes are derived from the decimal width.",
+        call. = FALSE
+      )
+    }
+    if (is.matrix(delta)) {
+      if (
+        !all(dim(delta) == p) ||
+          anyNA(delta) ||
+          any(!is.finite(delta)) ||
+          any(delta < 0) ||
+          max(abs(delta - t(delta))) > 0
+      ) {
+        stop(
+          "A `delta` matrix must be p x p, symmetric, non-negative and finite.",
+          call. = FALSE
+        )
+      }
+    } else if (
+      !(is.numeric(delta) &&
+        length(delta) == 1L &&
+        is.finite(delta) &&
+        delta >= 0)
+    ) {
+      stop(
+        "`delta` must be a single non-negative finite number (or a p x p matrix).",
+        call. = FALSE
+      )
+    }
+  }
+  invisible()
+}

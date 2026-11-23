@@ -172,66 +172,8 @@ check_corr_psd <- function(
   R <- if (has_na) .validate_corr_na(R) else .validate_corr(R)
   p <- nrow(R)
 
-  # --- precision arguments ---------------------------------------------------
-  dec_ok <- function(x) {
-    is.numeric(x) &&
-      !anyNA(x) &&
-      all(is.finite(x)) &&
-      all(x >= 0) &&
-      all(x == round(x))
-  }
-  if (is.null(delta)) {
-    if (is.matrix(decimals)) {
-      if (
-        !all(dim(decimals) == p) ||
-          !dec_ok(decimals) ||
-          max(abs(decimals - t(decimals))) > 0
-      ) {
-        stop(
-          "A `decimals` matrix must be p x p, symmetric, with non-negative ",
-          "integer entries.",
-          call. = FALSE
-        )
-      }
-    } else if (!(length(decimals) == 1L && dec_ok(decimals))) {
-      stop(
-        "`decimals` must be a single non-negative integer (or a p x p matrix).",
-        call. = FALSE
-      )
-    }
-  } else {
-    if (!identical(rounding, "nearest")) {
-      stop(
-        "Supply `decimals` (not `delta`) when `rounding` is not \"nearest\": ",
-        "asymmetric boxes are derived from the decimal width.",
-        call. = FALSE
-      )
-    }
-    if (is.matrix(delta)) {
-      if (
-        !all(dim(delta) == p) ||
-          anyNA(delta) ||
-          any(!is.finite(delta)) ||
-          any(delta < 0) ||
-          max(abs(delta - t(delta))) > 0
-      ) {
-        stop(
-          "A `delta` matrix must be p x p, symmetric, non-negative and finite.",
-          call. = FALSE
-        )
-      }
-    } else if (
-      !(is.numeric(delta) &&
-        length(delta) == 1L &&
-        is.finite(delta) &&
-        delta >= 0)
-    ) {
-      stop(
-        "`delta` must be a single non-negative finite number (or a p x p matrix).",
-        call. = FALSE
-      )
-    }
-  }
+  .validate_precision(decimals, delta, rounding, p)
+
   chk_tau <- function(tau) {
     if (!is.numeric(tau) || length(tau) != 1L || !is.finite(tau) || tau < 0) {
       stop("`tau` must be a single non-negative finite number.", call. = FALSE)
@@ -239,10 +181,7 @@ check_corr_psd <- function(
     tau
   }
 
-  uniform <- !has_na &&
-    identical(rounding, "nearest") &&
-    !is.matrix(decimals) &&
-    !is.matrix(delta)
+  uniform <- .is_uniform_box(has_na, decimals, delta, rounding)
 
   if (!uniform) {
     bx <- .reported_box(R, decimals, delta, rounding)
@@ -552,5 +491,101 @@ check_corr_psd <- function(
       ),
       na_note
     )
+  )
+}
+
+# Whether the rounding box is the uniform one (nearest rounding, one precision
+# for every cell, no missing cells), which check_corr_psd() and check_witness()
+# treat with the uniform bound rather than the general box.
+.is_uniform_box <- function(has_na, decimals, delta, rounding) {
+  !has_na &&
+    identical(rounding, "nearest") &&
+    !is.matrix(decimals) &&
+    !is.matrix(delta)
+}
+
+#' Check a witness vector against a reported correlation table
+#'
+#' Evaluates the bound behind an `inconsistent` verdict for one given vector of
+#' weights, without any search. Use it to check the witness that
+#' [check_corr_psd()] reports (see [certificate()]), a witness from another
+#' source, or one constructed by hand.
+#'
+#' For weights `v`, the bound is the largest value that `v'Xv` can take over
+#' all matrices `X` whose entries lie within the rounding ranges of the
+#' reported table, plus a rigorous allowance for floating-point error. `v'Xv`
+#' is the variance of the weighted sum of the standardized variables, so a
+#' negative bound proves that no dataset can have produced the table. A
+#' non-negative bound proves nothing: another vector may still give a negative
+#' one.
+#'
+#' The rounding ranges are those of [check_corr_psd()], and so is the bound: for
+#' the witness reported by [check_corr_psd()], `b_upper` is the same number.
+#' Reported entries outside `[-1, 1]` even at the nearest end of their range are
+#' not examined here; [check_corr_psd()] reports them at tier `precheck`.
+#'
+#' @inheritParams check_corr_psd
+#' @param witness A numeric vector of length `p` with finite entries, not all
+#'   zero.
+#' @return A one-row tibble with columns `inconsistent` (`TRUE` if the witness
+#'   proves the table inconsistent), `b_upper` (the rigorous upper bound;
+#'   negative proves inconsistency) and `margin` (the same maximum without the
+#'   floating-point allowance).
+#' @examples
+#' R <- matrix(c(1, 0.9, 0.9, 0.9, 1, -0.9, 0.9, -0.9, 1), 3, 3)
+#'
+#' # The witness found by check_corr_psd():
+#' result <- check_corr_psd(R, decimals = 2)
+#' check_witness(R, certificate(result)$witness, decimals = 2)
+#'
+#' # A witness by hand: variable 1 minus variables 2 and 3.
+#' check_witness(R, c(1, -1, -1), decimals = 2)
+#'
+#' @seealso [check_corr_psd()], [certificate()]
+#' @export
+check_witness <- function(
+  R,
+  witness,
+  decimals = 2,
+  delta = NULL,
+  rounding = c("nearest", "truncate", "floor", "ceiling")
+) {
+  rounding <- match.arg(rounding)
+  if (is.data.frame(R)) {
+    R <- as.matrix(R)
+  }
+  has_na <- is.matrix(R) && is.numeric(R) && anyNA(R)
+  R <- if (has_na) .validate_corr_na(R) else .validate_corr(R)
+  p <- nrow(R)
+  .validate_precision(decimals, delta, rounding, p)
+  if (
+    !is.numeric(witness) ||
+      length(witness) != p ||
+      !all(is.finite(witness)) ||
+      all(witness == 0)
+  ) {
+    stop(
+      sprintf(
+        "`witness` must be a numeric vector of length %d, finite and not all zero.",
+        p
+      ),
+      call. = FALSE
+    )
+  }
+  witness <- as.numeric(witness)
+
+  bound <- if (.is_uniform_box(has_na, decimals, delta, rounding)) {
+    if (is.null(delta)) {
+      delta <- 0.5 * 10^(-decimals)
+    }
+    .witness_bound(R, witness, delta)
+  } else {
+    box <- .reported_box(R, decimals, delta, rounding)
+    .witness_box_bound(box$lo, box$hi, box$off, witness)
+  }
+  tibble::tibble(
+    inconsistent = bound$B_upper < 0,
+    b_upper = bound$B_upper,
+    margin = bound$M_hat
   )
 }
