@@ -75,7 +75,9 @@ subsets <- function(p, max_size = p) {
 # Best single test direction, to numerical precision. Within one cell (a
 # support and a sign pattern) the box bound is the quadratic form of the vertex
 # matrix R + delta * signs signs' (unit diagonal) on the support, so a
-# minimiser is an eigenvector of it whose signs match. Enumerating all
+# minimiser inside the cell is its bottom eigenvector, with matching signs
+# (the loop below also accepts higher sign-matching eigenvectors, which are
+# valid directions but never better than the optimum). Enumerating all
 # (3^p - 1) / 2 cells therefore finds the global minimum; the result still goes
 # through the rigorous bound like any direction.
 best_direction <- function(cor_table) {

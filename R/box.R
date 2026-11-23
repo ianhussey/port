@@ -297,8 +297,8 @@
   # sparse search costs O(p^5) and POCS about O(p^3) per iteration, and the
   # first margin settles nearly every feasible box. For p > 20 the first margin
   # therefore runs first, so feasible boxes skip the sparse search (8 s at
-  # p = 100); implied_interval() then took 21 s instead of 53 s for one cell at
-  # p = 40. For p <= 20 the sparse search runs first; the other order made
+  # p = 100); implied_interval() then took less than half the 53 s for one
+  # cell at p = 40. For p <= 20 the sparse search runs first; the other order made
   # implied_interval() take about 1.5 times as long at p = 10.
   # ponytail: crossover p = 20 from timings on one machine; ties at p = 20-30.
   mus <- c(1e-2, 1e-3, 1e-4, 1e-6)

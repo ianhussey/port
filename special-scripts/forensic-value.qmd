@@ -46,7 +46,7 @@ ink <- "#3d3d3a"
 
 - The commits since `3671e6b` add two searches to `check_corr_psd()`: a **sparse witness search** (greedy elimination over subsets of variables) and a **last-resort witness search by alternating projections**. Both only *propose* test directions. Every proposal goes through the existing rigorous bound, so they cannot produce a false `inconsistent`.
 - **What they buy:** tables that are only *slightly* impossible, which the previous version reported as `undecided`, now get a proof. In a simulation built to produce such tables, about 99% of the previously undecided cases are now decided. The proofs often involve only a few variables, which makes them easier to explain and to check by hand.
-- **How much that matters in practice is modest.** In realistic tables the old search already caught nearly the same manipulations; the new searches lower the detection threshold by 0.005 to 0.01 (at most one unit in the last reported decimal) in some cases, more often in larger tables. The gain sits exactly at the edge of detectability.
+- **How much that matters in practice is modest.** In seven of eight realistic scenarios the old search already caught nearly the same manipulations; there the new searches lower the detection threshold by at most 0.01 (one unit in the last reported decimal), and often not at all. In the eighth, a table with 20 variables, the old search proves no change up to 0.4 impossible and the new one proves a change of 0.39. The gain sits at the edge of detectability.
 - **Proofs at that edge need a robustness check.** A borderline proof depends on the assumed rounding rule. `excusable_delta()` and a re-run under alternative rounding rules show how robust it is.
 - **Complete or partial?** port's *criterion* is complete: a table passes it if and only if some dataset could have produced it (for real-valued, complete-case data with at least $p + 1$ cases). port's *procedure* is not always decisive. Its certified verdicts are complete-test results in both directions; a "presumed consistent" verdict is only a partial pass; `undecided` is no result. Section 7 gives the details.
 
@@ -71,7 +71,7 @@ The new searches run only in that situation:
 1. **Sparse search** (`.greedy_subset_witness()`, `R/witness.R`). Start with all variables and drop, one at a time, the variable whose removal gives the most negative bound. The best direction at each step is polished on the variables still in play (`on_support = TRUE` in `.polish_witness()`), so it keeps its small rounding penalty.
 2. **Last resort** (`.pocs_witness()`, `R/pocs.R`). Alternately move a matrix to the nearest valid correlation matrix and back to the nearest matrix inside the rounding ranges. If the two never meet, the direction of the remaining gap is tried as a witness. A proof found this way is reported with `tier = "pocs"`.
 
-`check_corr_psd()`, `localize_psd_fault()`, `implied_interval()` and `check_disattenuated_psd()` use the new searches; no exported signature changed. One function is new: `check_witness()` evaluates the bound for a given witness, without any search (Section 3).
+`check_corr_psd()` uses both new searches; `localize_psd_fault()`, `implied_interval()` and `check_disattenuated_psd()` use only the sparse search; no exported signature changed. One function is new: `check_witness()` evaluates the bound for a given witness, without any search (Section 3).
 
 ## 3. Example: a table the old version could not decide
 
@@ -240,7 +240,7 @@ The same comparison for four kinds of manipulation, each in a table with 3 or 15
 
 Three things follow.
 
-- **The new searches lower the threshold by at most 0.01, and often not at all.** The previous menu already caught these manipulations at nearly the same size. The gain tends to be larger with more variables, because the rounding penalty of a spread-out witness grows with $p$.
+- **In seven of the eight scenarios the new searches lower the threshold by at most 0.01, and often not at all.** The previous menu already caught these manipulations at nearly the same size. The exception is the subscale's correlation with an outside variable at $p = 20$: the previous menu proves no change up to 0.4 impossible, the new searches a change of 0.39. The gain tends to be larger with more variables, because the rounding penalty of a spread-out witness grows with $p$.
 - **port's sensitivity depends strongly on the table and on the cell.** A change of 0.015 in the pre–post correlation of a change-score table is detectable, because the three variables are tied together exactly. A change of 0.4 in a subscale's correlation with an outside variable may not be. Whether a manipulation is detectable also depends on its direction: a change that moves a possible table further inside the valid region can never be detected.
 - **Most tables are far from the edge.** The same script draws random tables, changes one cell by up to ±0.08, rounds to two decimals and checks them (200 draws per row; draws whose changed cell left $[-1, 1]$ are dropped):
 
@@ -251,7 +251,7 @@ Three things follow.
   | 8 | 0.3 to 0.7 | 200 | 0 | 200 | 0 |
   | 20 | 0.3 to 0.7 | 200 | 0 | 200 | 0 |
 
-  Unique variances between 0.001 and 0.05 make the variables nearly redundant; this is the generator of `sparse-witness.md`, which is why many of its tables become impossible. With realistic unique variances (0.3 to 0.7), none does. port can only catch errors in tables whose variables are nearly redundant, and that is the setting where the new searches operate.
+  Unique variances between 0.001 and 0.05 make the variables nearly redundant; this is the generator of `sparse-witness.md`, which is why many of its tables become impossible. With realistic unique variances (0.3 to 0.7), none does. So a small error in one cell (up to ±0.08 here) makes a table impossible only when its variables are nearly redundant, and that is the setting where the new searches operate. Larger errors were not simulated here; the thresholds above show that changes of about 0.4 can be needed.
 
 ### 4.3 The simulation in `sparse-witness.md`
 
@@ -301,7 +301,7 @@ The table would become possible if each value were uncertain by ±`r signif(excu
 port asks whether the rounding ranges contain a matrix with unit diagonal that is positive semidefinite (PSD). That question is equivalent to whether a dataset exists:
 
 - **If a dataset exists, a PSD matrix lies in the ranges.** The dataset's correlation matrix is PSD (every weighted sum has non-negative variance) and rounds to the reported table, so it lies in the ranges.
-- **If a PSD matrix $C$ lies in the ranges, a dataset exists.** Write $C = L L^\top$ with $L$ of size $p \times r$, where $r$ is the rank of $C$. Take any $n \ge r + 1$ and an $n \times r$ matrix $U$ with orthonormal columns that each sum to zero (possible because $n - 1 \ge r$). The data matrix $Z = \sqrt{n-1}\, U L^\top$ has column means zero and sample covariance $Z^\top Z / (n - 1) = L L^\top = C$. Its diagonal is 1, so its correlation matrix is exactly $C$, which rounds to the reported table.
+- **If a PSD matrix $C$ lies in the ranges, a dataset exists.** Write $C = L L^\top$ with $L$ of size $p \times r$, where $r$ is the rank of $C$. Take any $n \ge r + 1$ and an $n \times r$ matrix $U$ with orthonormal columns that each sum to zero (possible because $n - 1 \ge r$). The data matrix $Z = \sqrt{n-1}\, U L^\top$ has column means zero and sample covariance $Z^\top Z / (n - 1) = L L^\top = C$. Its diagonal is 1, so its correlation matrix is exactly $C$. If $C$ lies strictly inside the ranges, it rounds to the reported table. A value exactly on the edge of a range may round the other way, but a positive definite $C$ (the kind port certifies) can be moved slightly inward and stays positive definite, so an interior matrix, and with it a dataset, exists as well. Only a singular $C$ on the edge of the ranges escapes this argument, a degenerate case.
 
 So for the question port addresses, passing the criterion implies possibility. In the sense defined above, the criterion is **complete**. This is standard linear algebra and not in doubt.
 
