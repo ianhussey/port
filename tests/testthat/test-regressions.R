@@ -107,3 +107,19 @@ test_that("merging does not hide an inconsistent duplicate", {
   bx <- port:::.reported_box(R, 2, NULL, "truncate")
   expect_null(port:::.pinned_merge(bx$lo, bx$hi, bx$off)$P)
 })
+
+test_that("a range merely close to +-1 is not merged into an out-of-box matrix", {
+  # hi = 1 - 1e-13 excludes 1, so forcing X12 = 1 would leave the box.
+  lo <- matrix(c(1, 1 - 3e-13, 1 - 3e-13, 1), 2)
+  hi <- matrix(c(1, 1 - 1e-13, 1 - 1e-13, 1), 2)
+  off <- row(lo) != col(lo)
+  expect_identical(nrow(port:::.pinned_cells(lo, hi)), 0L)
+  hit <- port:::.pocs_feasible(lo, hi, off)
+  if (!is.null(hit)) expect_true(port:::.in_box_generic(hit$X, lo, hi, off))
+
+  # A computed edge a few ulps off a real +-1 still counts as pinned:
+  # -1.001 under floor rounding at 3 decimals gives [-1, -1 + 1.1e-16].
+  R <- matrix(c(1, -1.001, 0.3, -1.001, 1, -0.3, 0.3, -0.3, 1), 3)
+  bx <- port:::.reported_box(R, 3, NULL, "floor")
+  expect_identical(nrow(port:::.pinned_cells(bx$lo, bx$hi)), 1L)
+})

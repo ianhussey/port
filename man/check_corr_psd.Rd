@@ -109,8 +109,9 @@ between a variable and its duplicate or reverse-coded copy: its range is the
 single value +-1 and the box holds no positive definite matrix. Such
 variables are equal up to sign in every PSD matrix in the box, so
 \code{check_corr_psd()} merges them and certifies the merged table. A range
-within \code{1e-12} of +-1 counts as +-1, which is exact when the reported values
-have at most 11 decimal places. The same applies under \code{"nearest"} with
+within about \code{4e-16} (four units of floating-point rounding) of +-1 counts as
++-1, which is exact when the reported values and half-widths have at most 15
+decimal places. The same applies under \code{"nearest"} with
 \code{delta = 0}. Other true values exactly on the grid (apart from 0, which does
 not need to move) arise only in very small samples or constructed data, and
 can leave a genuine table \code{undecided}.

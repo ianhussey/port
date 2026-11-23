@@ -100,15 +100,19 @@
 # Cells whose interval is the single value +1 or -1 ("pinned"), as rows of a
 # (row, col) matrix over the upper triangle. An interval within `tol` of such a
 # point counts: its computed ends can be a few ulps off, e.g. [-1, -1 + 1e-16]
-# for -1.001 under floor rounding. When the reported values and half-widths
-# have at most 11 decimal places, a decimal end that close to +-1 IS +-1, so
-# the cell really is pinned.
-.pinned_cells <- function(lo, hi, tol = 1e-12) {
+# for -1.001 under floor rounding. The default, 4u, is the error of a computed
+# box edge (see R/verify.R). A decimal end other than +-1 with at most 15
+# decimal places is at least 1e-15 - 4u > 4u from +-1, so for such input a cell
+# counts as pinned only if it really is. A larger tolerance would let the merge
+# force X_ij = +-1 in a cell whose box excludes it.
+.pinned_cells <- function(lo, hi, tol = .pin_tol()) {
   which(
     upper.tri(lo) & abs(hi - lo) <= tol & abs(abs(lo) - 1) <= tol,
     arr.ind = TRUE
   )
 }
+
+.pin_tol <- function() 4 * .unit_roundoff()
 
 # Merge variables whose correlation is pinned at s = +-1. If X is PSD with
 # X_ii = X_jj = 1 and X_ij = s, then (e_i - s e_j)' X (e_i - s e_j) = 0, so
@@ -121,7 +125,7 @@
 # list(P = NULL) if the pinned cells contradict each other or the merged
 # intervals are empty (then no in-box PSD matrix exists; the witness search,
 # not this function, is left to prove it), and otherwise list(lo, hi, off, P).
-.pinned_merge <- function(lo, hi, off, tol = 1e-12) {
+.pinned_merge <- function(lo, hi, off, tol = .pin_tol()) {
   pin <- .pinned_cells(lo, hi, tol)
   if (nrow(pin) == 0L) {
     return(NULL)
@@ -214,8 +218,8 @@
     }
     X <- m$P %*% hit$X %*% t(m$P)
     # Defensive: X is in the box by construction, up to the pinned cells'
-    # tolerance.
-    if (!.in_box_generic(X, lo, hi, off, tol = 1e-12)) {
+    # tolerance (a few ulps of computed edge error).
+    if (!.in_box_generic(X, lo, hi, off, tol = .pin_tol())) {
       return(NULL)
     }
     return(list(X = X, mu = hit$mu, merged = hit$merged %||% g))

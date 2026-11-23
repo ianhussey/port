@@ -301,7 +301,7 @@ The table would become possible if each value were uncertain by ±`r signif(excu
 port asks whether the rounding ranges contain a matrix with unit diagonal that is positive semidefinite (PSD). That question is equivalent to whether a dataset exists:
 
 - **If a dataset exists, a PSD matrix lies in the ranges.** The dataset's correlation matrix is PSD (every weighted sum has non-negative variance) and rounds to the reported table, so it lies in the ranges.
-- **If a PSD matrix $C$ lies in the ranges, a dataset exists.** Write $C = L L^\top$ with $L$ of size $p \times r$, where $r$ is the rank of $C$. Take any $n \ge r + 1$ and an $n \times r$ matrix $U$ with orthonormal columns that each sum to zero (possible because $n - 1 \ge r$). The data matrix $Z = \sqrt{n-1}\, U L^\top$ has column means zero and sample covariance $Z^\top Z / (n - 1) = L L^\top = C$. Its diagonal is 1, so its correlation matrix is exactly $C$. If $C$ lies strictly inside the ranges, it rounds to the reported table. A value exactly on the edge of a range may round the other way, but a positive definite $C$ (the kind port certifies) can be moved slightly inward and stays positive definite, so an interior matrix, and with it a dataset, exists as well. Only a singular $C$ on the edge of the ranges escapes this argument, a degenerate case.
+- **If a PSD matrix $C$ lies in the ranges, a dataset exists.** Write $C = L L^\top$ with $L$ of size $p \times r$, where $r$ is the rank of $C$. Take any $n \ge r + 1$ and an $n \times r$ matrix $U$ with orthonormal columns that each sum to zero (possible because $n - 1 \ge r$). The data matrix $Z = \sqrt{n-1}\, U L^\top$ has column means zero and sample covariance $Z^\top Z / (n - 1) = L L^\top = C$. Its diagonal is 1, so its correlation matrix is exactly $C$. If $C$ lies strictly inside the ranges, it rounds to the reported table. A value exactly on the edge of a range may round the other way, but a positive definite $C$ can be moved slightly inward and stays positive definite, so an interior matrix, and with it a dataset, exists as well. port certifies such matrices, and one kind of singular matrix: when a range is the single value $\pm 1$ (a duplicated or reverse-coded variable under truncation, floor or ceiling rounding, or with $\delta = 0$), port merges the variables, certifies a positive definite matrix on the merged table and expands it. That value $\pm 1$ is the reported value itself, so it rounds correctly, and the other cells can be moved inward as before. Only other singular matrices on the edge of the ranges escape this argument, a degenerate case.
 
 So for the question port addresses, passing the criterion implies possibility. In the sense defined above, the criterion is **complete**. This is standard linear algebra and not in doubt.
 
@@ -318,7 +318,7 @@ The criterion being complete does not mean port always settles it. Each verdict 
 | Verdict | What has been shown | In the complete/partial terms |
 |---|---|---|
 | `inconsistent` | A witness proves that no dataset exists. | A rigorous failure. |
-| `consistent`, `certified = TRUE` | An explicit matrix inside the ranges was verified to be positive definite, so by 7.1 a dataset exists. | A **complete** pass: possibility is proven. |
+| `consistent`, `certified = TRUE` | An explicit matrix inside the ranges was verified to be positive semidefinite (positive definite, or built from a positive definite matrix by merging variables correlated $\pm 1$), so by 7.1 a dataset exists. | A **complete** pass: possibility is proven. |
 | `consistent`, `certified = FALSE` ("presumed") | The witness bound is comfortably positive, but no valid matrix was exhibited. | Only a **partial** pass: this particular way of disproving failed. |
 | `undecided` | Neither. | No result. |
 
@@ -331,14 +331,18 @@ So port is a complete test whenever it returns a certified verdict, and it says 
 - The criterion is complete, within the scope above (7.1).
 - The question is decidable in principle: it is a statement about real numbers, and Tarski showed that every such statement can be decided by an algorithm. A verified semidefinite programming solver (Jansson et al., 2008, cited in the README) could decide all but degenerate cases. port deliberately avoids a solver dependency.
 - port's search cannot decide every case, for two reasons:
-  1. **Boundary-only tables.** If the ranges touch the PSD region only at singular matrices, the table is possible (a singular correlation matrix arises from data with an exact linear dependence), but there is no strictly positive definite matrix for port's verification step to certify. port then says `undecided` however long it searches. This needs the ranges to be cut off at $\pm 1$ or a similar degenerate situation, as in this constructed example:
+  1. **Boundary-only tables.** If the ranges touch the PSD region only at singular matrices, the table is possible (a singular correlation matrix arises from data with an exact linear dependence), but there is no strictly positive definite matrix for port's verification step to certify. port then returns a presumed `consistent` or `undecided` however long it searches. Ranges that pin a correlation at exactly $\pm 1$ are the exception: port merges those variables and certifies the merged table. What remains needs a degenerate situation, such as ranges of zero width around a singular matrix, as in this constructed example:
 
      ```{r}
      #| label: boundary
-     # The only correlation within the ranges is exactly 1: possible (y = x),
-     # but singular, so it cannot be certified.
-     boundary_table <- matrix(c(1, 1 + 2^-7, 1 + 2^-7, 1), nrow = 2)
-     check_corr_psd(boundary_table, delta = 2^-7)$verdict
+     # A change score reported exactly (delta = 0): z = x - y with
+     # cor(x, y) = 0.5 gives cor(x, z) = 0.5 and cor(y, z) = -0.5. Possible, but
+     # the only matrix within the ranges is singular, so it cannot be certified.
+     boundary_table <- matrix(
+       c(1, 0.5, 0.5, 0.5, 1, -0.5, 0.5, -0.5, 1),
+       nrow = 3
+     )
+     check_corr_psd(boundary_table, delta = 0)[c("verdict", "certified")]
      ```
 
   2. **Single-vector witnesses.** In general a table is impossible if and only if some *matrix* witness exists. A single vector is the simplest case of such a matrix. port only searches single vectors, so a table whose impossibility needs a matrix witness would stay `undecided`. Whether such tables occur in practice is not known; in the simulation all 202 decided cases had single-vector witnesses.

@@ -105,8 +105,9 @@
 #' single value +-1 and the box holds no positive definite matrix. Such
 #' variables are equal up to sign in every PSD matrix in the box, so
 #' `check_corr_psd()` merges them and certifies the merged table. A range
-#' within `1e-12` of +-1 counts as +-1, which is exact when the reported values
-#' have at most 11 decimal places. The same applies under `"nearest"` with
+#' within about `4e-16` (four units of floating-point rounding) of +-1 counts as
+#' +-1, which is exact when the reported values and half-widths have at most 15
+#' decimal places. The same applies under `"nearest"` with
 #' `delta = 0`. Other true values exactly on the grid (apart from 0, which does
 #' not need to move) arise only in very small samples or constructed data, and
 #' can leave a genuine table `undecided`.
