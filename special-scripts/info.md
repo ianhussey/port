@@ -2,8 +2,9 @@
 
 This folder contains research material for possible additions to port.
 
-- `sparse-witness.md`: the sparse witness search (implemented in `R/witness.R`), the simulation behind it, and three block-based ideas that were tried and rejected. `sparse-witness-simulation.R` reproduces its numbers.
+- `sparse-witness.md`: the sparse witness search (implemented in `R/witness.R`), the simulation behind it, and three block-based ideas that were tried and rejected. `sparse-witness-simulation.R` reproduces its numbers, and its last part those of `forensic-value.qmd`, Section 4.2.
 - `gci.md`: why the Gaussian correlation inequality gives port no new test.
+- `forensic-value.qmd`: what the new witness searches add in forensic terms, their limits, and whether port is a complete or a partial consistency test. Render with `quarto render special-scripts/forensic-value.qmd`; it loads the development version of port from the parent directory.
 
 ## Sources
 

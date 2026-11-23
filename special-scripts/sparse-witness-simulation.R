@@ -1,319 +1,443 @@
 # Simulation behind sparse-witness.md.
 #
-# Question: on rounded correlation matrices that port's original witness search
+# Question: on rounded correlation tables that port's original witness search
 # leaves undecided, which extra families of test directions (or constructions)
 # turn the verdict into a certificate?
 #
 # Generator: a low-rank-plus-small-noise correlation matrix (near the PSD
 # boundary), one cell perturbed by up to +-0.08, rounded to 2 decimals
-# (delta = 0.005). "Undecided" = the ORIGINAL witness search finds no
+# (delta = 0.005). "Undecided" = the original witness search finds no
 # certificate (B_upper >= 0) and neither the constructions nor POCS certify
 # consistency. The original search is .witness_search(sparse = FALSE).
 #
-# The search was tuned on these matrices, so a second part (holdout(), at the
-# end) asks how much of the result carries over to fresh matrices and larger p.
+# Part 1 compares the families on these tables. The searches were tuned on
+# them, so Part 2 asks how much of the result carries over to fresh tables and
+# larger p. Part 3 backs Section 4.2 of forensic-value.qmd: how large a change
+# to one cell of a realistic table must be before it is proven impossible, and
+# how often a random error makes a table impossible at all.
 #
 # Run from the package root:  Rscript special-scripts/sparse-witness-simulation.R
-# Takes about 8 minutes.
+# Takes about 10 minutes.
 
-suppressMessages(pkgload::load_all(".", quiet = TRUE))
+suppressMessages({
+  pkgload::load_all(".", quiet = TRUE)
+  library(dplyr)
+  library(purrr)
+  library(tibble)
+  library(tidyr)
+})
 
-# Best single test direction, to numerical precision. Within one cell (support
-# T, sign pattern s) the box bound is the quadratic form of X_s = R + d * s s'
-# (unit diagonal) on T, so a minimiser is an eigenvector of X_s[T, T] whose
-# signs match s. Enumerating all (3^p - 1) / 2 cells therefore finds the global
-# minimum; the result still goes through the rigorous bound like any direction.
-global_dir <- function(R, d) {
-  p <- nrow(R)
-  best <- Inf
-  best_v <- NULL
-  for (m in seq_len(2^p - 1)) {
-    S <- which(bitwAnd(m, 2^(0:(p - 1))) > 0)
-    k <- length(S)
-    if (k < 2) {
-      next
-    }
-    for (sg in 0:(2^(k - 1) - 1)) {
-      s <- c(1, ifelse(bitwAnd(sg, 2^(seq_len(k - 1) - 1)) > 0, -1, 1))
-      X <- R[S, S] + d * outer(s, s)
-      diag(X) <- 1
-      e <- eigen(X, symmetric = TRUE)
-      for (j in k:1) {
-        if (e$values[j] >= best) {
-          break
-        }
-        v <- e$vectors[, j]
-        if (v[1] < 0) {
-          v <- -v
-        }
-        if (all(v * s > -1e-12)) {
-          best <- e$values[j]
-          best_v <- replace(numeric(p), S, v)
-          break
-        }
-      }
-    }
-  }
-  best_v
-}
+delta <- 0.005
 
-msqrt_inv <- function(A) {
-  e <- eigen(A, symmetric = TRUE)
-  e$vectors %*% (1 / sqrt(e$values) * t(e$vectors))
-}
+# --- Generator ----------------------------------------------------------------
 
-# Block (canonical-correlation) witness for the partition S | rest; NULL unless
-# both diagonal blocks are positive definite.
-block_dir <- function(R, S) {
-  Tt <- setdiff(seq_len(nrow(R)), S)
-  A <- R[S, S, drop = FALSE]
-  B <- R[Tt, Tt, drop = FALSE]
-  pd <- function(X) min(eigen(X, TRUE, TRUE)$values) > 1e-10
-  if (!pd(A) || !pd(B)) {
+# One table from the generator, or NULL if the perturbed cell left [-1, 1].
+# `unique_range` bounds the unique variances. Small ones make the variables
+# nearly redundant, which puts the table near the PSD boundary.
+draw <- function(p, unique_range = c(0.001, 0.05)) {
+  rank <- sample(2:max(2, p - 2), 1)
+  loadings <- matrix(rnorm(p * rank), p)
+  unique_variances <- runif(p, unique_range[1], unique_range[2])
+  population <- cov2cor(tcrossprod(loadings) + diag(unique_variances))
+  cell <- sample(p, 2)
+  population[cell[1], cell[2]] <- population[cell[2], cell[1]] <-
+    population[cell[1], cell[2]] + runif(1, -0.08, 0.08)
+  if (any(abs(population[upper.tri(population)]) > 1)) {
     return(NULL)
   }
-  Ai <- msqrt_inv(A)
-  Bi <- msqrt_inv(B)
-  sv <- svd(Ai %*% R[S, Tt, drop = FALSE] %*% Bi)
-  v <- numeric(nrow(R))
-  v[S] <- Ai %*% sv$u[, 1]
-  v[Tt] <- -Bi %*% sv$v[, 1]
-  v
+  round(population, 2)
 }
 
+# n draws from the generator, without the ones that left [-1, 1].
+draw_tables <- function(p, n, unique_range = c(0.001, 0.05)) {
+  map(seq_len(n), \(i) draw(p, unique_range)) |>
+    compact()
+}
+
+# --- Candidate families ---------------------------------------------------------
+
+proves <- function(cor_table, direction) {
+  !is.null(direction) &&
+    .witness_bound(cor_table, direction, delta)$B_upper < 0
+}
+
+# Variable subsets as index vectors: all bipartitions (each counted once), and
+# all subsets of size 3 to `max_size`.
 bipartitions <- function(p) {
-  lapply(seq_len(2^(p - 1) - 1), function(m) {
-    which(bitwAnd(m, 2^(0:(p - 1))) > 0)
-  })
+  map(seq_len(2^(p - 1) - 1), \(mask) which(bitwAnd(mask, 2^(0:(p - 1))) > 0))
 }
+
 subsets <- function(p, max_size = p) {
-  unlist(
-    lapply(3:max_size, function(m) utils::combn(p, m, simplify = FALSE)),
-    recursive = FALSE
-  )
+  map(3:max_size, \(size) utils::combn(p, size, simplify = FALSE)) |>
+    list_flatten()
 }
 
-cross_shrink <- function(R, S, d) {
-  X <- R
-  Tt <- setdiff(seq_len(nrow(R)), S)
-  X[S, Tt] <- sign(R[S, Tt]) * pmax(0, abs(R[S, Tt]) - d)
-  X[Tt, S] <- t(X[S, Tt])
-  X
+# Best single test direction, to numerical precision. Within one cell (a
+# support and a sign pattern) the box bound is the quadratic form of the vertex
+# matrix R + delta * signs signs' (unit diagonal) on the support, so a
+# minimiser is an eigenvector of it whose signs match. Enumerating all
+# (3^p - 1) / 2 cells therefore finds the global minimum; the result still goes
+# through the rigorous bound like any direction.
+best_direction <- function(cor_table) {
+  p <- nrow(cor_table)
+  best_value <- Inf
+  best <- NULL
+  for (support_mask in seq_len(2^p - 1)) {
+    support <- which(bitwAnd(support_mask, 2^(0:(p - 1))) > 0)
+    size <- length(support)
+    if (size < 2) {
+      next
+    }
+    for (sign_mask in 0:(2^(size - 1) - 1)) {
+      flips <- bitwAnd(sign_mask, 2^(seq_len(size - 1) - 1)) > 0
+      signs <- c(1, ifelse(flips, -1, 1))
+      vertex <- cor_table[support, support] + delta * outer(signs, signs)
+      diag(vertex) <- 1
+      decomposition <- eigen(vertex, symmetric = TRUE)
+      for (j in size:1) {
+        if (decomposition$values[j] >= best_value) {
+          break
+        }
+        direction <- decomposition$vectors[, j]
+        if (direction[1] < 0) {
+          direction <- -direction
+        }
+        if (all(direction * signs > -1e-12)) {
+          best_value <- decomposition$values[j]
+          best <- replace(numeric(p), support, direction)
+          break
+        }
+      }
+    }
+  }
+  best
 }
 
-# One matrix from the generator, or NULL if the perturbed cell left [-1, 1].
-draw <- function(p) {
-  r <- sample(2:max(2, p - 2), 1)
-  L <- matrix(rnorm(p * r), p)
-  S0 <- cov2cor(tcrossprod(L) + diag(runif(p, 0.001, 0.05)))
-  ij <- sample(p, 2)
-  S0[ij[1], ij[2]] <- S0[ij[2], ij[1]] <- S0[ij[1], ij[2]] +
-    runif(1, -0.08, 0.08)
-  if (any(abs(S0[upper.tri(S0)]) > 1)) {
+inverse_sqrt <- function(matrix) {
+  decomposition <- eigen(matrix, symmetric = TRUE)
+  decomposition$vectors %*%
+    (1 / sqrt(decomposition$values) * t(decomposition$vectors))
+}
+
+# Block (canonical-correlation) witness for the partition `part` | rest
+# (sparse-witness.md, Section 5.1); NULL unless both diagonal blocks are
+# positive definite.
+block_direction <- function(cor_table, part) {
+  rest <- setdiff(seq_len(nrow(cor_table)), part)
+  within_part <- cor_table[part, part, drop = FALSE]
+  within_rest <- cor_table[rest, rest, drop = FALSE]
+  is_positive_definite <- function(matrix) {
+    min(eigen(matrix, symmetric = TRUE, only.values = TRUE)$values) > 1e-10
+  }
+  if (
+    !is_positive_definite(within_part) || !is_positive_definite(within_rest)
+  ) {
     return(NULL)
   }
-  round(S0, 2)
+  scale_part <- inverse_sqrt(within_part)
+  scale_rest <- inverse_sqrt(within_rest)
+  canonical <- svd(
+    scale_part %*% cor_table[part, rest, drop = FALSE] %*% scale_rest
+  )
+  direction <- numeric(nrow(cor_table))
+  direction[part] <- scale_part %*% canonical$u[, 1]
+  direction[rest] <- -scale_rest %*% canonical$v[, 1]
+  direction
 }
 
-simulate <- function(p, n, d = 0.005) {
-  verdicts <- character(0)
-  undec <- NULL
-  triples_lost <- 0L
-  secs <- c(greedy = 0, greedy_all = 0)
-  example <- NULL
-  for (k in seq_len(n)) {
-    R <- draw(p)
-    if (is.null(R)) {
-      next
-    }
-
-    old_inc <- .witness_search(R, d, sparse = FALSE)$B_upper < 0
-    if (old_inc) {
-      verdicts <- c(verdicts, "inconsistent")
-      # Is the triples family redundant once greedy elimination is added?
-      if (.witness_search(R, d, triples_max_p = 0L)$B_upper >= 0) {
-        triples_lost <- triples_lost + 1L
-      }
-      next
-    }
-    if (!is.null(.construct_consistent(R, d))) {
-      verdicts <- c(verdicts, "consistent (construction)")
-      next
-    }
-    if (!is.null(.pocs_consistent(R, d))) {
-      verdicts <- c(verdicts, "consistent (POCS)")
-      next
-    }
-    verdicts <- c(verdicts, "undecided")
-
-    neg <- function(v) !is.null(v) && .witness_bound(R, v, d)$B_upper < 0
-    s_opt <- any(vapply(
-      seq_len(p),
-      function(j) {
-        dd <- .rsquared_direction(R, j)
-        if (is.null(dd)) {
-          return(FALSE)
-        }
-        v0 <- dd$v / -dd$v[j]
-        f <- function(s) {
-          v <- v0
-          v[j] <- -s
-          .witness_bound(R, v, d)$B_upper
-        }
-        stats::optimize(f, c(0.01, 3))$objective < 0
-      },
-      logical(1)
-    ))
-    block <- any(vapply(
-      bipartitions(p),
-      function(S) neg(block_dir(R, S)),
-      logical(1)
-    ))
-    shrink <- any(vapply(
-      bipartitions(p),
-      function(S) {
-        .verify_psd(cross_shrink(R, S, d))
-      },
-      logical(1)
-    ))
-    sub_le4 <- any(vapply(
-      subsets(p, 4),
-      function(S) neg(.subset_bottom_eigvec(R, S)),
-      logical(1)
-    ))
-    sub_all <- any(vapply(
-      subsets(p),
-      function(S) neg(.subset_bottom_eigvec(R, S)),
-      logical(1)
-    ))
-    # greedy elimination without polishing, then as implemented (each round's
-    # winner polished on its support), then with every trial polished, then the
-    # margin-free POCS direction (.pocs_witness(), the last resort of
-    # check_corr_psd()) with a cap of 1000 iterations and as implemented, then
-    # the single-vector optimum
-    raw <- function(v) .witness_bound(R, v, d)
-    pol <- function(v) .polish_witness(R, d, v, on_support = TRUE)
-    greedy_raw <- isTRUE(.greedy_subset_witness(R, raw, raw)$B_upper < 0)
-    secs["greedy"] <- secs["greedy"] +
-      system.time(g <- .greedy_subset_witness(R, raw, pol))[["elapsed"]]
-    greedy <- isTRUE(g$B_upper < 0)
-    secs["greedy_all"] <- secs["greedy_all"] +
-      system.time(g <- .greedy_subset_witness(R, pol, pol))[["elapsed"]]
-    greedy_all <- isTRUE(g$B_upper < 0)
-    bb <- .box_bounds(R, d)
-    pocs_1000 <- .pocs_witness(bb$lo, bb$hi, bb$off, raw, 1000L)$B_upper < 0
-    pocs <- .pocs_witness(bb$lo, bb$hi, bb$off, raw)$B_upper < 0
-    global <- neg(global_dir(R, d))
-    new_inc <- check_corr_psd(R, delta = d)$verdict == "inconsistent"
-    if (new_inc && is.null(example)) {
-      example <- R
-    }
-
-    undec <- rbind(
-      undec,
-      data.frame(
-        s_opt,
-        block,
-        shrink,
-        sub_le4,
-        sub_all,
-        greedy_raw,
-        greedy,
-        greedy_all,
-        pocs_1000,
-        pocs,
-        pocs_only = pocs && !greedy, # where greedy elimination fails
-        global,
-        new_inc
-      )
-    )
+# Does some multiple s in the regression-residual direction (beta_j; -s) of
+# variable j certify the table (sparse-witness.md, Section 5.1)?
+residual_s_proves <- function(cor_table, j) {
+  residual <- .rsquared_direction(cor_table, j)
+  if (is.null(residual)) {
+    return(FALSE)
   }
-  list(
-    verdicts = table(verdicts),
-    undec = undec,
-    triples_lost = triples_lost,
-    secs = secs,
-    example = example
+  beta <- residual$v / -residual$v[j]
+  bound_at <- function(s) {
+    direction <- beta
+    direction[j] <- -s
+    .witness_bound(cor_table, direction, delta)$B_upper
+  }
+  stats::optimize(bound_at, c(0.01, 3))$objective < 0
+}
+
+# Cross-block shrinkage (sparse-witness.md, Section 5.3): every cell between
+# `part` and the rest moved towards zero by up to delta.
+cross_shrink <- function(cor_table, part) {
+  rest <- setdiff(seq_len(nrow(cor_table)), part)
+  shrunk <- cor_table
+  shrunk[part, rest] <- sign(cor_table[part, rest]) *
+    pmax(0, abs(cor_table[part, rest]) - delta)
+  shrunk[rest, part] <- t(shrunk[part, rest])
+  shrunk
+}
+
+# --- Part 1: families on the tables the original search leaves undecided -------
+
+# Which families certify an undecided table. `shrink` counts consistency
+# certificates; all others count inconsistency certificates. The greedy
+# elimination is run without polishing, as implemented (each round's winner
+# polished on its support), and with every trial polished; the margin-free POCS
+# direction (.pocs_witness(), the last resort of check_corr_psd()) with a cap of
+# 1000 iterations and as implemented.
+try_families <- function(cor_table) {
+  p <- nrow(cor_table)
+  bound <- function(direction) .witness_bound(cor_table, direction, delta)
+  polish <- function(direction) {
+    .polish_witness(cor_table, delta, direction, on_support = TRUE)
+  }
+  box <- .box_bounds(cor_table, delta)
+  greedy_seconds <- system.time(
+    greedy <- .greedy_subset_witness(cor_table, bound, polish)
+  )[["elapsed"]]
+  greedy_all_seconds <- system.time(
+    greedy_all <- .greedy_subset_witness(cor_table, polish, polish)
+  )[["elapsed"]]
+  greedy_proves <- isTRUE(greedy$B_upper < 0)
+  pocs_proves <- .pocs_witness(box$lo, box$hi, box$off, bound)$B_upper < 0
+
+  tibble(
+    residual_s = any(map_lgl(seq_len(p), \(j) residual_s_proves(cor_table, j))),
+    block = any(map_lgl(bipartitions(p), \(part) {
+      proves(cor_table, block_direction(cor_table, part))
+    })),
+    shrink = any(map_lgl(bipartitions(p), \(part) {
+      .verify_psd(cross_shrink(cor_table, part))
+    })),
+    subsets_3_4 = any(map_lgl(subsets(p, 4), \(support) {
+      proves(cor_table, .subset_bottom_eigvec(cor_table, support))
+    })),
+    subsets_all = any(map_lgl(subsets(p), \(support) {
+      proves(cor_table, .subset_bottom_eigvec(cor_table, support))
+    })),
+    greedy_unpolished = isTRUE(
+      .greedy_subset_witness(cor_table, bound, bound)$B_upper < 0
+    ),
+    greedy = greedy_proves,
+    greedy_all = isTRUE(greedy_all$B_upper < 0),
+    pocs_1000 = .pocs_witness(box$lo, box$hi, box$off, bound, 1000L)$B_upper <
+      0,
+    pocs = pocs_proves,
+    pocs_only = pocs_proves && !greedy_proves, # where greedy elimination fails
+    best_single = proves(cor_table, best_direction(cor_table)),
+    check_corr_psd = check_corr_psd(cor_table, delta = delta)$verdict ==
+      "inconsistent",
+    greedy_seconds = greedy_seconds,
+    greedy_all_seconds = greedy_all_seconds
   )
+}
+
+# Verdict of the original search for one table and, if undecided, which
+# families certify it. For tables the original search proves inconsistent,
+# `lost_without_triples` says whether the certificate depends on the triples
+# family once greedy elimination is added.
+classify <- function(cor_table) {
+  if (.witness_search(cor_table, delta, sparse = FALSE)$B_upper < 0) {
+    without_triples <- .witness_search(cor_table, delta, triples_max_p = 0L)
+    return(tibble(
+      verdict = "inconsistent",
+      lost_without_triples = without_triples$B_upper >= 0
+    ))
+  }
+  if (!is.null(.construct_consistent(cor_table, delta))) {
+    return(tibble(verdict = "consistent (construction)"))
+  }
+  if (!is.null(.pocs_consistent(cor_table, delta))) {
+    return(tibble(verdict = "consistent (POCS)"))
+  }
+  tibble(verdict = "undecided", table = list(cor_table)) |>
+    bind_cols(try_families(cor_table))
 }
 
 set.seed(2026)
 for (p in c(5, 6, 8, 10)) {
-  res <- simulate(p, n = if (p == 10) 1500 else 2500)
+  results <- draw_tables(p, n = if (p == 10) 1500 else 2500) |>
+    map(classify) |>
+    list_rbind()
+  undecided <- filter(results, verdict == "undecided")
+
   cat("\n=== p =", p, "===\n")
-  print(res$verdicts)
-  cat("Undecided cases certified inconsistent by:\n")
-  print(colSums(res$undec))
-  cat("(shrink counts consistency certificates)\n")
+  print(count(results, verdict))
+  cat("Undecided cases certified by each family (shrink: consistency):\n")
+  print(
+    summarise(undecided, across(residual_s:check_corr_psd, sum)),
+    width = Inf
+  )
   cat("Seconds in greedy elimination, winner / every trial polished:\n")
-  print(res$secs)
+  print(summarise(undecided, across(ends_with("_seconds"), sum)))
   cat(
     "Original certificates lost if triples are dropped (greedy kept):",
-    res$triples_lost,
+    sum(results$lost_without_triples, na.rm = TRUE),
     "\n"
   )
-  if (p == 6 && !is.null(res$example)) {
-    cat("Example matrix undecided before, inconsistent now:\n")
-    dput(res$example)
+  if (p == 6) {
+    cat("Example table undecided before, inconsistent now:\n")
+    undecided |>
+      filter(check_corr_psd) |>
+      pull(table) |>
+      pluck(1) |>
+      dput()
   }
 }
 
-# Held-out check. The searches were chosen on the matrices above, so "all
-# decided" is an in-sample result. On fresh matrices from the same generator,
-# larger p included: of the cases the original search leaves open (no
-# certificate either way), how many does check_corr_psd() certify, by which
-# search, and how many stay undecided (or presumed consistent: margin above
-# tau, so the POCS witness search never ran)? `pocs_over_1000` counts the POCS
-# certificates that a cap of 1000 iterations would have missed.
-holdout <- function(p, n, d = 0.005) {
-  out <- c(
-    open = 0,
-    sparse = 0,
-    pocs = 0,
-    pocs_over_1000 = 0,
-    presumed = 0,
-    undecided = 0
-  )
-  for (k in seq_len(n)) {
-    R <- draw(p)
-    if (is.null(R) || .witness_search(R, d, sparse = FALSE)$B_upper < 0) {
-      next
-    }
-    res <- check_corr_psd(R, delta = d)
-    # "presumed consistent" (margin above tau) skips POCS; run it as simulate()
-    # does, so that "open" means the same thing in both parts
-    if (
-      res$verdict == "consistent" &&
-        (res$certified || !is.null(.pocs_consistent(R, d)))
-    ) {
-      next
-    }
-    out["open"] <- out["open"] + 1
-    if (res$verdict == "consistent") {
-      # presumed consistent: margin above tau, so check_corr_psd() never ran
-      # the POCS witness search; not the same as "undecided"
-      out["presumed"] <- out["presumed"] + 1
-    } else if (res$verdict == "undecided") {
-      out["undecided"] <- out["undecided"] + 1
-    } else if (res$tier == "witness") {
-      out["sparse"] <- out["sparse"] + 1
-    } else {
-      out["pocs"] <- out["pocs"] + 1
-      bb <- .box_bounds(R, d)
-      raw <- function(v) .witness_bound(R, v, d)
-      if (.pocs_witness(bb$lo, bb$hi, bb$off, raw, 1000L)$B_upper >= 0) {
-        out["pocs_over_1000"] <- out["pocs_over_1000"] + 1
-      }
-    }
+# --- Part 2: held-out tables ---------------------------------------------------
+
+# Outcome for one fresh table, or NA if it is not open: the original search
+# proves it inconsistent, or it is consistent. A presumed consistent (margin
+# above tau) skips POCS in check_corr_psd(), so POCS is run here as in Part 1,
+# so that "open" means the same thing in both parts. For POCS certificates,
+# "over 1000" marks those a cap of 1000 iterations would have missed.
+holdout_outcome <- function(cor_table) {
+  if (.witness_search(cor_table, delta, sparse = FALSE)$B_upper < 0) {
+    return(NA_character_)
   }
-  out
+  result <- check_corr_psd(cor_table, delta = delta)
+  if (
+    result$verdict == "consistent" &&
+      (result$certified || !is.null(.pocs_consistent(cor_table, delta)))
+  ) {
+    return(NA_character_)
+  }
+  if (result$verdict == "consistent") {
+    return("presumed consistent")
+  }
+  if (result$verdict == "undecided") {
+    return("undecided")
+  }
+  if (result$tier == "witness") {
+    return("sparse search")
+  }
+  box <- .box_bounds(cor_table, delta)
+  bound <- function(direction) .witness_bound(cor_table, direction, delta)
+  pocs_1000 <- .pocs_witness(box$lo, box$hi, box$off, bound, 1000L)
+  if (pocs_1000$B_upper < 0) {
+    "POCS, within 1000 iterations"
+  } else {
+    "POCS, over 1000 iterations"
+  }
 }
 
 set.seed(2027)
-cat("\n=== Held-out matrices ===\n")
-print(vapply(
-  c("p = 8" = 8, "p = 10" = 10, "p = 15" = 15, "p = 20" = 20),
-  holdout,
-  numeric(6),
-  n = 2000
-))
+holdout <- tibble(p = c(8, 10, 15, 20)) |>
+  mutate(
+    outcome = map(p, \(p) map_chr(draw_tables(p, n = 2000), holdout_outcome))
+  ) |>
+  unnest_longer(outcome) |>
+  filter(!is.na(outcome)) |>
+  count(p, outcome)
+
+cat(
+  "\n=== Held-out tables (open cases by outcome; empty outcomes omitted) ===\n"
+)
+holdout |>
+  pivot_wider(names_from = p, names_prefix = "p = ", values_from = n) |>
+  mutate(across(starts_with("p = "), \(n) replace_na(n, 0L))) |>
+  print()
+cat("Open cases per p:\n")
+print(count(holdout, p, wt = n, name = "open"))
+
+# --- Part 3: realistic tables (forensic-value.qmd, Section 4.2) ----------------
+
+# A table in which some variables are tied by an exact linear dependency, plus
+# `n_other` variables that share a common factor with them.
+dependency_table <- function(kind, n_other, seed) {
+  set.seed(seed)
+  n <- 300
+  common <- rnorm(n)
+  core <- if (kind == "total") {
+    subscales <- 0.7 * common + matrix(rnorm(n * 4), nrow = n)
+    colnames(subscales) <- paste0("sub", 1:4)
+    cbind(subscales, total = rowSums(subscales))
+  } else {
+    pre <- common + rnorm(n)
+    post <- 0.6 * pre + rnorm(n)
+    cbind(pre, post, change = post - pre)
+  }
+  others <- 0.3 * common + matrix(rnorm(n * n_other), nrow = n)
+  colnames(others) <- paste0("x", seq_len(n_other))
+  round(cor(cbind(core, others)), 2)
+}
+
+# Smallest change to one cell, in either direction and in steps of 0.005, that
+# the previous directions and check_corr_psd() prove impossible (NA: none up to
+# 0.4).
+detection_threshold <- function(
+  cor_table,
+  cell,
+  steps = seq(0.005, 0.4, by = 0.005)
+) {
+  found <- c(previous = NA, new = NA)
+  for (step in steps) {
+    for (value in cor_table[cell[1], cell[2]] + c(-step, step)) {
+      if (abs(value) > 1) {
+        next
+      }
+      changed <- cor_table
+      changed[cell[1], cell[2]] <- changed[cell[2], cell[1]] <- value
+      previous_proves <-
+        .witness_search(changed, delta, sparse = FALSE)$B_upper < 0
+      if (is.na(found[["previous"]]) && previous_proves) {
+        found[["previous"]] <- step
+      }
+      new_proves <- check_corr_psd(changed, decimals = 2)$verdict ==
+        "inconsistent"
+      if (is.na(found[["new"]]) && new_proves) {
+        found[["new"]] <- step
+      }
+    }
+    if (!anyNA(found)) {
+      break
+    }
+  }
+  found
+}
+
+# fmt: skip
+scenarios <- tribble(
+  ~kind,    ~cell,
+  "total",  c("sub1", "sub2"),
+  "total",  c("sub1", "x1"),
+  "change", c("pre", "post"),
+  "change", c("pre", "x1")
+)
+
+thresholds <- scenarios |>
+  expand_grid(n_other = c(3, 15)) |>
+  mutate(
+    found = pmap(list(kind, n_other, cell), \(kind, n_other, cell) {
+      detection_threshold(dependency_table(kind, n_other, seed = 2), cell)
+    }),
+    cell = map_chr(cell, \(cell) paste(cell, collapse = " with "))
+  ) |>
+  unnest_wider(found)
+
+cat("\n=== Detection thresholds (forensic-value.qmd, Section 4.2) ===\n")
+print(thresholds)
+
+# Verdicts on random tables with nearly redundant variables (the generator
+# above) and with realistic unique variances.
+random_verdict <- function(cor_table) {
+  result <- check_corr_psd(cor_table, decimals = 2)
+  if (result$verdict == "consistent" && !result$certified) {
+    "presumed consistent"
+  } else {
+    result$verdict
+  }
+}
+
+set.seed(2028)
+verdicts <- expand_grid(
+  p = c(8, 20),
+  unique_range = list(c(0.001, 0.05), c(0.3, 0.7))
+) |>
+  mutate(
+    verdict = map2(p, unique_range, \(p, unique_range) {
+      map_chr(draw_tables(p, n = 200, unique_range), random_verdict)
+    }),
+    unique_range = map_chr(unique_range, toString)
+  ) |>
+  unnest_longer(verdict) |>
+  count(p, unique_range, verdict)
+
+cat("\n=== Verdicts on random tables (forensic-value.qmd, Section 4.2) ===\n")
+print(verdicts, n = Inf)

@@ -102,13 +102,17 @@ test_that("a sparse witness that needs polishing on its support is found", {
   # step on that support gives -3.4e-5. Polishing on the full matrix turns the
   # direction dense and finds nothing.
   # fmt: skip
-  R <- matrix(c(
-     1.00,  0.57, -0.51, -0.95,  0.98,
-     0.57,  1.00,  0.34, -0.30,  0.53,
-    -0.51,  0.34,  1.00,  0.72, -0.60,
-    -0.95, -0.30,  0.72,  1.00, -0.97,
-     0.98,  0.53, -0.60, -0.97,  1.00
-  ), 5, 5, byrow = TRUE)
+  R <- matrix(
+    c(
+       1.00,  0.57, -0.51, -0.95,  0.98,
+       0.57,  1.00,  0.34, -0.30,  0.53,
+      -0.51,  0.34,  1.00,  0.72, -0.60,
+      -0.95, -0.30,  0.72,  1.00, -0.97,
+       0.98,  0.53, -0.60, -0.97,  1.00
+    ),
+    nrow = 5,
+    byrow = TRUE
+  )
   v0 <- port:::.subset_bottom_eigvec(R, 2:5)
   expect_gt(port:::.witness_bound(R, v0, 0.005)$B_upper, 0)
   expect_gt(port:::.polish_witness(R, 0.005, v0)$B_upper, 0)
@@ -129,16 +133,20 @@ test_that("the POCS direction certifies a case the sparse search misses", {
   # succeeds). The search is called directly, so the test does not depend on
   # the greedy search missing this matrix.
   # fmt: skip
-  R <- matrix(c(
-     1.00,  0.83,  0.33, -0.17, -0.88, -0.99,  0.14, -0.83,
-     0.83,  1.00, -0.17,  0.39, -0.70, -0.76,  0.65, -0.77,
-     0.33, -0.17,  1.00, -0.90, -0.11, -0.38, -0.55,  0.10,
-    -0.17,  0.39, -0.90,  1.00,  0.13,  0.26,  0.87, -0.09,
-    -0.88, -0.70, -0.11,  0.13,  1.00,  0.91,  0.03,  0.96,
-    -0.99, -0.76, -0.38,  0.26,  0.91,  1.00, -0.02,  0.84,
-     0.14,  0.65, -0.55,  0.87,  0.03, -0.02,  1.00, -0.16,
-    -0.83, -0.77,  0.10, -0.09,  0.96,  0.84, -0.16,  1.00
-  ), 8, 8, byrow = TRUE)
+  R <- matrix(
+    c(
+       1.00,  0.83,  0.33, -0.17, -0.88, -0.99,  0.14, -0.83,
+       0.83,  1.00, -0.17,  0.39, -0.70, -0.76,  0.65, -0.77,
+       0.33, -0.17,  1.00, -0.90, -0.11, -0.38, -0.55,  0.10,
+      -0.17,  0.39, -0.90,  1.00,  0.13,  0.26,  0.87, -0.09,
+      -0.88, -0.70, -0.11,  0.13,  1.00,  0.91,  0.03,  0.96,
+      -0.99, -0.76, -0.38,  0.26,  0.91,  1.00, -0.02,  0.84,
+       0.14,  0.65, -0.55,  0.87,  0.03, -0.02,  1.00, -0.16,
+      -0.83, -0.77,  0.10, -0.09,  0.96,  0.84, -0.16,  1.00
+    ),
+    nrow = 8,
+    byrow = TRUE
+  )
   bb <- port:::.box_bounds(R, 0.005)
   wp <- port:::.pocs_witness(bb$lo, bb$hi, bb$off, function(v) {
     port:::.witness_bound(R, v, 0.005)

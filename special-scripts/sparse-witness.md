@@ -34,7 +34,7 @@ Two properties of the bound matter for the search.
 
 ### Design
 
-The script `special-scripts/sparse-witness-simulation.R` (seed 2026, about 8 minutes with the held-out run of Section 4) generates near-boundary rounded matrices:
+The script `special-scripts/sparse-witness-simulation.R` (seed 2026; about 10 minutes, including the held-out run of Section 4 and the runs behind `forensic-value.qmd`) generates near-boundary rounded matrices:
 
 1. a correlation matrix of rank 2 to $p - 2$ plus small diagonal noise,
 2. one off-diagonal cell perturbed by up to ±0.08,
