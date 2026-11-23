@@ -189,7 +189,8 @@
 # residual directions of the midpoint -- the same family that powers the base
 # checker, all evaluated with the rigorous box bound, then polished; if none
 # certifies and `sparse` is TRUE, the greedy-subset search of the midpoint is
-# tried as well (see .witness_search() for why it can be switched off).
+# tried as well (.box_sparse(); see .witness_search() for why it can be
+# switched off).
 .box_inconsistent <- function(
   lo,
   hi,
@@ -243,22 +244,41 @@
     pol <- .polish_witness_box(lo, hi, off, best$v)
     if (pol$B_upper < best$B_upper) best <- pol
   }
-  if (sparse && (is.null(best) || best$B_upper >= 0)) {
-    g <- .greedy_subset_witness(
-      mid,
-      function(v) .witness_box_bound(lo, hi, off, v),
-      function(v) .polish_witness_box(lo, hi, off, v, on_support = TRUE)
-    )
-    if (!is.null(g) && (is.null(best) || g$B_upper < best$B_upper)) {
-      best <- g
-    }
-  }
-  list(
+  res <- list(
     inconsistent = !is.null(best) && best$B_upper < 0,
     witness = if (is.null(best)) NULL else best$v,
     b_upper = if (is.null(best)) NA_real_ else best$B_upper,
     margin = if (is.null(best)) NA_real_ else best$M_hat
   )
+  if (sparse) .box_sparse(lo, hi, off, res) else res
+}
+
+# Sparse stage of .box_inconsistent(): if `imp` (a result of that function)
+# certifies nothing, try the greedy-subset search of the box midpoint and return
+# `imp` with its witness replaced if the new one is better. Callers that run
+# the dense stage first (sparse = FALSE) and something else in between call
+# this afterwards instead of repeating the dense stage.
+.box_sparse <- function(lo, hi, off, imp) {
+  if (isTRUE(imp$inconsistent)) {
+    return(imp)
+  }
+  mid <- matrix(0, nrow(lo), ncol(lo))
+  mid[off] <- (lo[off] + hi[off]) / 2
+  diag(mid) <- 1
+  g <- .greedy_subset_witness(
+    mid,
+    function(v) .witness_box_bound(lo, hi, off, v),
+    function(v) .polish_witness_box(lo, hi, off, v, on_support = TRUE)
+  )
+  if (!is.null(g) && (is.na(imp$b_upper) || g$B_upper < imp$b_upper)) {
+    imp <- list(
+      inconsistent = g$B_upper < 0,
+      witness = g$v,
+      b_upper = g$B_upper,
+      margin = g$M_hat
+    )
+  }
+  imp
 }
 
 # Feasibility oracle used by the bisection localizers. Combines the two sound
@@ -268,13 +288,30 @@
 # When verify = FALSE, a POCS point that fails Rump is still reported feasible
 # (labelled solver/search-based) so callers can run cheaply.
 .box_feasible <- function(lo, hi, off, verify = TRUE) {
-  # Witness first, sparse search included, so the bisection localizers can
-  # reject infeasible pins without a full POCS search. check_corr_psd() defers
-  # the O(p^5) sparse search until after the consistency search; doing that here
-  # is slower, because bisection asks about many boxes that are only just
-  # infeasible, and a failed POCS run costs far more than the sparse search
-  # (localize_psd_fault() took 2.4 times as long over eight tables, p = 8 to 30).
-  imp <- .box_inconsistent(lo, hi, off)
+  # Order of the searches. The full POCS search tries four margins, each a
+  # separate run. The sparse witness search goes before the three smaller
+  # margins: they rarely succeed and cost the most when they fail, which
+  # bisection near the boundary often makes them do (run after them, the sparse
+  # search made localize_psd_fault() 2.4 times as slow over eight tables, p = 8
+  # to 30). Whether it also goes before the first margin depends on p. The
+  # sparse search costs O(p^5) and POCS about O(p^3) per iteration, and the
+  # first margin settles nearly every feasible box. For p > 20 the first margin
+  # therefore runs first, so feasible boxes skip the sparse search (8 s at
+  # p = 100); implied_interval() then took 21 s instead of 53 s for one cell at
+  # p = 40. For p <= 20 the sparse search runs first; the other order made
+  # implied_interval() take about 1.5 times as long at p = 10.
+  # ponytail: crossover p = 20 from timings on one machine; ties at p = 20-30.
+  mus <- c(1e-2, 1e-3, 1e-4, 1e-6)
+  sparse_first <- nrow(lo) <= 20L
+  imp <- .box_inconsistent(lo, hi, off, sparse = sparse_first)
+  if (!sparse_first && !isTRUE(imp$inconsistent)) {
+    hit <- .pocs_feasible(lo, hi, off, mus = mus[1L])
+    if (!is.null(hit)) {
+      return(list(status = "feasible", X = hit$X, certified = TRUE))
+    }
+    imp <- .box_sparse(lo, hi, off, imp)
+    mus <- mus[-1L]
+  }
   if (isTRUE(imp$inconsistent)) {
     return(list(
       status = "infeasible",
@@ -283,7 +320,7 @@
       certified = TRUE
     ))
   }
-  hit <- .pocs_feasible(lo, hi, off)
+  hit <- .pocs_feasible(lo, hi, off, mus = mus)
   if (!is.null(hit)) {
     return(list(status = "feasible", X = hit$X, certified = TRUE))
   }

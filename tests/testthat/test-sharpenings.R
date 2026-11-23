@@ -356,3 +356,36 @@ test_that("greedy subset elimination certifies a case the dense search missed", 
   bx <- .reported_box(R, 2, NULL, "nearest")
   expect_true(.box_inconsistent(bx$lo, bx$hi, bx$off)$inconsistent)
 })
+
+test_that("the feasibility oracle settles both kinds of box above p = 20", {
+  # For p > 20 .box_feasible() tries the first POCS margin before the sparse
+  # search. Embed the 5 x 5 matrix from test-escalation.R, whose witness needs
+  # polishing on its support, in a 24 x 24 table of uncorrelated variables.
+  # fmt: skip
+  fragile <- matrix(
+    c(
+       1.00,  0.57, -0.51, -0.95,  0.98,
+       0.57,  1.00,  0.34, -0.30,  0.53,
+      -0.51,  0.34,  1.00,  0.72, -0.60,
+      -0.95, -0.30,  0.72,  1.00, -0.97,
+       0.98,  0.53, -0.60, -0.97,  1.00
+    ),
+    nrow = 5,
+    byrow = TRUE
+  )
+  table_24 <- diag(24)
+  table_24[1:5, 1:5] <- fragile
+  box <- .box_bounds(table_24, 0.005)
+  oracle <- .box_feasible(box$lo, box$hi, box$off)
+  expect_equal(oracle$status, "infeasible")
+  expect_lt(
+    .witness_box_bound(box$lo, box$hi, box$off, oracle$witness)$B_upper,
+    0
+  )
+
+  table_24[1:5, 1:5] <- diag(5)
+  box <- .box_bounds(table_24, 0.005)
+  oracle <- .box_feasible(box$lo, box$hi, box$off)
+  expect_equal(oracle$status, "feasible")
+  expect_true(.verify_psd(oracle$X))
+})

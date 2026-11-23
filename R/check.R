@@ -460,7 +460,7 @@ check_corr_psd <- function(
   hit <- NULL
   if (!isTRUE(imp$inconsistent)) {
     hit <- .pocs_feasible(bx$lo, bx$hi, bx$off)
-    if (is.null(hit)) imp <- .box_inconsistent(bx$lo, bx$hi, bx$off)
+    if (is.null(hit)) imp <- .box_sparse(bx$lo, bx$hi, bx$off, imp)
   }
   if (isTRUE(imp$inconsistent)) {
     return(.new_corr_psd_check(
