@@ -89,7 +89,7 @@
 }
 
 # Is X inside the (heterogeneous) box? Unit diagonal, off-diagonals in [lo, hi].
-.in_box_generic <- function(X, lo, hi, off, tol = 1e-9) {
+.in_box_generic <- function(X, lo, hi, off, tol = 0) {
   if (any(abs(diag(X) - 1) > tol)) {
     return(FALSE)
   }
@@ -97,9 +97,99 @@
   all(x >= lo[off] - tol & x <= hi[off] + tol)
 }
 
+# Cells whose interval is the single value +1 or -1 ("pinned"), as rows of a
+# (row, col) matrix over the upper triangle. An interval within `tol` of such a
+# point counts: its computed ends can be a few ulps off, e.g. [-1, -1 + 1e-16]
+# for -1.001 under floor rounding. When the reported values and half-widths
+# have at most 11 decimal places, a decimal end that close to +-1 IS +-1, so
+# the cell really is pinned.
+.pinned_cells <- function(lo, hi, tol = 1e-12) {
+  which(
+    upper.tri(lo) & abs(hi - lo) <= tol & abs(abs(lo) - 1) <= tol,
+    arr.ind = TRUE
+  )
+}
+
+# Merge variables whose correlation is pinned at s = +-1. If X is PSD with
+# X_ii = X_jj = 1 and X_ij = s, then (e_i - s e_j)' X (e_i - s e_j) = 0, so
+# X e_i = s X e_j: in every PSD matrix in the box, variable j is variable i up
+# to sign. Each class of such variables becomes one variable whose box row is
+# the intersection of its members' sign-adjusted rows. With P the p x g matrix
+# that has P[i, class(i)] = sign(i), the in-box PSD matrices are exactly the
+# matrices P Y P' with Y PSD in the merged box: any such Y gives one, and every
+# in-box PSD X is of that form. Returns NULL if no cell is pinned,
+# list(P = NULL) if the pinned cells contradict each other or the merged
+# intervals are empty (then no in-box PSD matrix exists; the witness search,
+# not this function, is left to prove it), and otherwise list(lo, hi, off, P).
+.pinned_merge <- function(lo, hi, off, tol = 1e-12) {
+  pin <- .pinned_cells(lo, hi, tol)
+  if (nrow(pin) == 0L) {
+    return(NULL)
+  }
+  p <- nrow(lo)
+  parent <- seq_len(p)
+  sgn <- rep(1, p) # sign of each variable relative to its parent
+  find <- function(i) {
+    s <- 1
+    while (parent[i] != i) {
+      s <- s * sgn[i]
+      i <- parent[i]
+    }
+    c(i, s)
+  }
+  for (r in seq_len(nrow(pin))) {
+    a <- find(pin[r, 1])
+    b <- find(pin[r, 2])
+    s <- sign(lo[pin[r, 1], pin[r, 2]])
+    if (a[1] != b[1]) {
+      parent[b[1]] <- a[1]
+      sgn[b[1]] <- a[2] * b[2] * s
+    }
+  }
+  cls <- t(vapply(seq_len(p), find, numeric(2)))
+  reps <- sort(unique(cls[, 1]))
+  g <- length(reps)
+  P <- matrix(0, p, g)
+  P[cbind(seq_len(p), match(cls[, 1], reps))] <- cls[, 2]
+
+  L <- matrix(-1, g, g)
+  H <- matrix(1, g, g)
+  for (i in seq_len(p - 1L)) {
+    for (j in (i + 1L):p) {
+      a <- match(cls[i, 1], reps)
+      b <- match(cls[j, 1], reps)
+      s <- cls[i, 2] * cls[j, 2]
+      if (a == b) {
+        # X_ij is forced to s; the cell's interval must allow it.
+        if (s < lo[i, j] - tol || s > hi[i, j] + tol) {
+          return(list(P = NULL))
+        }
+        next
+      }
+      iv <- sort(s * c(lo[i, j], hi[i, j]))
+      L[a, b] <- L[b, a] <- max(L[a, b], iv[1])
+      H[a, b] <- H[b, a] <- min(H[a, b], iv[2])
+    }
+  }
+  diag(L) <- 1
+  diag(H) <- 1
+  if (any(L > H)) {
+    return(list(P = NULL))
+  }
+  list(lo = L, hi = H, off = upper.tri(L) | lower.tri(L), P = P)
+}
+
 # POCS search for an in-box PSD matrix in a heterogeneous box. Returns a
 # Rump-verified in-box matrix (list with X, mu) or NULL. NULL means "not found",
 # NOT "infeasible"; infeasibility must be established by .box_inconsistent().
+#
+# A box with a cell pinned at +-1 holds no positive definite matrix, which the
+# Rump test needs, so such boxes are first reduced by .pinned_merge(). The
+# search then runs on the merged box (recursively, as merging can pin further
+# cells) and the result is expanded as X = P Y P'. That product is exact: each
+# entry of X is +-1 times one entry of Y. Y is Rump-verified PSD, so X is
+# exactly PSD, though singular; the result then also carries `merged`, the
+# number of merged variables.
 .pocs_feasible <- function(
   lo,
   hi,
@@ -108,6 +198,29 @@
   max_iter = 1000L,
   tol = 1e-13
 ) {
+  m <- .pinned_merge(lo, hi, off)
+  if (!is.null(m)) {
+    if (is.null(m$P)) {
+      return(NULL)
+    }
+    g <- ncol(m$P)
+    hit <- if (g == 1L) {
+      list(X = matrix(1, 1, 1), mu = NA_real_)
+    } else {
+      .pocs_feasible(m$lo, m$hi, m$off, mus, max_iter, tol)
+    }
+    if (is.null(hit)) {
+      return(NULL)
+    }
+    X <- m$P %*% hit$X %*% t(m$P)
+    # Defensive: X is in the box by construction, up to the pinned cells'
+    # tolerance.
+    if (!.in_box_generic(X, lo, hi, off, tol = 1e-12)) {
+      return(NULL)
+    }
+    return(list(X = X, mu = hit$mu, merged = hit$merged %||% g))
+  }
+
   p <- nrow(lo)
   start <- matrix(0, p, p)
   start[off] <- (lo[off] + hi[off]) / 2

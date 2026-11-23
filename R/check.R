@@ -87,6 +87,30 @@
 #'     missed, or consistent only on the boundary of the PSD cone.}
 #' }
 #'
+#' @section When a genuine table can be undecided:
+#' Let `C` be the true correlation matrix behind a genuine table. For small
+#' `t > 0`, `(1 - t) C + t I` is positive definite and moves every correlation
+#' toward 0, so it lies in the rounding box unless some true correlation sits
+#' exactly on the end of its range nearer to 0. Under `"nearest"` rounding that
+#' end is a rounding midpoint (such as 0.125 at 2 decimals), which real data
+#' essentially never hit. So the box of a genuine table rounded to nearest
+#' always contains a positive definite matrix, and the verdict is never
+#' `undecided` for structural reasons; an `undecided` genuine table has too
+#' little room around such a matrix for the search to find and verify it.
+#'
+#' Under `"truncate"`, `"floor"` and `"ceiling"` the reported value is itself
+#' an end of the range, so a true value exactly on the rounding grid can sit on
+#' the end nearer to 0. In practice that is a correlation of exactly 1 or -1, as
+#' between a variable and its duplicate or reverse-coded copy: its range is the
+#' single value +-1 and the box holds no positive definite matrix. Such
+#' variables are equal up to sign in every PSD matrix in the box, so
+#' `check_corr_psd()` merges them and certifies the merged table. A range
+#' within `1e-12` of +-1 counts as +-1, which is exact when the reported values
+#' have at most 11 decimal places. The same applies under `"nearest"` with
+#' `delta = 0`. Other true values exactly on the grid (apart from 0, which does
+#' not need to move) arise only in very small samples or constructed data, and
+#' can leave a genuine table `undecided`.
+#'
 #' @section Rigor guarantee (and what it does not prove):
 #' If `verdict == "inconsistent"`, then no PSD matrix exists in the rounding box,
 #' subject to the stated floating-point error model (IEEE double precision,
@@ -141,8 +165,9 @@
 #'   `note`, and a summary of the reported off-diagonal correlations `r_min`,
 #'   `r_max`, `r_mean`, `r_sd` (over the unique off-diagonal entries, excluding
 #'   the unit diagonal and any `NA` cells; `r_sd` is the sample SD, `NA` when
-#'   fewer than two correlations are present). See [certificate()] and the print
-#'   method.
+#'   fewer than two correlations are present). The witness is named by the
+#'   column (or row) names of `R`, if it has any. See [certificate()] and the
+#'   print method.
 #'
 #' @examples
 #' # Strongly inconsistent 3x3: r12 = r13 = 0.9, r23 = -0.9.
@@ -169,10 +194,21 @@ check_corr_psd <- function(
     R <- as.matrix(R)
   }
   has_na <- is.matrix(R) && is.numeric(R) && anyNA(R)
-  R <- if (has_na) .validate_corr_na(R) else .validate_corr(R)
+  var_names <- colnames(R) %||% rownames(R)
+  R <- .validate_corr(R, allow_na = has_na)
   p <- nrow(R)
 
   .validate_precision(decimals, delta, rounding, p)
+
+  finish <- function(res, uniform) {
+    if (!is.null(res$witness)) {
+      names(res$witness) <- var_names
+    }
+    res[c("r_min", "r_max", "r_mean", "r_sd")] <- .offdiag_stats(R)
+    attr(res, "R") <- R
+    attr(res, "uniform_box") <- uniform
+    res
+  }
 
   chk_tau <- function(tau) {
     if (!is.numeric(tau) || length(tau) != 1L || !is.finite(tau) || tau < 0) {
@@ -188,11 +224,7 @@ check_corr_psd <- function(
     if (is.null(tau)) {
       tau <- 10 * bx$half_max
     }
-    res <- .check_box(R, bx, chk_tau(tau), rounding)
-    res[c("r_min", "r_max", "r_mean", "r_sd")] <- .offdiag_stats(R)
-    attr(res, "R") <- R
-    attr(res, "uniform_box") <- FALSE
-    return(res)
+    return(finish(.check_box(R, bx, chk_tau(tau), rounding), FALSE))
   }
 
   if (is.null(delta)) {
@@ -341,11 +373,7 @@ check_corr_psd <- function(
     )
   }
 
-  res <- build()
-  res[c("r_min", "r_max", "r_mean", "r_sd")] <- .offdiag_stats(R)
-  attr(res, "R") <- R
-  attr(res, "uniform_box") <- TRUE
-  res
+  finish(build(), TRUE)
 }
 
 # General (heterogeneous) box path: asymmetric rounding rules, per-cell
@@ -428,10 +456,7 @@ check_corr_psd <- function(
       margin = imp$margin,
       b_upper = imp$b_upper,
       certified_matrix = hit$X,
-      note = c(
-        "alternating projections found an in-box matrix, independently verified PSD",
-        na_note
-      )
+      note = c(.pocs_note(hit), na_note)
     ))
   }
 
@@ -491,6 +516,23 @@ check_corr_psd <- function(
       ),
       na_note
     )
+  )
+}
+
+# Evidence note for a consistency certificate from .pocs_feasible().
+.pocs_note <- function(hit) {
+  if (is.null(hit$merged)) {
+    return(
+      "alternating projections found an in-box matrix, independently verified PSD"
+    )
+  }
+  sprintf(
+    paste(
+      "variables correlated exactly +-1 were merged (%d remain); alternating",
+      "projections found a matrix on them, independently verified PSD, which",
+      "expands exactly to an in-box PSD matrix"
+    ),
+    hit$merged
   )
 }
 
@@ -555,7 +597,7 @@ check_witness <- function(
     R <- as.matrix(R)
   }
   has_na <- is.matrix(R) && is.numeric(R) && anyNA(R)
-  R <- if (has_na) .validate_corr_na(R) else .validate_corr(R)
+  R <- .validate_corr(R, allow_na = has_na)
   p <- nrow(R)
   .validate_precision(decimals, delta, rounding, p)
   if (

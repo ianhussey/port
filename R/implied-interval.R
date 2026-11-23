@@ -47,36 +47,6 @@
   c(lo = max(-1, g - rad), hi = min(1, g + rad))
 }
 
-# Relaxed validation: like .validate_corr but permits NA off-diagonals.
-.validate_corr_na <- function(R) {
-  if (is.data.frame(R)) {
-    R <- as.matrix(R)
-  }
-  if (!is.matrix(R) || !is.numeric(R)) {
-    stop("`R` must be a numeric matrix.", call. = FALSE)
-  }
-  if (nrow(R) != ncol(R)) {
-    stop("`R` must be square.", call. = FALSE)
-  }
-  if (nrow(R) < 2L) {
-    stop("`R` must have at least 2 variables.", call. = FALSE)
-  }
-  d <- diag(R)
-  if (anyNA(d) || any(abs(d - 1) > 1e-8)) {
-    stop("Diagonal entries must equal 1 (and be non-missing).", call. = FALSE)
-  }
-  asym <- max(abs(R - t(R)), na.rm = TRUE)
-  if (is.finite(asym) && asym > 1e-6) {
-    stop("`R` is not symmetric.", call. = FALSE)
-  }
-  # NA must be mirrored across the diagonal
-  na_ok <- all(is.na(R) == is.na(t(R)))
-  if (!na_ok) {
-    stop("Missing (NA) entries must be symmetric.", call. = FALSE)
-  }
-  R
-}
-
 #' Implied interval for a correlation cell (and single-cell imputation)
 #'
 #' Compute the interval a correlation cell could occupy for the matrix to be a
@@ -120,11 +90,9 @@ implied_interval <- function(
   verify = TRUE
 ) {
   hold <- match.arg(hold)
-  R <- .validate_corr_na(R)
+  R <- .validate_corr(R, allow_na = TRUE)
   p <- nrow(R)
-  if (is.null(delta)) {
-    delta <- 0.5 * 10^(-decimals)
-  }
+  delta <- .uniform_delta(decimals, delta, p)
 
   if (is.null(cells)) {
     na_idx <- which(is.na(R) & upper.tri(R), arr.ind = TRUE)
@@ -139,6 +107,18 @@ implied_interval <- function(
   }
   if (is.null(dim(cells))) {
     cells <- matrix(cells, nrow = 1)
+  }
+  if (
+    !is.numeric(cells) ||
+      ncol(cells) != 2L ||
+      anyNA(cells) ||
+      any(cells != round(cells)) ||
+      any(cells < 1 | cells > p)
+  ) {
+    stop(
+      sprintf("`cells` must be (i, j) pairs of variable indices in 1..%d.", p),
+      call. = FALSE
+    )
   }
   storage.mode(cells) <- "integer"
 
@@ -194,7 +174,6 @@ implied_interval <- function(
     status <- if (any(is.na(iv))) "empty" else "feasible"
     if (is.na(reported)) {
       edit <- NA_real_
-      if (status == "feasible") status <- "feasible" # imputation
     } else {
       edit <- if (status == "feasible") {
         .signed_gap(reported - delta, reported + delta, iv["lo"], iv["hi"])

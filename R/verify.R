@@ -12,7 +12,14 @@
 #     lambda_min(B) >= -||dB||_2 >= -gamma_{n+1} * ||Rhat||_F^2
 #                   >= -gamma_{n+1} * trace(B) >= -gamma_{n+1} * trace(A).
 # Since lambda_min(A) = lambda_min(B) + c, choosing c >= gamma_{n+1}*trace(A)
-# gives lambda_min(A) >= 0, i.e. A is PSD. The test is one-sided and cheap: it
+# gives lambda_min(A) >= 0, i.e. A is PSD.
+#
+# The callers check that A lies in the box as computed in floating point. Each
+# computed box edge (R_ij -/+ delta, or the general-box forms) is within 4u of
+# the real one, so A is within 4u of a matrix A' in the real box in every
+# off-diagonal entry, and lambda_min(A') >= lambda_min(A) - 4u(n - 1). The
+# extra shift 8nu in c covers that, so a pass also proves A' PSD. The test is
+# one-sided and cheap: it
 # may fail to certify a genuinely-but-marginally PSD matrix, which is safe (we
 # then fall through to "undecided"), and it never certifies a non-PSD matrix.
 # -----------------------------------------------------------------------------
@@ -29,7 +36,7 @@
   }
   c <- .gamma(n + 1L, u) * trA
   # Inflate c to cover rounding while forming c and the PSD-vs-PD gap.
-  c <- c * 1.0001 + 2 * u * trA
+  c <- c * 1.0001 + 2 * u * trA + 8 * n * u
   B <- A - diag(c, n)
   isTRUE(tryCatch(
     {

@@ -9,6 +9,7 @@ check_corr_psd_batch(
   decimals = 2,
   delta = NULL,
   tau = NULL,
+  rounding = c("nearest", "truncate", "floor", "ceiling"),
   on_error = c("row", "stop"),
   quiet = FALSE
 )
@@ -17,7 +18,7 @@ check_corr_psd_batch(
 \item{mats}{A list of matrices (each a candidate correlation matrix). May be
 named; names become the \code{id} column (otherwise a positional index is used).}
 
-\item{decimals, delta, tau}{Passed through to \code{\link[=check_corr_psd]{check_corr_psd()}}.}
+\item{decimals, delta, tau, rounding}{Passed through to \code{\link[=check_corr_psd]{check_corr_psd()}}.}
 
 \item{on_error}{How to handle a matrix that fails validation: \code{"row"}
 (default) records a verdict of \code{"error"} with the message; \code{"stop"}

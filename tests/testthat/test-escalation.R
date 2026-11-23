@@ -163,15 +163,16 @@ test_that("the POCS direction certifies a case the sparse search misses", {
   expect_lt(exact_box_max(R, res_box$witness), 0)
 })
 
-test_that("a genuinely boundary-only case is honestly undecided, not guessed", {
+test_that("a boundary-only box pinned at r = 1 is certified by merging", {
   # The box [1, 1 + 2^-6] clips to the single point r = 1, so the only in-box
-  # correlation matrix is singular: it is PSD, so no witness exists, and it is
-  # not positive definite, so the Cholesky test cannot certify it either.
+  # correlation matrix is singular: no witness exists, and the Cholesky test
+  # cannot certify it. Merging the two variables (r = 1 forces them equal)
+  # leaves a 1 x 1 table, which expands exactly to that matrix.
   R <- matrix(c(1, 1 + 2^-7, 1 + 2^-7, 1), 2)
   res <- check_corr_psd(R, delta = 2^-7)
-  expect_equal(res$verdict, "undecided")
-  expect_equal(res$tier, "pocs")
-  expect_false(res$certified)
+  expect_equal(res$verdict, "consistent")
+  expect_true(res$certified)
+  expect_equal(res$certified_matrix, matrix(1, 2, 2))
 })
 
 test_that(".pocs_consistent returns a verified in-box matrix when one exists", {

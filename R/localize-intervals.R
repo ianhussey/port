@@ -12,9 +12,11 @@
 #     distance from the cell's rounding box to [lo_ij, hi_ij].
 #
 # Rigor: "empty" is certified by the sound box witness; "nonempty" exhibits a
-# Rump-verified matrix. Endpoints are converged from the certified-feasible side,
-# so [lo_ij, hi_ij] is a (slightly conservative) subset of the true interval and
-# required_edit is never understated.
+# Rump-verified matrix. Endpoints are converged from the certified-feasible side
+# (undecided oracle calls count as infeasible), so [lo_ij, hi_ij] is a subset of
+# the true interval and required_edit is an upper bound on the true minimum
+# edit: exact to the bisection tolerance unless the oracle was undecided near an
+# endpoint, never smaller than the true value.
 #
 # Note: for an inconsistent-given-rounding matrix, no cell's rounding box can
 # overlap its own feasible interval (an overlap would exhibit a fully in-box PSD

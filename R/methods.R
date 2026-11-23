@@ -51,7 +51,11 @@ print.corr_psd_check <- function(x, digits = 4, ...) {
       ))
       cat("  witness : v =", .fmt_vec(v, digits), "\n")
       cat(sprintf(
-        "  certificate: v'Rv + delta*(||v||_1^2 - ||v||_2^2) = %.*g < 0\n",
+        if (isTRUE(attr(x, "uniform_box") %||% TRUE)) {
+          "  certificate: v'Rv + delta*(||v||_1^2 - ||v||_2^2) = %.*g < 0\n"
+        } else {
+          "  certificate: max over the box of v'Xv = %.*g < 0\n"
+        },
         digits,
         x$margin
       ))

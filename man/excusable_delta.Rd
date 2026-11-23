@@ -12,7 +12,7 @@ excusable_delta(R, tol = 1e-06)
 \item{tol}{Bisection tolerance for the threshold.}
 }
 \value{
-A single number: the smallest excusing half-width \code{w}.
+A single number: the smallest certified excusing half-width \code{w}.
 }
 \description{
 The excusable delta of a reported correlation matrix is the smallest uniform
@@ -23,8 +23,8 @@ the units of reporting precision:
 }
 \details{
 \itemize{
-\item the matrix is inconsistent at reporting precision \code{delta} \strong{iff}
-\code{excusable_delta(R) > delta};
+\item the matrix is inconsistent at reporting precision \code{delta} only if
+\code{excusable_delta(R) > delta} (up to \code{tol});
 \item a value like \code{0.04} reads as "the reported values are inconsistent with any
 correlation matrix unless each entry were misstated by more than +/-0.04 --
 not excusable even by rounding to 1 decimal place (+/-0.05 would be needed)".
@@ -32,7 +32,11 @@ not excusable even by rounding to 1 decimal place (+/-0.05 would be needed)".
 
 For a matrix that is already consistent at fine precision the threshold is ~0.
 The value is located by bisection over the box feasibility oracle (witness
-refutation + Rump-verified POCS), to tolerance \code{tol}.
+refutation + Rump-verified POCS), to tolerance \code{tol}. The returned width is
+certified: a PSD matrix was verified in its box. It is an upper bound on the
+true threshold: bisection steps where the oracle proves neither feasibility
+nor infeasibility count as infeasible, so near the PSD boundary the value can
+exceed the true one by a little more than \code{tol}.
 }
 \examples{
 R <- matrix(c(1, 0.9, 0.9, 0.9, 1, -0.9, 0.9, -0.9, 1), 3, 3)

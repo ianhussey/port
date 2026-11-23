@@ -13,8 +13,9 @@ inconsistent_triples(R, decimals = 2, delta = NULL)
 }
 \value{
 A \link[tibble:tibble]{tibble} with one row per inconsistent triple: columns
-\code{i}, \code{j}, \code{k}, and \code{box_max_det} (the sound upper bound on the box-max
-determinant; negative means inconsistent). Empty if none.
+\code{i}, \code{j}, \code{k}, and \code{box_max_det} (the upper bound on the box-max
+determinant; a triple is listed only when it is negative by more than a
+floating-point allowance of about \code{6e-14}). Empty if none.
 }
 \description{
 For every triple of variables, test whether the induced 3x3 correlation

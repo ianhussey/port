@@ -48,8 +48,9 @@ An object of class \code{corr_psd_check} (a list) with elements
 \code{note}, and a summary of the reported off-diagonal correlations \code{r_min},
 \code{r_max}, \code{r_mean}, \code{r_sd} (over the unique off-diagonal entries, excluding
 the unit diagonal and any \code{NA} cells; \code{r_sd} is the sample SD, \code{NA} when
-fewer than two correlations are present). See \code{\link[=certificate]{certificate()}} and the print
-method.
+fewer than two correlations are present). The witness is named by the
+column (or row) names of \code{R}, if it has any. See \code{\link[=certificate]{certificate()}} and the
+print method.
 }
 \description{
 Given a reported correlation matrix \code{R} whose off-diagonal entries are
@@ -87,6 +88,32 @@ and the alternating-projection escalation produced neither such a matrix
 nor a witness. The table may be inconsistent with a witness the search
 missed, or consistent only on the boundary of the PSD cone.}
 }
+}
+
+\section{When a genuine table can be undecided}{
+
+Let \code{C} be the true correlation matrix behind a genuine table. For small
+\code{t > 0}, \verb{(1 - t) C + t I} is positive definite and moves every correlation
+toward 0, so it lies in the rounding box unless some true correlation sits
+exactly on the end of its range nearer to 0. Under \code{"nearest"} rounding that
+end is a rounding midpoint (such as 0.125 at 2 decimals), which real data
+essentially never hit. So the box of a genuine table rounded to nearest
+always contains a positive definite matrix, and the verdict is never
+\code{undecided} for structural reasons; an \code{undecided} genuine table has too
+little room around such a matrix for the search to find and verify it.
+
+Under \code{"truncate"}, \code{"floor"} and \code{"ceiling"} the reported value is itself
+an end of the range, so a true value exactly on the rounding grid can sit on
+the end nearer to 0. In practice that is a correlation of exactly 1 or -1, as
+between a variable and its duplicate or reverse-coded copy: its range is the
+single value +-1 and the box holds no positive definite matrix. Such
+variables are equal up to sign in every PSD matrix in the box, so
+\code{check_corr_psd()} merges them and certifies the merged table. A range
+within \code{1e-12} of +-1 counts as +-1, which is exact when the reported values
+have at most 11 decimal places. The same applies under \code{"nearest"} with
+\code{delta = 0}. Other true values exactly on the grid (apart from 0, which does
+not need to move) arise only in very small samples or constructed data, and
+can leave a genuine table \code{undecided}.
 }
 
 \section{Rigor guarantee (and what it does not prove)}{

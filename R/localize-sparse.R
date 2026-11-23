@@ -10,8 +10,11 @@
 #     consistent. Minimality is heuristic; every feasibility fact in it is
 #     rigorously certified (Rump-verified restoring matrix).
 #   * severity_max (D2, min-max box-excess): the smallest UNIFORM box-widening
-#     eps that makes the box feasible -- located exactly by bisection. This is
-#     "the largest single edit required, minimized over corrections".
+#     eps that makes the box feasible, located by bisection. This is
+#     "the largest single edit required, minimized over corrections". The
+#     returned eps is certified feasible; undecided oracle calls count as
+#     infeasible, so it is an upper bound (tight to `tol` unless the oracle was
+#     undecided near the threshold).
 #   * severity_frob (D3, total mass): an achievable total beyond-rounding
 #     movement, from the nearest PSD correlation matrix; an upper bound on the
 #     true minimum, reported as such.
@@ -214,46 +217,62 @@
     return(NULL)
   }
 
-  # Greedy for larger matrices: add the cell that most reduces the best achievable
-  # margin deficit until feasible or sparse_k reached.
+  # Greedy for larger matrices. Singletons were tested in component A, so each
+  # round first commits the cell the current witness leans on most: freeing
+  # (i, j) to [-1, 1] raises the box bound along v by
+  # 2 |v_i v_j| - 2 v_i v_j X_ij(v), where X_ij(v) is the box-optimal entry.
+  # The next round then tests every remaining cell added to the chosen set and
+  # keeps the restoring set with the least beyond-box movement.
+  # ponytail: one committed cell per round; a beam over the top few cells if
+  # greedy misses joint faults in practice.
+  key <- function(cells) paste(cells[, 1], cells[, 2])
   chosen <- matrix(integer(0), ncol = 2)
-  remaining <- allcells
   for (kk in seq_len(sparse_k)) {
-    best_cell <- NULL
-    best_X <- NULL
-    best_score <- Inf
-    for (r in seq_len(nrow(remaining))) {
-      cand <- rbind(chosen, remaining[r, , drop = FALSE])
-      X <- .set_restores(bnd, cand, verify)
-      if (!is.null(X)) {
-        best_cell <- remaining[r, , drop = FALSE]
-        best_X <- X
-        best_score <- 0
-        break
+    remaining <- allcells[!key(allcells) %in% key(chosen), , drop = FALSE]
+    if (kk >= 2L) {
+      best <- NULL
+      best_score <- Inf
+      for (r in seq_len(nrow(remaining))) {
+        cells <- rbind(chosen, remaining[r, , drop = FALSE])
+        X <- .set_restores(bnd, cells, verify)
+        if (!is.null(X)) {
+          sc <- score_set(cells, X)
+          if (sc < best_score) {
+            best_score <- sc
+            best <- list(cells = cells, X = X)
+          }
+        }
+      }
+      if (!is.null(best)) {
+        mags <- vapply(
+          seq_len(nrow(best$cells)),
+          function(r) {
+            i <- best$cells[r, 1]
+            j <- best$cells[r, 2]
+            max(
+              0,
+              best$X[i, j] - (R[i, j] + delta),
+              (R[i, j] - delta) - best$X[i, j]
+            )
+          },
+          numeric(1)
+        )
+        return(list(cells = best$cells, magnitudes = mags, cardinality = kk))
       }
     }
-    if (!is.null(best_X)) {
-      cells <- rbind(chosen, best_cell)
-      mags <- vapply(
-        seq_len(nrow(cells)),
-        function(r) {
-          i <- cells[r, 1]
-          j <- cells[r, 2]
-          max(
-            0,
-            best_X[i, j] - (R[i, j] + delta),
-            (R[i, j] - delta) - best_X[i, j]
-          )
-        },
-        numeric(1)
-      )
-      return(list(cells = cells, magnitudes = mags, cardinality = nrow(cells)))
+    if (kk == sparse_k || nrow(remaining) == 0L) {
+      break
     }
-    # otherwise greedily commit the cell whose addition most lowers the witness
-    # violation (approximate); pick the first remaining as a simple heuristic
-    chosen <- rbind(chosen, remaining[1, , drop = FALSE])
-    remaining <- remaining[-1, , drop = FALSE]
-    if (nrow(remaining) == 0L) break
+    b <- .free_set_box(bnd, chosen)
+    v <- .box_inconsistent(b$lo, b$hi, b$off, sparse = FALSE)$witness
+    if (is.null(v)) {
+      break
+    }
+    vi <- v[remaining[, 1]]
+    vj <- v[remaining[, 2]]
+    x_opt <- ifelse(vi * vj >= 0, b$hi[remaining], b$lo[remaining])
+    gain <- abs(vi * vj) - vi * vj * x_opt
+    chosen <- rbind(chosen, remaining[which.max(gain), , drop = FALSE])
   }
   NULL
 }

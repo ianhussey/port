@@ -135,9 +135,7 @@ localize_psd_fault <- function(
     delta <- chk$delta
   } else {
     R <- .validate_corr(x)
-    if (is.null(delta)) {
-      delta <- 0.5 * 10^(-decimals)
-    }
+    delta <- .uniform_delta(decimals, delta, nrow(R))
     chk <- check_corr_psd(R, delta = delta)
   }
   p <- nrow(R)

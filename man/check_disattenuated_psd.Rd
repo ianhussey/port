@@ -46,7 +46,10 @@ decide whether the reliability-disattenuated construct matrix is
 \verb{consistent but implausible} (valid, but a corrected correlation exceeds \code{max_plausible_r}),
 \code{consistent}, or \code{undecided}. The inconsistency side is rigorous and box-aware
 (it reuses the package's witness / Rump machinery); rounding of both the
-correlations and the reliabilities is taken into account.
+correlations and the reliabilities is taken into account. A \code{consistent}
+verdict is weaker: each corrected correlation is given its own interval,
+although the reliabilities are shared across cells, so the box can contain
+matrices that no single set of reliabilities produces.
 }
 \details{
 With \code{reliability = NULL} the function instead reports the \emph{critical

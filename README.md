@@ -41,7 +41,7 @@ Verified witness-vector bound. For any test direction `v ≠ 0`, the most PSD-fa
 max_{X in box}  vᵀ X v  =  vᵀRv  +  δ·(‖v‖₁² − ‖v‖₂²).
 ```
 
-Clipping the box to `[−1, 1]` only shrinks it, so ignoring that clip keeps this an upper boundm which is sound for inconsistency. If this maximum is negative, then no in-box matrix has a nonnegative quadratic form along `v`, so none is PSD, and `v` is the certificate:
+Clipping the box to `[−1, 1]` only shrinks it, so ignoring that clip keeps this an upper bound, which is sound for inconsistency. If this maximum is negative, then no in-box matrix has a nonnegative quadratic form along `v`, so none is PSD, and `v` is the certificate:
 
 ```
 vᵀRv + δ·(‖v‖₁² − ‖v‖₂²) < 0   ⟹   INCONSISTENT.
@@ -87,6 +87,8 @@ port-inconsistent results can also have more problematic causes, including error
 ### Verdict certification
 
 Every result carries a `certified` flag. `inconsistent` is always certified (a witness vector). A `consistent` with `certified = TRUE` exhibits a Rump-verified in-box PSD matrix; `certified = FALSE` marks a presumed consistent ("not shown inconsistent":  the witness margin is comfortably positive but no certificate was found). The print labels the two cases explicitly.
+
+**When can a genuine table be `undecided`?** For small `t > 0`, `(1 − t)·C + t·I` is positive definite and moves every true correlation in `C` toward 0, so it stays in the box unless a true correlation sits exactly on the end of its range nearer to 0. Under nearest rounding that end is a rounding midpoint (such as 0.125 at 2 decimals), which real data essentially never hit, so the box of a genuine table always contains a positive definite matrix and is never `undecided` for structural reasons. Under truncate, floor and ceiling the reported value is itself an end of the range, and the case that matters in practice is a correlation of exactly ±1 (a duplicated or reverse-coded variable): its range is the single value ±1 and no positive definite matrix fits. Such variables are equal up to sign in every PSD matrix in the box, so `port` merges them and certifies the merged table, whose verified matrix expands exactly to an in-box PSD one.
 
 ### Rounding rules, mixed precision, and missing cells
 
@@ -146,11 +148,13 @@ check_corr_psd(G, decimals = 2)$verdict
 ```r
 mats <- list(good = diag(3), bad = R)
 check_corr_psd_batch(mats, decimals = 2)
-#> # A tibble: 2 x 8
-#>   id    verdict    tier    margin b_upper delta     p message
-#>   <chr> <chr>      <chr>    <dbl>   <dbl> <dbl> <int> <chr>
-#> 1 good  consistent   witness  1       1     0.005     3 the reported matrix ...
-#> 2 bad   inconsistent witness -0.79   -0.79  0.005     3 NA
+#> POCS escalation tier fired on 0 of 2 matrices (0.0%).
+#> # A tibble: 2 × 13
+#>   id    verdict    tier  certified margin b_upper delta     p r_min r_max r_mean
+#>   <chr> <chr>      <chr> <lgl>      <dbl>   <dbl> <dbl> <int> <dbl> <dbl>  <dbl>
+#> 1 good  consistent witn… TRUE        1      1.00  0.005     3   0     0      0
+#> 2 bad   inconsist… witn… TRUE       -0.79  -0.790 0.005     3  -0.9   0.9    0.3
+#> # ℹ 2 more variables: r_sd <dbl>, message <chr>
 ```
 
 The batch helper logs how often the POCS escalation tier fired:  it is expected to be rare, since the cheap rigorous tiers settle most cases.
@@ -260,4 +264,4 @@ Hussey, I. (2026). port: Positive-semi-definiteness Of Rounded correlation Table
 
 Code is MIT licenced © Ian Hussey (2026)
 
-Text and images are CC BY 4.0 (see above citation)
+Text and images are CC BY 4.0 (cite as under Suggested citation).

@@ -17,7 +17,16 @@
 # cell's box and the product interval of the other two. Both are sound over-/
 # under-estimates, so the difference is a sound upper bound on det. We take the
 # tightest (minimum) over the three forms.
+#
+# Floating point. Every box endpoint lies in [-1, 1] and is within 4u of the
+# real one; every intermediate (1 - x^2, products, gaps) has magnitude <= 4. The
+# input errors move the bound by at most (4 + 12) * 4u (derivatives of the
+# product term <= 4, of the squared gap <= 12), and the dozen roundings in the
+# evaluation by at most about 12 * 4u * 4. A triple is flagged only when the
+# computed bound is below -.triple_slack(), which exceeds both by far.
 # -----------------------------------------------------------------------------
+
+.triple_slack <- function() .gamma(512L)
 
 # Point of interval [lo, hi] nearest 0 (maximises 1 - x^2).
 .nearest_zero <- function(lo, hi) min(hi, max(lo, 0))
@@ -70,7 +79,7 @@
     bx_b <- c(lo[i, k], hi[i, k]) # X_ik
     bx_c <- c(lo[j, k], hi[j, k]) # X_jk
     ub <- .triple_det_ub(bx_a, bx_b, bx_c)
-    if (ub < 0) {
+    if (ub < -.triple_slack()) {
       out[[length(out) + 1L]] <- list(
         vars = c(i, j, k),
         cells = rbind(c(i, j), c(i, k), c(j, k)),
@@ -93,8 +102,9 @@
 #' @param R A symmetric numeric correlation matrix with unit diagonal.
 #' @param decimals,delta Rounding precision, as in [check_corr_psd()].
 #' @return A [tibble][tibble::tibble] with one row per inconsistent triple: columns
-#'   `i`, `j`, `k`, and `box_max_det` (the sound upper bound on the box-max
-#'   determinant; negative means inconsistent). Empty if none.
+#'   `i`, `j`, `k`, and `box_max_det` (the upper bound on the box-max
+#'   determinant; a triple is listed only when it is negative by more than a
+#'   floating-point allowance of about `6e-14`). Empty if none.
 #' @examples
 #' R <- matrix(c(1, 0.9, 0.9, 0.9, 1, -0.9, 0.9, -0.9, 1), 3, 3)
 #' inconsistent_triples(R, decimals = 2)
@@ -102,9 +112,7 @@
 #' @export
 inconsistent_triples <- function(R, decimals = 2, delta = NULL) {
   R <- .validate_corr(R)
-  if (is.null(delta)) {
-    delta <- 0.5 * 10^(-decimals)
-  }
+  delta <- .uniform_delta(decimals, delta, nrow(R))
   trs <- .scan_inconsistent_triples(R, delta)
   if (length(trs) == 0L) {
     return(tibble::tibble(
