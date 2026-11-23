@@ -11,7 +11,7 @@ certificate(x)
 }
 \value{
 A list with \code{witness} (the certificate vector \code{v}, or \code{NULL} when the
-verdict is not \code{inconsistent} via the witness tier), \code{margin} (the value
+verdict is not \code{inconsistent} by a witness vector), \code{margin} (the value
 \verb{B = v'Rv + delta*(||v||_1^2 - ||v||_2^2)}), \code{b_upper} (the rigorous upper
 bound \code{B_upper}), \code{verdict} and \code{tier}.
 }

@@ -31,7 +31,7 @@ Question: Does there exist a symmetric `X` in this box that is PSD?
 |---|---|
 | no such `X` | **`inconsistent`** (a genuine correlation matrix cannot round to `R`) |
 | some `X` exists | **`consistent`** |
-| can't tell at this precision | **`undecided`** |
+| neither could be shown | **`undecided`** |
 
 ## The method
 
@@ -41,19 +41,19 @@ Verified witness-vector bound. For any test direction `v ≠ 0`, the most PSD-fa
 max_{X in box}  vᵀ X v  =  vᵀRv  +  δ·(‖v‖₁² − ‖v‖₂²).
 ```
 
-Clipping the box to `[−1, 1]` only shrinks it, so ignoring that clip keeps this an upper boundm which is sound for inconsistency. If this maximum is negative, then no in-box matrix has a nonnegative quadratic form along `v`, so none is PSD, and `v` is the certificate:
+Clipping the box to `[−1, 1]` only shrinks it, so ignoring that clip keeps this an upper bound, which is sound for inconsistency. If this maximum is negative, then no in-box matrix has a nonnegative quadratic form along `v`, so none is PSD, and `v` is the certificate:
 
 ```
 vᵀRv + δ·(‖v‖₁² − ‖v‖₂²) < 0   ⟹   INCONSISTENT.
 ```
 
-The algorithm takes `v` from the smallest eigenvector of `R` (plus cheap coordinate-pair and 3×3-submatrix directions that connect to the exact minor conditions), and reports the most inconsistency-favourable one. `v` need not be an exact eigenvector: it is only a *test direction*, so its inaccuracy never invalidates the certificate.
+The algorithm takes `v` from the smallest eigenvectors of `R` (plus cheap coordinate-pair, 3×3-submatrix and regression-residual directions that connect to the exact minor conditions), polishes the best one, and reports the most inconsistency-favourable. If none of these certifies anything and no in-box PSD matrix is found, it searches for a sparse `v` by greedy elimination over principal submatrices. `v` need not be an exact eigenvector: it is only a *test direction*, so its inaccuracy never invalidates the certificate.
 
 ### Tiers
 
 1. `precheck`: if any reported `|R_ij| − δ > 1`, the entry is out of range even at its nearest box edge: immediately inconsistent. `O(p²)`, no eigendecomposition.
 2. `witness`: the rigorous bound above (primary path, all `p`).
-3. `pocs`: a self-contained escalation (alternating projections onto the box and the PSD cone) used only in the precision-limited ambiguous zone; see below.
+3. `pocs`: a self-contained escalation (alternating projections onto the box and the PSD cone) used only in the ambiguous zone, where the first two tiers prove nothing either way. It can end in `consistent`, `inconsistent` or `undecided`; see below.
 
 ## The rigor guarantee
 
@@ -88,6 +88,8 @@ port-inconsistent results can also have more problematic causes, including error
 
 Every result carries a `certified` flag. `inconsistent` is always certified (a witness vector). A `consistent` with `certified = TRUE` exhibits a Rump-verified in-box PSD matrix; `certified = FALSE` marks a presumed consistent ("not shown inconsistent":  the witness margin is comfortably positive but no certificate was found). The print labels the two cases explicitly.
 
+**When can a genuine table be `undecided`?** For small `t > 0`, `(1 − t)·C + t·I` is positive definite and moves every true correlation in `C` toward 0, so it stays in the box unless a true correlation sits exactly on the end of its range nearer to 0. Under nearest rounding that end is a rounding midpoint (such as 0.125 at 2 decimals), which real data essentially never hit, so the box of a genuine table always contains a positive definite matrix and is never `undecided` for structural reasons. Under truncate, floor and ceiling the reported value is itself an end of the range, and the case that matters in practice is a correlation of exactly ±1 (a duplicated or reverse-coded variable): its range is the single value ±1 and no positive definite matrix fits. Such variables are equal up to sign in every PSD matrix in the box, so `port` merges them and certifies the merged table, whose verified matrix expands exactly to an in-box PSD one.
+
 ### Rounding rules, mixed precision, and missing cells
 
 `check_corr_psd()` also supports:
@@ -100,7 +102,7 @@ Every result carries a `certified` flag. `inconsistent` is always certified (a w
 
 Consistency is certified constructively: the tool exhibits an explicit in-box matrix (the reported matrix itself; the box-edge matrix shrunk toward the diagonal; the box-clipped PSD projection of `R`) and verifies it PSD with a one-sided Cholesky test (Rump, *Verification of positive definiteness*, BIT 46:433–452, 2006): `A` is provably PSD if `chol(A − c·I)` completes, where `c` rigorously bounds the Cholesky backward error. Any success is a rigorous proof that a PSD matrix exists in the box.
 
-When no cheap construction succeeds and the witness margin sits in the precision-limited zone `[0, τ]` (default `τ = 10·δ`), the result escalates to a self-contained projections-onto-convex-sets (POCS) search: alternating Euclidean projections onto the box and onto the PSD cone (tightened by a small margin `μ` for a strictly positive-definite result). For two closed convex sets this converges to a point in their intersection whenever one exists; the recovered in-box matrix is then independently Rump-verified before a `consistent` verdict is accepted. A failure to find a verifiable point is inconclusive (`undecided`), never a rigorous inconsistency. This tier needs no external solver.
+When no cheap construction succeeds and the witness margin sits in the ambiguous zone `[0, τ]` (default `τ = 10·δ`), the result escalates to a self-contained projections-onto-convex-sets (POCS) search: alternating Euclidean projections onto the box and onto the PSD cone (tightened by a small margin `μ` for a strictly positive-definite result). For two closed convex sets this converges to a point in their intersection whenever one exists; the recovered in-box matrix is then independently Rump-verified before a `consistent` verdict is accepted. A failure to find a verifiable point is inconclusive, never a rigorous inconsistency. Before the verdict becomes `undecided`, the same projections are run without the margin. If the box misses the cone, the iterates approach the closest pair of points, and the bottom eigenvector of the in-box one is tried as a witness `v` through the rigorous bound; a negative bound gives `inconsistent` at this tier. `undecided` therefore means that neither proof was found. The table may be inconsistent with a witness the search missed, or consistent only on the boundary of the cone, where no strictly positive-definite in-box matrix exists for the Cholesky test. This tier needs no external solver.
 
 ## Installation
 
@@ -146,11 +148,13 @@ check_corr_psd(G, decimals = 2)$verdict
 ```r
 mats <- list(good = diag(3), bad = R)
 check_corr_psd_batch(mats, decimals = 2)
-#> # A tibble: 2 x 8
-#>   id    verdict    tier    margin b_upper delta     p message
-#>   <chr> <chr>      <chr>    <dbl>   <dbl> <dbl> <int> <chr>
-#> 1 good  consistent   witness  1       1     0.005     3 the reported matrix ...
-#> 2 bad   inconsistent witness -0.79   -0.79  0.005     3 NA
+#> POCS escalation tier fired on 0 of 2 matrices (0.0%).
+#> # A tibble: 2 × 13
+#>   id    verdict    tier  certified margin b_upper delta     p r_min r_max r_mean
+#>   <chr> <chr>      <chr> <lgl>      <dbl>   <dbl> <dbl> <int> <dbl> <dbl>  <dbl>
+#> 1 good  consistent witn… TRUE        1      1.00  0.005     3   0     0      0
+#> 2 bad   inconsist… witn… TRUE       -0.79  -0.790 0.005     3  -0.9   0.9    0.3
+#> # ℹ 2 more variables: r_sd <dbl>, message <chr>
 ```
 
 The batch helper logs how often the POCS escalation tier fired:  it is expected to be rare, since the cheap rigorous tiers settle most cases.
@@ -228,16 +232,27 @@ This package assembles established results from verified numerical computing; th
 | Consistency search / feasibility oracle by alternating projection onto the box and the PSD cone; nearest-correlation-matrix helper (`R/pocs.R`, `R/box.R`, `R/localize-sparse.R`) | Higham (2002, *IMA J. Numer. Anal.*); Cheney & Goldstein (1959) | Alternating projection onto the PSD cone and the unit-diagonal set (Higham's nearest-correlation-matrix iteration); convergence of projections onto two convex sets (Cheney–Goldstein). |
 | Fault-localization layer: the R² / VIF variable localizer, the per-cell implied-interval closed form, single-cell imputation, the plausibility gradient, and the benign-vs-substantive causes taxonomy (`R/localize-rsquared.R`, `R/localize-causes.R`, `R/implied-interval.R`) | van Tilburg & van Tilburg (2023); Lorenzo-Seva & Ferrando (2021) | The squared-multiple-correlation inconsistency criterion and its VIF / determinant identities (V1–V2); the closed-form per-cell interval (V3); single-unknown solving / imputation (V8); the consistency-vs-plausibility gradient (V4); and the taxonomy of benign structural causes to surface before any integrity inference (V5–V6). Realized on this package's box-aware witness/POCS engine rather than via matrix inversion or interval determinants (see below). |
 
-**Original to this package** (derivations, not taken from the above): the closed-form box quadratic-form maximum `v'Rv + δ(‖v‖₁²−‖v‖₂²)` and its use as a box-aware witness; the witness-polishing fixed point (alternate the most PSD-favourable in-box matrix along `v` with its bottom eigenvector:  sound by construction, since every iterate is re-evaluated through the rigorous bound); the sound interval determinant bound `det = (1−b²)(1−c²) − (a−bc)²` for the inconsistent-triple scan; the greedy minimal-cardinality fault localization; the excusable-imprecision statistic; the tiered checker and localization ruleset; and the observation that van Tilburg's R²>1 criterion is the regression-residual witness vector `v = (M₋ᵢ⁻¹cᵢ ; −1)` (since `vᵀMv = 1 − R²ᵢ`), which is what lets the R² localizer reuse the existing box-witness rigor model instead of an interval determinant or a verified inverse. These residual directions also seed the main witness search.
+**Original to this package** (derivations, not taken from the above): the closed-form box quadratic-form maximum `v'Rv + δ(‖v‖₁²−‖v‖₂²)` and its use as a box-aware witness; the witness-polishing fixed point (alternate the most PSD-favourable in-box matrix along `v` with its bottom eigenvector:  sound by construction, since every iterate is re-evaluated through the rigorous bound); the sound interval determinant bound `det = (1−b²)(1−c²) − (a−bc)²` for the inconsistent-triple scan; the greedy minimal-cardinality fault localization; the excusable-imprecision statistic; the tiered checker and localization ruleset; and the observation that van Tilburg's R²>1 criterion is the regression-residual witness vector `v = (M₋ᵢ⁻¹cᵢ ; −1)` (since `vᵀMv = 1 − R²ᵢ`), which is what lets the R² localizer reuse the existing box-witness rigor model instead of an interval determinant or a verified inverse. These residual directions also seed the main witness search. When the dense directions fail, a greedy backward elimination over principal submatrices supplies sparse witnesses, each polished on its own support, which pay less of the rounding penalty `δ(‖v‖₁²−‖v‖₂²)`. As a last resort before `undecided`, alternating projections between the ranges and the PSD cone are run without a margin, and the bottom eigenvector of the limit point on the side of the ranges is tried as a witness.
+
+**What this means, for readers outside numerical linear algebra.** Correlations computed from one complete dataset obey a rule that follows from the arithmetic alone: every weighted sum of the standardized variables has a variance of zero or more. In matrix terms, `v'Rv ≥ 0` for every vector of weights `v`. A printed table is rounded, so each true correlation is only known to lie within `±δ` of the printed value. The expression `v'Rv + δ(‖v‖₁²−‖v‖₂²)` is the largest variance the weighted sum `v` could have under *any* choice of true values within those ranges. If it is negative for even one `v`, some weighted sum would need a negative variance however the rounding went, so no dataset can have produced the table. That one vector is the whole proof. Anyone can check it with a few lines of arithmetic, without trusting this package, a solver, or a tolerance. `check_witness()` evaluates it for any given vector, for example one reported by `check_corr_psd()`.
+
+**What follows for `port`.** An `inconsistent` verdict is a proof and not a numerical judgment. The search for `v` (eigenvectors, polishing, greedy elimination, alternating projections) can be as heuristic as it likes, because a poor guess only fails to prove something; it cannot prove something false. The reverse does not hold: failing to find such a vector proves nothing. That is why `consistent` needs a certificate of its own (an explicit valid matrix inside the ranges), and why `undecided` exists. Finding the *best* `v` is not a convex problem, and exact search over all supports and sign patterns costs on the order of `3ᵖ`, so heuristics are unavoidable for larger tables. A complete test does exist, as a semidefinite program. The matrix it returns could be checked with the same kind of arithmetic as a single vector, so the proof would not rest on the solver's tolerances. But the search would need a solver, and this package is built to run without one. In a simulation of tables near the boundary, each of the 202 cases the simpler heuristics left `undecided` had a single-vector proof, and greedy elimination and alternating projections between them found one each time. The two searches were chosen on those same cases. On 546 fresh cases with up to 20 variables, six stayed `undecided` (`special-scripts/sparse-witness.md`).
+
+**Beyond `port`.** The same reasoning applies to any symmetric matrix reported with a margin of error in each cell, such as covariance matrices, similarity or kernel matrices, and correlation tables assembled from several sources, whenever the question is whether the reported numbers can be valid at all.
+
+**How notable this is.** Modestly. "Original" means derived for this package and not taken from the sources in the table. It does not mean new mathematics. The box maximum is a few lines of algebra, and interval linear algebra has known it with the sign reversed for decades. For an interval matrix with centre `A_c` and radius `Δ`, Rohn (1994, proof of Theorem 1) shows `x'Ax ≥ x'A_c x − |x|'Δ|x|` for every member `A`, with equality at the vertex matrix `A_c − T_z Δ T_z`, where `z` holds the signs of `x` and `T_z` is the diagonal matrix of `z`. With `Δ` equal to `δ` off the diagonal and zero on it, `|x|'Δ|x| = δ(‖x‖₁²−‖x‖₂²)`. The "most PSD-favourable in-box matrix along `v`" in the polishing step is that vertex matrix with the opposite sign. Rohn asks whether *every* matrix in the ranges is positive semidefinite, which his Theorem 2 reduces to testing `2ⁿ⁻¹` vertex matrices. `port` asks whether *any* is. That question is convex, which is why a complete test exists at all. Choosing the best `v` is the ℓ₁-penalized eigenvalue problem known from sparse principal component analysis, and the complete semidefinite test is the convex relaxation used there (d'Aspremont et al., 2007). Greedy backward elimination over principal submatrices is an established heuristic in the same literature (Moghaddam, Weiss & Avidan, 2005), so methods from that field could serve as further witness searches. What `port` adds is the combination and the purpose: these pieces, joined to a-priori floating-point error bounds, give verdicts on published correlation tables that need no solver and can be checked by hand.
 
 ## References
 
 - W. Cheney and A. A. Goldstein (1959), "Proximity maps for convex sets," *Proceedings of the American Mathematical Society*, 10(3):448–450. [doi:10.2307/2032864](https://doi.org/10.2307/2032864)
+- A. d'Aspremont, L. El Ghaoui, M. I. Jordan, and G. R. G. Lanckriet (2007), "A direct formulation for sparse PCA using semidefinite programming," *SIAM Review*, 49(3):434–448. [doi:10.1137/050645506](https://doi.org/10.1137/050645506)
 - N. J. Higham (2002), "Computing the nearest correlation matrix—a problem from finance," *IMA Journal of Numerical Analysis*, 22(3):329–343. [doi:10.1093/imanum/22.3.329](https://doi.org/10.1093/imanum/22.3.329)
 - N. J. Higham (2002), *Accuracy and Stability of Numerical Algorithms*, 2nd ed., SIAM. (chapter 10 on Cholesky Factorization)
 - C. Jansson, D. Chaykin, and C. Keil (2008), "Rigorous error bounds for the optimal value in semidefinite programming," *SIAM Journal on Numerical Analysis*, 46(1):180–200. [doi:10.1137/050622870](https://doi.org/10.1137/050622870)
 - C. Jansson (2009), "On verified numerical computations in convex programming," *Japan Journal of Industrial and Applied Mathematics*, 26(2–3):337–363. [doi:10.1007/BF03186539](https://doi.org/10.1007/BF03186539)
 - U. Lorenzo-Seva and P. J. Ferrando (2021), "Not positive definite correlation matrices in exploratory item factor analysis: causes, consequences and a proposed solution," *Structural Equation Modeling*, 28(1):138–147. [doi:10.1080/10705511.2020.1735393](https://doi.org/10.1080/10705511.2020.1735393)
+- B. Moghaddam, Y. Weiss, and S. Avidan (2005), "Spectral bounds for sparse PCA: exact and greedy algorithms," *Advances in Neural Information Processing Systems 18*, 915–922. MIT Press. [proceedings.neurips.cc](https://proceedings.neurips.cc/paper/2005/hash/d47844673f2db74d78da8687d794523d-Abstract.html)
+- J. Rohn (1994), "Positive definiteness and stability of interval matrices," *SIAM Journal on Matrix Analysis and Applications*, 15(1):175–184. [doi:10.1137/S0895479891219216](https://doi.org/10.1137/S0895479891219216)
 - S. M. Rump (2006), "Verification of positive definiteness," *BIT Numerical Mathematics*, 46(2):433–452. [doi:10.1007/s10543-006-0056-1](https://doi.org/10.1007/s10543-006-0056-1)
 - W. A. P. van Tilburg and L. J. A. van Tilburg (2023), "Inconsistent hypotheses and effect-size limits," *Advances in Methods and Practices in Psychological Science*, 6(4). [doi:10.1177/25152459231197605](https://doi.org/10.1177/25152459231197605)
 
@@ -249,4 +264,4 @@ Hussey, I. (2026). port: Positive-semi-definiteness Of Rounded correlation Table
 
 Code is MIT licenced © Ian Hussey (2026)
 
-Text and images are CC BY 4.0 (see above citation)
+Text and images are CC BY 4.0 (cite as under Suggested citation).

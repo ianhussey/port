@@ -298,3 +298,113 @@ test_that("inconsistent verdicts surface the benign-generator caution", {
   )
   expect_output(print(localize_psd_fault(triad_R, decimals = 2)), "polychoric")
 })
+
+# ---- sparse witness by greedy subset elimination ------------------------------
+
+test_that("greedy subset elimination certifies a case the dense search missed", {
+  # From special-scripts/sparse-witness-simulation.R: undecided before the greedy
+  # search was added (no dense witness, no in-box PSD matrix found).
+  R <- matrix(
+    c(
+      1,
+      -0.83,
+      0.36,
+      0.4,
+      0.67,
+      0.3,
+      -0.83,
+      1,
+      -0.09,
+      -0.45,
+      -0.33,
+      -0.11,
+      0.36,
+      -0.09,
+      1,
+      0.85,
+      0.55,
+      -0.09,
+      0.4,
+      -0.45,
+      0.85,
+      1,
+      0.29,
+      -0.29,
+      0.67,
+      -0.33,
+      0.55,
+      0.29,
+      1,
+      0.72,
+      0.3,
+      -0.11,
+      -0.09,
+      -0.29,
+      0.72,
+      1
+    ),
+    6,
+    6
+  )
+  res <- check_corr_psd(R, decimals = 2)
+  expect_equal(res$verdict, "inconsistent")
+  expect_true(res$certified)
+  # the certificate is sparse and holds on independent recomputation
+  expect_true(any(res$witness == 0))
+  expect_lt(.witness_bound(R, res$witness, 0.005)$B_upper, 0)
+  # same verdict through the heterogeneous-box path
+  bx <- .reported_box(R, 2, NULL, "nearest")
+  expect_true(.box_inconsistent(bx$lo, bx$hi, bx$off)$inconsistent)
+})
+
+test_that("the feasibility oracle settles both kinds of box above p = 20", {
+  # For p > 20 .box_feasible() tries the first POCS margin before the sparse
+  # search. Embed the 5 x 5 matrix from test-escalation.R, whose witness needs
+  # polishing on its support, in a 24 x 24 table of uncorrelated variables.
+  # fmt: skip
+  fragile <- matrix(
+    c(
+       1.00,  0.57, -0.51, -0.95,  0.98,
+       0.57,  1.00,  0.34, -0.30,  0.53,
+      -0.51,  0.34,  1.00,  0.72, -0.60,
+      -0.95, -0.30,  0.72,  1.00, -0.97,
+       0.98,  0.53, -0.60, -0.97,  1.00
+    ),
+    nrow = 5,
+    byrow = TRUE
+  )
+  table_24 <- diag(24)
+  table_24[1:5, 1:5] <- fragile
+  box <- .box_bounds(table_24, 0.005)
+  oracle <- .box_feasible(box$lo, box$hi, box$off)
+  expect_equal(oracle$status, "infeasible")
+  expect_lt(
+    .witness_box_bound(box$lo, box$hi, box$off, oracle$witness)$B_upper,
+    0
+  )
+
+  table_24[1:5, 1:5] <- diag(5)
+  box <- .box_bounds(table_24, 0.005)
+  oracle <- .box_feasible(box$lo, box$hi, box$off)
+  expect_equal(oracle$status, "feasible")
+  expect_true(.verify_psd(oracle$X))
+})
+
+test_that("the box bound matches the direct maximum over the box", {
+  # Direct evaluation: the box-optimal entry per pair, summed over the matrix.
+  direct <- function(lo, hi, off, v) {
+    vv <- outer(v, v)
+    best <- ifelse(vv >= 0, hi, lo)
+    sum(v^2) + sum((vv * best)[off])
+  }
+  set.seed(11)
+  for (k in 1:50) {
+    p <- sample(2:12, 1)
+    R <- round(cor(matrix(rnorm(p * (p + 3)), ncol = p)), 2)
+    bx <- .reported_box(R, 2, NULL, sample(c("nearest", "truncate", "floor"), 1))
+    v <- rnorm(p)
+    v[sample(p, sample(0:(p - 2), 1))] <- 0
+    wb <- .witness_box_bound(bx$lo, bx$hi, bx$off, v)
+    expect_lt(abs(wb$M_hat - direct(bx$lo, bx$hi, bx$off, v)), wb$E)
+  }
+})

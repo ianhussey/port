@@ -114,7 +114,7 @@ print.psd_fault <- function(x, digits = 3, ...) {
       " (%s; delta = %g)",
       if (s$severity_max > 10 * d) {
         "egregious, rounding cannot excuse it"
-      } else if (s$severity_max <= 2 * d) {
+      } else if (s$severity_max <= 3 * d) {
         "borderline / precision-limited"
       } else {
         "beyond rounding"

@@ -46,9 +46,20 @@ test_that("POCS resolves the ambiguous case to a certified consistent", {
   expect_true(port:::.verify_psd(res$certified_matrix))
 })
 
-test_that("a genuinely boundary-only case is honestly undecided, not guessed", {
-  # b_upper ~ 6e-5: the box only grazes the PSD cone, so no strictly-PD in-box
-  # point exists for the one-sided Cholesky test to certify.
+# 200 * max over the 2-decimal rounding box of w'Xw, for the integer direction
+# w = round(v * 1e5), in exact integer arithmetic (every term is an integer far
+# below 2^53). Negative means inconsistent, independently of the package's
+# floating-point error model. (Clipping at +-1 is ignored, which can only make
+# the value larger; no cell of the matrices below is within delta of +-1.)
+exact_box_max <- function(R, v) {
+  w <- round(v * 1e5)
+  2 * sum(outer(w, w) * round(100 * R)) + sum(abs(w))^2 - sum(w^2)
+}
+
+test_that("a near-boundary case the dense witness search missed is certified", {
+  # The dense directions leave b_upper ~ 6e-5 > 0 and no strictly-PD in-box
+  # point exists, so this was once "undecided". The greedy sparse search finds a
+  # witness on variables 1-4.
   R <- matrix(
     c(
       1,
@@ -82,9 +93,86 @@ test_that("a genuinely boundary-only case is honestly undecided, not guessed", {
     byrow = TRUE
   )
   res <- check_corr_psd(R, decimals = 2)
-  expect_equal(res$verdict, "undecided")
-  expect_equal(res$tier, "pocs")
-  expect_false(identical(res$verdict, "inconsistent")) # never a false inconsistent
+  expect_equal(res$verdict, "inconsistent")
+  expect_lt(exact_box_max(R, res$witness), 0)
+})
+
+test_that("a sparse witness that needs polishing on its support is found", {
+  # The bottom eigenvector of R[2:5, 2:5] gives b_upper ~ 2e-4 > 0; one polish
+  # step on that support gives -3.4e-5. Polishing on the full matrix turns the
+  # direction dense and finds nothing.
+  # fmt: skip
+  R <- matrix(
+    c(
+       1.00,  0.57, -0.51, -0.95,  0.98,
+       0.57,  1.00,  0.34, -0.30,  0.53,
+      -0.51,  0.34,  1.00,  0.72, -0.60,
+      -0.95, -0.30,  0.72,  1.00, -0.97,
+       0.98,  0.53, -0.60, -0.97,  1.00
+    ),
+    nrow = 5,
+    byrow = TRUE
+  )
+  v0 <- port:::.subset_bottom_eigvec(R, 2:5)
+  expect_gt(port:::.witness_bound(R, v0, 0.005)$B_upper, 0)
+  expect_gt(port:::.polish_witness(R, 0.005, v0)$B_upper, 0)
+  pol <- port:::.polish_witness(R, 0.005, v0, on_support = TRUE)
+  expect_lt(pol$B_upper, 0)
+  expect_equal(pol$v[1], 0)
+  expect_lt(exact_box_max(R, pol$v), 0)
+  res <- check_corr_psd(R, decimals = 2)
+  expect_equal(res$verdict, "inconsistent")
+  expect_lt(exact_box_max(R, res$witness), 0)
+})
+
+test_that("the POCS direction certifies a case the sparse search misses", {
+  # From special-scripts/sparse-witness-simulation.R. When this was added,
+  # greedy elimination left b_upper ~ 7e-4 > 0 and no in-box PSD matrix was
+  # found. The bottom eigenvector of the box-side iterate of margin-free
+  # alternating projections certifies it (about -3e-4 at the first check that
+  # succeeds). The search is called directly, so the test does not depend on
+  # the greedy search missing this matrix.
+  # fmt: skip
+  R <- matrix(
+    c(
+       1.00,  0.83,  0.33, -0.17, -0.88, -0.99,  0.14, -0.83,
+       0.83,  1.00, -0.17,  0.39, -0.70, -0.76,  0.65, -0.77,
+       0.33, -0.17,  1.00, -0.90, -0.11, -0.38, -0.55,  0.10,
+      -0.17,  0.39, -0.90,  1.00,  0.13,  0.26,  0.87, -0.09,
+      -0.88, -0.70, -0.11,  0.13,  1.00,  0.91,  0.03,  0.96,
+      -0.99, -0.76, -0.38,  0.26,  0.91,  1.00, -0.02,  0.84,
+       0.14,  0.65, -0.55,  0.87,  0.03, -0.02,  1.00, -0.16,
+      -0.83, -0.77,  0.10, -0.09,  0.96,  0.84, -0.16,  1.00
+    ),
+    nrow = 8,
+    byrow = TRUE
+  )
+  bb <- port:::.box_bounds(R, 0.005)
+  wp <- port:::.pocs_witness(bb$lo, bb$hi, bb$off, function(v) {
+    port:::.witness_bound(R, v, 0.005)
+  })
+  expect_lt(wp$B_upper, 0)
+  expect_lt(exact_box_max(R, wp$v), 0)
+  res <- check_corr_psd(R, decimals = 2)
+  expect_equal(res$verdict, "inconsistent")
+  expect_true(res$certified)
+  expect_lt(exact_box_max(R, res$witness), 0)
+  # same verdict through the heterogeneous-box path
+  res_box <- check_corr_psd(R, decimals = matrix(2, 8, 8))
+  expect_equal(res_box$verdict, "inconsistent")
+  expect_lt(exact_box_max(R, res_box$witness), 0)
+})
+
+test_that("a boundary-only box pinned at r = 1 is certified by merging", {
+  # The box [1, 1 + 2^-6] clips to the single point r = 1, so the only in-box
+  # correlation matrix is singular: no witness exists, and the Cholesky test
+  # cannot certify it. Merging the two variables (r = 1 forces them equal)
+  # leaves a 1 x 1 table, which expands exactly to that matrix.
+  R <- matrix(c(1, 1 + 2^-7, 1 + 2^-7, 1), 2)
+  res <- check_corr_psd(R, delta = 2^-7)
+  expect_equal(res$verdict, "consistent")
+  expect_true(res$certified)
+  expect_equal(res$certified_matrix, matrix(1, 2, 2))
 })
 
 test_that(".pocs_consistent returns a verified in-box matrix when one exists", {

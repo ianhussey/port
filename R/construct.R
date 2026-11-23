@@ -9,7 +9,7 @@
 
 # Is X inside the rounding box around R (off-diagonals within delta, clipped to
 # [-1, 1]; unit diagonal)? Used to double-check solver / constructed solutions.
-.in_box <- function(X, R, delta, tol = 1e-9) {
+.in_box <- function(X, R, delta, tol = 0) {
   p <- nrow(R)
   if (any(abs(diag(X) - 1) > tol)) {
     return(FALSE)
@@ -66,6 +66,13 @@
   )
   for (cand in candidates) {
     if (.in_box(cand$X, R, delta) && .verify_psd(cand$X)) return(cand)
+  }
+  # A cell pinned at +-1 (|R_ij| = 1 with delta = 0, or |R_ij| = 1 + delta)
+  # rules out every PD candidate; .pocs_feasible() merges such variables first.
+  bb <- .box_bounds(R, delta)
+  if (nrow(.pinned_cells(bb$lo, bb$hi)) > 0L) {
+    hit <- .pocs_feasible(bb$lo, bb$hi, bb$off)
+    if (!is.null(hit)) return(list(X = hit$X, how = .pocs_note(hit)))
   }
   NULL
 }

@@ -5,7 +5,8 @@
 # check on the (p-1)x(p-1) submatrix at the same delta. A variable "restores"
 # feasibility if its removal makes the submatrix consistent-given-rounding.
 # Reuses the base package's rigorous machinery directly: "still inconsistent" is a
-# witness-certified claim; "restored" is a Rump-verified consistency.
+# witness-certified claim; "restored" is a Rump-verified consistency (a presumed
+# consistent, certified = FALSE, does not count).
 # -----------------------------------------------------------------------------
 
 # Returns a list with:
@@ -19,7 +20,9 @@
     sub <- R[-k, -k, drop = FALSE]
     res <- check_corr_psd(sub, delta = delta)
     verdicts[k] <- res$verdict
-    if (identical(res$verdict, "consistent")) restoring <- c(restoring, k)
+    if (identical(res$verdict, "consistent") && isTRUE(res$certified)) {
+      restoring <- c(restoring, k)
+    }
   }
   list(restoring = restoring, verdicts = verdicts)
 }

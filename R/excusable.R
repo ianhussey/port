@@ -10,19 +10,23 @@
 #' unifies the verdict and the severity into a single interpretable statistic in
 #' the units of reporting precision:
 #'
-#' * the matrix is inconsistent at reporting precision `delta` **iff**
-#'   `excusable_delta(R) > delta`;
+#' * the matrix is inconsistent at reporting precision `delta` only if
+#'   `excusable_delta(R) > delta` (up to `tol`);
 #' * a value like `0.04` reads as "the reported values are inconsistent with any
 #'   correlation matrix unless each entry were misstated by more than +/-0.04 --
 #'   not excusable even by rounding to 1 decimal place (+/-0.05 would be needed)".
 #'
 #' For a matrix that is already consistent at fine precision the threshold is ~0.
 #' The value is located by bisection over the box feasibility oracle (witness
-#' refutation + Rump-verified POCS), to tolerance `tol`.
+#' refutation + Rump-verified POCS), to tolerance `tol`. The returned width is
+#' certified: a PSD matrix was verified in its box. It is an upper bound on the
+#' true threshold: bisection steps where the oracle proves neither feasibility
+#' nor infeasibility count as infeasible, so near the PSD boundary the value can
+#' exceed the true one by a little more than `tol`.
 #'
 #' @param R A symmetric numeric correlation matrix with unit diagonal.
 #' @param tol Bisection tolerance for the threshold.
-#' @return A single number: the smallest excusing half-width `w`.
+#' @return A single number: the smallest certified excusing half-width `w`.
 #' @examples
 #' R <- matrix(c(1, 0.9, 0.9, 0.9, 1, -0.9, 0.9, -0.9, 1), 3, 3)
 #' excusable_delta(R)   # far above 0.005: 2dp rounding cannot excuse it

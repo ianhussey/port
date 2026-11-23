@@ -16,3 +16,5 @@
 ^application$
 ^LICENSE\.md$
 ^app$
+^special-scripts$
+^CITATION\.cff$

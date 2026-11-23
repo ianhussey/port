@@ -89,7 +89,7 @@
 }
 
 # Is X inside the (heterogeneous) box? Unit diagonal, off-diagonals in [lo, hi].
-.in_box_generic <- function(X, lo, hi, off, tol = 1e-9) {
+.in_box_generic <- function(X, lo, hi, off, tol = 0) {
   if (any(abs(diag(X) - 1) > tol)) {
     return(FALSE)
   }
@@ -97,9 +97,103 @@
   all(x >= lo[off] - tol & x <= hi[off] + tol)
 }
 
+# Cells whose interval is the single value +1 or -1 ("pinned"), as rows of a
+# (row, col) matrix over the upper triangle. An interval within `tol` of such a
+# point counts: its computed ends can be a few ulps off, e.g. [-1, -1 + 1e-16]
+# for -1.001 under floor rounding. The default, 4u, is the error of a computed
+# box edge (see R/verify.R). A decimal end other than +-1 with at most 15
+# decimal places is at least 1e-15 - 4u > 4u from +-1, so for such input a cell
+# counts as pinned only if it really is. A larger tolerance would let the merge
+# force X_ij = +-1 in a cell whose box excludes it.
+.pinned_cells <- function(lo, hi, tol = .pin_tol()) {
+  which(
+    upper.tri(lo) & abs(hi - lo) <= tol & abs(abs(lo) - 1) <= tol,
+    arr.ind = TRUE
+  )
+}
+
+.pin_tol <- function() 4 * .unit_roundoff()
+
+# Merge variables whose correlation is pinned at s = +-1. If X is PSD with
+# X_ii = X_jj = 1 and X_ij = s, then (e_i - s e_j)' X (e_i - s e_j) = 0, so
+# X e_i = s X e_j: in every PSD matrix in the box, variable j is variable i up
+# to sign. Each class of such variables becomes one variable whose box row is
+# the intersection of its members' sign-adjusted rows. With P the p x g matrix
+# that has P[i, class(i)] = sign(i), the in-box PSD matrices are exactly the
+# matrices P Y P' with Y PSD in the merged box: any such Y gives one, and every
+# in-box PSD X is of that form. Returns NULL if no cell is pinned,
+# list(P = NULL) if the pinned cells contradict each other or the merged
+# intervals are empty (then no in-box PSD matrix exists; the witness search,
+# not this function, is left to prove it), and otherwise list(lo, hi, off, P).
+.pinned_merge <- function(lo, hi, off, tol = .pin_tol()) {
+  pin <- .pinned_cells(lo, hi, tol)
+  if (nrow(pin) == 0L) {
+    return(NULL)
+  }
+  p <- nrow(lo)
+  parent <- seq_len(p)
+  sgn <- rep(1, p) # sign of each variable relative to its parent
+  find <- function(i) {
+    s <- 1
+    while (parent[i] != i) {
+      s <- s * sgn[i]
+      i <- parent[i]
+    }
+    c(i, s)
+  }
+  for (r in seq_len(nrow(pin))) {
+    a <- find(pin[r, 1])
+    b <- find(pin[r, 2])
+    s <- sign(lo[pin[r, 1], pin[r, 2]])
+    if (a[1] != b[1]) {
+      parent[b[1]] <- a[1]
+      sgn[b[1]] <- a[2] * b[2] * s
+    }
+  }
+  cls <- t(vapply(seq_len(p), find, numeric(2)))
+  reps <- sort(unique(cls[, 1]))
+  g <- length(reps)
+  P <- matrix(0, p, g)
+  P[cbind(seq_len(p), match(cls[, 1], reps))] <- cls[, 2]
+
+  L <- matrix(-1, g, g)
+  H <- matrix(1, g, g)
+  for (i in seq_len(p - 1L)) {
+    for (j in (i + 1L):p) {
+      a <- match(cls[i, 1], reps)
+      b <- match(cls[j, 1], reps)
+      s <- cls[i, 2] * cls[j, 2]
+      if (a == b) {
+        # X_ij is forced to s; the cell's interval must allow it.
+        if (s < lo[i, j] - tol || s > hi[i, j] + tol) {
+          return(list(P = NULL))
+        }
+        next
+      }
+      iv <- sort(s * c(lo[i, j], hi[i, j]))
+      L[a, b] <- L[b, a] <- max(L[a, b], iv[1])
+      H[a, b] <- H[b, a] <- min(H[a, b], iv[2])
+    }
+  }
+  diag(L) <- 1
+  diag(H) <- 1
+  if (any(L > H)) {
+    return(list(P = NULL))
+  }
+  list(lo = L, hi = H, off = upper.tri(L) | lower.tri(L), P = P)
+}
+
 # POCS search for an in-box PSD matrix in a heterogeneous box. Returns a
 # Rump-verified in-box matrix (list with X, mu) or NULL. NULL means "not found",
 # NOT "infeasible"; infeasibility must be established by .box_inconsistent().
+#
+# A box with a cell pinned at +-1 holds no positive definite matrix, which the
+# Rump test needs, so such boxes are first reduced by .pinned_merge(). The
+# search then runs on the merged box (recursively, as merging can pin further
+# cells) and the result is expanded as X = P Y P'. That product is exact: each
+# entry of X is +-1 times one entry of Y. Y is Rump-verified PSD, so X is
+# exactly PSD, though singular; the result then also carries `merged`, the
+# number of merged variables.
 .pocs_feasible <- function(
   lo,
   hi,
@@ -108,6 +202,29 @@
   max_iter = 1000L,
   tol = 1e-13
 ) {
+  m <- .pinned_merge(lo, hi, off)
+  if (!is.null(m)) {
+    if (is.null(m$P)) {
+      return(NULL)
+    }
+    g <- ncol(m$P)
+    hit <- if (g == 1L) {
+      list(X = matrix(1, 1, 1), mu = NA_real_)
+    } else {
+      .pocs_feasible(m$lo, m$hi, m$off, mus, max_iter, tol)
+    }
+    if (is.null(hit)) {
+      return(NULL)
+    }
+    X <- m$P %*% hit$X %*% t(m$P)
+    # Defensive: X is in the box by construction, up to the pinned cells'
+    # tolerance (a few ulps of computed edge error).
+    if (!.in_box_generic(X, lo, hi, off, tol = .pin_tol())) {
+      return(NULL)
+    }
+    return(list(X = X, mu = hit$mu, merged = hit$merged %||% g))
+  }
+
   p <- nrow(lo)
   start <- matrix(0, p, p)
   start[off] <- (lo[off] + hi[off]) / 2
@@ -132,17 +249,37 @@
 # and lo_st otherwise. If B_upper < 0 then no in-box matrix is PSD along v.
 # A rigorous a-priori forward-error slack is added (Higham gamma bounds), so the
 # verdict is floating-point-safe (same model as the base witness bound).
+#
+# Computed without forming p x p matrices per call, which made this function
+# most of the running time of the localizers and check_disattenuated_psd().
+# Coordinates with v_i = 0 contribute nothing and are dropped. With
+# v = a - b (a, b >= 0, disjoint supports), same-sign pairs take hi and
+# opposite-sign pairs take lo, so the off-diagonal sum is
+#     a'Ha + b'Hb - a'Lb - b'La      (H, L = hi, lo with zero diagonal),
+# four quadratic forms, each a sum of products, with |.| in place of each
+# factor giving the magnitude scaffold P. Every term passes through at most
+# 3p + 3 roundings, within the gamma_{2p^2+2} used here for p >= 2.
 .witness_box_bound <- function(lo, hi, off, v) {
   p <- length(v)
   u <- .unit_roundoff()
-  vv <- outer(v, v) # v_s v_t
-  best <- ifelse(vv >= 0, hi, lo) # box-optimal entry per pair
-  best[!off] <- 0
+  S <- which(v != 0)
+  H <- hi[S, S, drop = FALSE]
+  L <- lo[S, S, drop = FALSE]
+  H[!off[S, S]] <- 0
+  L[!off[S, S]] <- 0
+  AB <- cbind(pmax(v[S], 0), pmax(-v[S], 0)) # columns a, b
   diag_term <- sum(v * v) # sum_i v_i^2 (diagonal = 1)
-  cross <- sum(vv[off] * best[off]) # sum over ALL ordered off pairs = 2 * sum_{s<t}
+  HAB <- H %*% AB
+  LAB <- L %*% AB
+  cross <- sum(AB * HAB) - sum(AB[, 1] * LAB[, 2]) - sum(AB[, 2] * LAB[, 1])
   M_hat <- diag_term + cross
   # Magnitude scaffold for the error bound.
-  P <- sum(v * v) + sum(abs(vv[off]) * abs(best[off]))
+  HAB <- abs(H) %*% AB
+  LAB <- abs(L) %*% AB
+  P <- diag_term +
+    sum(AB * HAB) +
+    sum(AB[, 1] * LAB[, 2]) +
+    sum(AB[, 2] * LAB[, 1])
   E <- (.gamma(2L * p * p + 2L) + u) * P
   E <- E * 1.000001
   list(v = v, M_hat = M_hat, E = E, B_upper = M_hat + E)
@@ -151,16 +288,26 @@
 # Fixed-point polish for the heterogeneous box (see .polish_witness in
 # witness.R): X(v) picks the box-optimal entry per pair, the next direction is
 # its bottom eigenvector. Sound by construction (every iterate is evaluated
-# through the rigorous box bound).
-.polish_witness_box <- function(lo, hi, off, v, max_iter = 8L) {
+# through the rigorous box bound). `on_support = TRUE` keeps the iteration on
+# the nonzero coordinates of v.
+.polish_witness_box <- function(
+  lo,
+  hi,
+  off,
+  v,
+  max_iter = 8L,
+  on_support = FALSE
+) {
   best <- .witness_box_bound(lo, hi, off, v)
-  p <- nrow(lo)
+  S <- if (on_support) which(v != 0) else seq_along(v)
   for (k in seq_len(max_iter)) {
     vv <- outer(v, v)
     X <- ifelse(vv >= 0, hi, lo)
     X[!off] <- 0
     diag(X) <- 1
-    v_new <- eigen(X, symmetric = TRUE)$vectors[, p]
+    e <- eigen(X[S, S, drop = FALSE], symmetric = TRUE)
+    v_new <- numeric(length(v))
+    v_new[S] <- e$vectors[, length(S)]
     wb <- .witness_box_bound(lo, hi, off, v_new)
     if (wb$B_upper < best$B_upper - 1e-15) {
       best <- wb
@@ -177,8 +324,17 @@
 # b_upper, margin). Directions: bottom eigenvectors of the box midpoint, all
 # coordinate pairs, (small p) 3x3 submatrix eigenvectors, and the p regression-
 # residual directions of the midpoint -- the same family that powers the base
-# checker, all evaluated with the rigorous box bound, then polished.
-.box_inconsistent <- function(lo, hi, off, triples_max_p = 12L) {
+# checker, all evaluated with the rigorous box bound, then polished; if none
+# certifies and `sparse` is TRUE, the greedy-subset search of the midpoint is
+# tried as well (.box_sparse(); see .witness_search() for why it can be
+# switched off).
+.box_inconsistent <- function(
+  lo,
+  hi,
+  off,
+  triples_max_p = 12L,
+  sparse = TRUE
+) {
   p <- nrow(lo)
   mid <- matrix(0, p, p)
   mid[off] <- (lo[off] + hi[off]) / 2
@@ -225,12 +381,41 @@
     pol <- .polish_witness_box(lo, hi, off, best$v)
     if (pol$B_upper < best$B_upper) best <- pol
   }
-  list(
+  res <- list(
     inconsistent = !is.null(best) && best$B_upper < 0,
     witness = if (is.null(best)) NULL else best$v,
     b_upper = if (is.null(best)) NA_real_ else best$B_upper,
     margin = if (is.null(best)) NA_real_ else best$M_hat
   )
+  if (sparse) .box_sparse(lo, hi, off, res) else res
+}
+
+# Sparse stage of .box_inconsistent(): if `imp` (a result of that function)
+# certifies nothing, try the greedy-subset search of the box midpoint and return
+# `imp` with its witness replaced if the new one is better. Callers that run
+# the dense stage first (sparse = FALSE) and something else in between call
+# this afterwards instead of repeating the dense stage.
+.box_sparse <- function(lo, hi, off, imp) {
+  if (isTRUE(imp$inconsistent)) {
+    return(imp)
+  }
+  mid <- matrix(0, nrow(lo), ncol(lo))
+  mid[off] <- (lo[off] + hi[off]) / 2
+  diag(mid) <- 1
+  g <- .greedy_subset_witness(
+    mid,
+    function(v) .witness_box_bound(lo, hi, off, v),
+    function(v) .polish_witness_box(lo, hi, off, v, on_support = TRUE)
+  )
+  if (!is.null(g) && (is.na(imp$b_upper) || g$B_upper < imp$b_upper)) {
+    imp <- list(
+      inconsistent = g$B_upper < 0,
+      witness = g$v,
+      b_upper = g$B_upper,
+      margin = g$M_hat
+    )
+  }
+  imp
 }
 
 # Feasibility oracle used by the bisection localizers. Combines the two sound
@@ -240,9 +425,32 @@
 # When verify = FALSE, a POCS point that fails Rump is still reported feasible
 # (labelled solver/search-based) so callers can run cheaply.
 .box_feasible <- function(lo, hi, off, verify = TRUE) {
-  # Witness first: a sound refutation is cheap (O(p^2) directions) and lets the
-  # bisection localizers reject infeasible pins without a full POCS search.
-  imp <- .box_inconsistent(lo, hi, off)
+  # Order of the searches. The full POCS search tries four margins, each a
+  # separate run. The sparse witness search goes before the three smaller
+  # margins: they rarely succeed and cost the most when they fail, which
+  # bisection near the boundary often makes them do (run after them, the sparse
+  # search made localize_psd_fault() 2.4 times as slow over eight tables, p = 8
+  # to 30, measured before the box bound was made faster). Whether it also goes
+  # before the first margin depends on p. The sparse search costs O(p^5) and
+  # POCS about O(p^3) per iteration, and the first margin settles nearly every
+  # feasible box. For p > 20 the first margin therefore runs first, so feasible
+  # boxes skip the sparse search. Timed with implied_interval(hold = "box") for
+  # one cell of two near-boundary tables, POCS first takes 1.3 times as long as
+  # sparse first at p = 10, 1.03 and 1.1 times at p = 20 and 30, and 0.54 and
+  # 0.85 times at p = 40 and 60.
+  # ponytail: crossover from timings on one machine, two tables per p; anywhere
+  # in p = 20-30 is within noise. Move it to 30 if larger samples agree.
+  mus <- c(1e-2, 1e-3, 1e-4, 1e-6)
+  sparse_first <- nrow(lo) <= 20L
+  imp <- .box_inconsistent(lo, hi, off, sparse = sparse_first)
+  if (!sparse_first && !isTRUE(imp$inconsistent)) {
+    hit <- .pocs_feasible(lo, hi, off, mus = mus[1L])
+    if (!is.null(hit)) {
+      return(list(status = "feasible", X = hit$X, certified = TRUE))
+    }
+    imp <- .box_sparse(lo, hi, off, imp)
+    mus <- mus[-1L]
+  }
   if (isTRUE(imp$inconsistent)) {
     return(list(
       status = "infeasible",
@@ -251,7 +459,7 @@
       certified = TRUE
     ))
   }
-  hit <- .pocs_feasible(lo, hi, off)
+  hit <- .pocs_feasible(lo, hi, off, mus = mus)
   if (!is.null(hit)) {
     return(list(status = "feasible", X = hit$X, certified = TRUE))
   }

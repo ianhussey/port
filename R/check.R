@@ -72,17 +72,45 @@
 #' \describe{
 #'   \item{`inconsistent`}{No PSD matrix exists in the rounding box. Reached at
 #'     tier `precheck` (a reported entry is out of range even at its nearest box
-#'     edge) or `witness` (a test vector `v` gives a rigorously-negative upper
-#'     bound `B_upper < 0`). Always certified.}
+#'     edge), `witness` (a test vector `v` gives a rigorously-negative upper
+#'     bound `B_upper < 0`), or `pocs` (the same bound, for a test vector that
+#'     only the alternating-projection escalation found). Always certified.}
 #'   \item{`consistent`}{`certified = TRUE` when an explicit in-box matrix was
 #'     verified PSD (Rump 2006) -- a rigorous existence certificate.
 #'     `certified = FALSE` marks a *presumed* consistent: the witness margin is
 #'     comfortably positive but no in-box PSD matrix was exhibited, so the
 #'     verdict means only "not shown inconsistent".}
-#'   \item{`undecided`}{The witness margin sits in the precision-limited
-#'     ambiguous zone `[0, tau]` and no in-box PSD matrix could be certified,
-#'     including by the alternating-projection escalation.}
+#'   \item{`undecided`}{Neither proof was found: the witness margin sits in
+#'     the ambiguous zone `[0, tau]`, no in-box PSD matrix could be certified,
+#'     and the alternating-projection escalation produced neither such a matrix
+#'     nor a witness. The table may be inconsistent with a witness the search
+#'     missed, or consistent only on the boundary of the PSD cone.}
 #' }
+#'
+#' @section When a genuine table can be undecided:
+#' Let `C` be the true correlation matrix behind a genuine table. For small
+#' `t > 0`, `(1 - t) C + t I` is positive definite and moves every correlation
+#' toward 0, so it lies in the rounding box unless some true correlation sits
+#' exactly on the end of its range nearer to 0. Under `"nearest"` rounding that
+#' end is a rounding midpoint (such as 0.125 at 2 decimals), which real data
+#' essentially never hit. So the box of a genuine table rounded to nearest
+#' always contains a positive definite matrix, and the verdict is never
+#' `undecided` for structural reasons; an `undecided` genuine table has too
+#' little room around such a matrix for the search to find and verify it.
+#'
+#' Under `"truncate"`, `"floor"` and `"ceiling"` the reported value is itself
+#' an end of the range, so a true value exactly on the rounding grid can sit on
+#' the end nearer to 0. In practice that is a correlation of exactly 1 or -1, as
+#' between a variable and its duplicate or reverse-coded copy: its range is the
+#' single value +-1 and the box holds no positive definite matrix. Such
+#' variables are equal up to sign in every PSD matrix in the box, so
+#' `check_corr_psd()` merges them and certifies the merged table. A range
+#' within about `4e-16` (four units of floating-point rounding) of +-1 counts as
+#' +-1, which is exact when the reported values and half-widths have at most 15
+#' decimal places. The same applies under `"nearest"` with
+#' `delta = 0`. Other true values exactly on the grid (apart from 0, which does
+#' not need to move) arise only in very small samples or constructed data, and
+#' can leave a genuine table `undecided`.
 #'
 #' @section Rigor guarantee (and what it does not prove):
 #' If `verdict == "inconsistent"`, then no PSD matrix exists in the rounding box,
@@ -100,6 +128,16 @@
 #' over-estimate, a rounding box that contains any PSD matrix can never be
 #' reported `inconsistent`.
 #'
+#' @section Running time:
+#' Most tables take well under a second. When the dense witness directions
+#' prove nothing and no in-box PSD matrix is found (by a cheap construction or,
+#' for the general box of other rounding rules, per-cell precision or missing
+#' cells, by alternating projections), a sparse witness search runs whose cost
+#' grows like `p^5`: about 1.5 s at `p = 80`, 4 s at
+#' `p = 100` and 20 s at `p = 150`. If a verdict is still `undecided` after
+#' that, the alternating-projection witness search can add up to about 17 s at
+#' `p = 100`.
+#'
 #' @param R A symmetric numeric `p x p` matrix with unit diagonal (the reported
 #'   correlation matrix). Small asymmetries are symmetrized with a warning;
 #'   large ones error. `p >= 2` is required. Off-diagonal `NA` entries
@@ -111,11 +149,12 @@
 #' @param delta Optional absolute half-width(s) of the rounding box: a scalar or
 #'   a `p x p` symmetric matrix. Overrides `decimals`; requires
 #'   `rounding = "nearest"`.
-#' @param tau Non-negative width of the precision-limited ambiguous zone. When
-#'   the witness upper bound lies in `[0, tau]` and no in-box PSD matrix is
-#'   certified by the cheap constructions, the result escalates to the
-#'   self-contained alternating-projection search, and is reported `undecided`
-#'   if that too fails. Defaults to `10 *` the (maximum) box half-width.
+#' @param tau Non-negative width of the ambiguous zone. When the witness upper
+#'   bound lies in `[0, tau]` and no in-box PSD matrix is certified by the cheap
+#'   constructions, the result escalates to the self-contained
+#'   alternating-projection search, which looks for an in-box PSD matrix and
+#'   then for a witness direction, and is reported `undecided` if both fail.
+#'   Defaults to `10 *` the (maximum) box half-width.
 #' @param rounding The rule that produced the reported values: `"nearest"`
 #'   (default; symmetric box of half-width `0.5 * 10^(-decimals)`),
 #'   `"truncate"` (toward zero), `"floor"`, or `"ceiling"` (asymmetric boxes of
@@ -129,8 +168,9 @@
 #'   `note`, and a summary of the reported off-diagonal correlations `r_min`,
 #'   `r_max`, `r_mean`, `r_sd` (over the unique off-diagonal entries, excluding
 #'   the unit diagonal and any `NA` cells; `r_sd` is the sample SD, `NA` when
-#'   fewer than two correlations are present). See [certificate()] and the print
-#'   method.
+#'   fewer than two correlations are present). The witness is named by the
+#'   column (or row) names of `R`, if it has any. See [certificate()] and the
+#'   print method.
 #'
 #' @examples
 #' # Strongly inconsistent 3x3: r12 = r13 = 0.9, r23 = -0.9.
@@ -157,69 +197,22 @@ check_corr_psd <- function(
     R <- as.matrix(R)
   }
   has_na <- is.matrix(R) && is.numeric(R) && anyNA(R)
-  R <- if (has_na) .validate_corr_na(R) else .validate_corr(R)
+  var_names <- colnames(R) %||% rownames(R)
+  R <- .validate_corr(R, allow_na = has_na)
   p <- nrow(R)
 
-  # --- precision arguments ---------------------------------------------------
-  dec_ok <- function(x) {
-    is.numeric(x) &&
-      !anyNA(x) &&
-      all(is.finite(x)) &&
-      all(x >= 0) &&
-      all(x == round(x))
+  .validate_precision(decimals, delta, rounding, p)
+
+  finish <- function(res, uniform) {
+    if (!is.null(res$witness)) {
+      names(res$witness) <- var_names
+    }
+    res[c("r_min", "r_max", "r_mean", "r_sd")] <- .offdiag_stats(R)
+    attr(res, "R") <- R
+    attr(res, "uniform_box") <- uniform
+    res
   }
-  if (is.null(delta)) {
-    if (is.matrix(decimals)) {
-      if (
-        !all(dim(decimals) == p) ||
-          !dec_ok(decimals) ||
-          max(abs(decimals - t(decimals))) > 0
-      ) {
-        stop(
-          "A `decimals` matrix must be p x p, symmetric, with non-negative ",
-          "integer entries.",
-          call. = FALSE
-        )
-      }
-    } else if (!(length(decimals) == 1L && dec_ok(decimals))) {
-      stop(
-        "`decimals` must be a single non-negative integer (or a p x p matrix).",
-        call. = FALSE
-      )
-    }
-  } else {
-    if (!identical(rounding, "nearest")) {
-      stop(
-        "Supply `decimals` (not `delta`) when `rounding` is not \"nearest\": ",
-        "asymmetric boxes are derived from the decimal width.",
-        call. = FALSE
-      )
-    }
-    if (is.matrix(delta)) {
-      if (
-        !all(dim(delta) == p) ||
-          anyNA(delta) ||
-          any(!is.finite(delta)) ||
-          any(delta < 0) ||
-          max(abs(delta - t(delta))) > 0
-      ) {
-        stop(
-          "A `delta` matrix must be p x p, symmetric, non-negative and finite.",
-          call. = FALSE
-        )
-      }
-    } else if (
-      !(is.numeric(delta) &&
-        length(delta) == 1L &&
-        is.finite(delta) &&
-        delta >= 0)
-    ) {
-      stop(
-        "`delta` must be a single non-negative finite number (or a p x p matrix).",
-        call. = FALSE
-      )
-    }
-  }
+
   chk_tau <- function(tau) {
     if (!is.numeric(tau) || length(tau) != 1L || !is.finite(tau) || tau < 0) {
       stop("`tau` must be a single non-negative finite number.", call. = FALSE)
@@ -227,21 +220,14 @@ check_corr_psd <- function(
     tau
   }
 
-  uniform <- !has_na &&
-    identical(rounding, "nearest") &&
-    !is.matrix(decimals) &&
-    !is.matrix(delta)
+  uniform <- .is_uniform_box(has_na, decimals, delta, rounding)
 
   if (!uniform) {
     bx <- .reported_box(R, decimals, delta, rounding)
     if (is.null(tau)) {
       tau <- 10 * bx$half_max
     }
-    res <- .check_box(R, bx, chk_tau(tau), rounding)
-    res[c("r_min", "r_max", "r_mean", "r_sd")] <- .offdiag_stats(R)
-    attr(res, "R") <- R
-    attr(res, "uniform_box") <- FALSE
-    return(res)
+    return(finish(.check_box(R, bx, chk_tau(tau), rounding), FALSE))
   }
 
   if (is.null(delta)) {
@@ -276,8 +262,18 @@ check_corr_psd <- function(
       ))
     }
 
-    # Tier 2: witness-vector bound (primary inconsistency path).
-    w <- .witness_search(R, delta)
+    # Tier 2: witness-vector bound (primary inconsistency path). The dense
+    # directions go first. The O(p^5) sparse search runs only if they certify
+    # nothing and no construction certifies consistency (in which case no
+    # witness can exist).
+    w <- .witness_search(R, delta, sparse = FALSE)
+    cons <- NULL
+    if (is.null(w) || w$B_upper >= 0) {
+      cons <- .construct_consistent(R, delta)
+      # ponytail: repeats the dense search, negligible next to the sparse one;
+      # split .witness_search() if that ever shows up in a profile.
+      if (is.null(cons)) w <- .witness_search(R, delta)
+    }
     if (!is.null(w) && w$B_upper < 0) {
       return(.new_corr_psd_check(
         verdict = "inconsistent",
@@ -294,8 +290,7 @@ check_corr_psd <- function(
     b_upper <- if (is.null(w)) NA_real_ else w$B_upper
     margin <- if (is.null(w)) NA_real_ else w$M_hat
 
-    # Consistency: try to exhibit and verify an in-box PSD matrix.
-    cons <- .construct_consistent(R, delta)
+    # Consistency: an in-box PSD matrix was exhibited and verified.
     if (!is.null(cons)) {
       return(.new_corr_psd_check(
         verdict = "consistent",
@@ -345,6 +340,26 @@ check_corr_psd <- function(
       ))
     }
 
+    # Last resort before "undecided": if the projections cannot bring the box
+    # and the PSD cone together, try the direction that separates them.
+    bb <- .box_bounds(R, delta)
+    wp <- .pocs_witness(bb$lo, bb$hi, bb$off, function(v) {
+      .witness_bound(R, v, delta)
+    })
+    if (wp$B_upper < 0) {
+      return(.new_corr_psd_check(
+        verdict = "inconsistent",
+        tier = "pocs",
+        delta = delta,
+        p = p,
+        certified = TRUE,
+        witness = wp$v,
+        margin = wp$M_hat,
+        b_upper = wp$B_upper,
+        note = "witness direction found by alternating projections"
+      ))
+    }
+
     .new_corr_psd_check(
       verdict = "undecided",
       tier = "pocs",
@@ -354,18 +369,14 @@ check_corr_psd <- function(
       margin = margin,
       b_upper = b_upper,
       note = paste(
-        "witness margin within the precision-limited zone [0, tau]",
-        "and no in-box PSD matrix could be constructed or found by",
+        "witness margin within the ambiguous zone [0, tau]; neither an",
+        "in-box PSD matrix nor a witness was found, including by",
         "alternating projections"
       )
     )
   }
 
-  res <- build()
-  res[c("r_min", "r_max", "r_mean", "r_sd")] <- .offdiag_stats(R)
-  attr(res, "R") <- R
-  attr(res, "uniform_box") <- TRUE
-  res
+  finish(build(), TRUE)
 }
 
 # General (heterogeneous) box path: asymmetric rounding rules, per-cell
@@ -413,8 +424,17 @@ check_corr_psd <- function(
     ))
   }
 
-  # Tier 2: box witness (primary inconsistency path).
-  imp <- .box_inconsistent(bx$lo, bx$hi, bx$off)
+  # Tier 2: box witness (primary inconsistency path). The general box has no
+  # cheap constructions, so POCS takes their place: the O(p^5) sparse search
+  # runs only if the dense directions certify nothing and POCS finds no in-box
+  # PSD matrix. (The uniform path runs it after the constructions and before
+  # POCS.)
+  imp <- .box_inconsistent(bx$lo, bx$hi, bx$off, sparse = FALSE)
+  hit <- NULL
+  if (!isTRUE(imp$inconsistent)) {
+    hit <- .pocs_feasible(bx$lo, bx$hi, bx$off)
+    if (is.null(hit)) imp <- .box_sparse(bx$lo, bx$hi, bx$off, imp)
+  }
   if (isTRUE(imp$inconsistent)) {
     return(.new_corr_psd_check(
       verdict = "inconsistent",
@@ -430,8 +450,7 @@ check_corr_psd <- function(
     ))
   }
 
-  # Consistency: POCS search + Rump verification on the heterogeneous box.
-  hit <- .pocs_feasible(bx$lo, bx$hi, bx$off)
+  # Consistency: POCS found an in-box matrix, Rump-verified.
   if (!is.null(hit)) {
     return(.new_corr_psd_check(
       verdict = "consistent",
@@ -443,10 +462,7 @@ check_corr_psd <- function(
       margin = imp$margin,
       b_upper = imp$b_upper,
       certified_matrix = hit$X,
-      note = c(
-        "alternating projections found an in-box matrix, independently verified PSD",
-        na_note
-      )
+      note = c(.pocs_note(hit), na_note)
     ))
   }
 
@@ -470,6 +486,25 @@ check_corr_psd <- function(
     ))
   }
 
+  # Last resort before "undecided", as in the uniform path.
+  wp <- .pocs_witness(bx$lo, bx$hi, bx$off, function(v) {
+    .witness_box_bound(bx$lo, bx$hi, bx$off, v)
+  })
+  if (wp$B_upper < 0) {
+    return(.new_corr_psd_check(
+      verdict = "inconsistent",
+      tier = "pocs",
+      delta = bx$half_max,
+      p = p,
+      certified = TRUE,
+      rounding = rounding,
+      witness = wp$v,
+      margin = wp$M_hat,
+      b_upper = wp$B_upper,
+      note = c("witness direction found by alternating projections", na_note)
+    ))
+  }
+
   .new_corr_psd_check(
     verdict = "undecided",
     tier = "pocs",
@@ -481,11 +516,135 @@ check_corr_psd <- function(
     b_upper = imp$b_upper,
     note = c(
       paste(
-        "witness margin within the precision-limited zone [0, tau]",
-        "and no in-box PSD matrix could be found by alternating",
-        "projections"
+        "witness margin within the ambiguous zone [0, tau]; neither an",
+        "in-box PSD matrix nor a witness was found, including by",
+        "alternating projections"
       ),
       na_note
     )
+  )
+}
+
+# Evidence note for a consistency certificate from .pocs_feasible().
+.pocs_note <- function(hit) {
+  if (is.null(hit$merged)) {
+    return(
+      "alternating projections found an in-box matrix, independently verified PSD"
+    )
+  }
+  sprintf(
+    paste(
+      "variables correlated exactly +-1 were merged (%d remain); alternating",
+      "projections found a matrix on them, independently verified PSD, which",
+      "expands exactly to an in-box PSD matrix"
+    ),
+    hit$merged
+  )
+}
+
+# Whether the rounding box is the uniform one (nearest rounding, one precision
+# for every cell, no missing cells), which check_corr_psd() and check_witness()
+# treat with the uniform bound rather than the general box.
+.is_uniform_box <- function(has_na, decimals, delta, rounding) {
+  !has_na &&
+    identical(rounding, "nearest") &&
+    !is.matrix(decimals) &&
+    !is.matrix(delta)
+}
+
+#' Check a witness vector against a reported correlation table
+#'
+#' Evaluates the bound behind an `inconsistent` verdict for one given vector of
+#' weights, without any search. Use it to check the witness that
+#' [check_corr_psd()] reports (see [certificate()]), a witness from another
+#' source, or one constructed by hand.
+#'
+#' For weights `v`, the bound is the largest value that `v'Xv` can take over
+#' all matrices `X` whose entries lie within the rounding ranges of the
+#' reported table, plus a rigorous allowance for floating-point error. `v'Xv`
+#' is the variance of the weighted sum of the standardized variables, so a
+#' negative bound proves that no dataset can have produced the table. A
+#' non-negative bound proves nothing: another vector may still give a negative
+#' one.
+#'
+#' The rounding ranges are those of [check_corr_psd()], and so is the bound: for
+#' the witness reported by [check_corr_psd()], `b_upper` is the same number.
+#' Reported entries outside `[-1, 1]` even at the nearest end of their range are
+#' not examined here; [check_corr_psd()] reports them at tier `precheck`.
+#'
+#' @inheritParams check_corr_psd
+#' @param witness A numeric vector of length `p` with finite entries, not all
+#'   zero, whose largest absolute entry lies between `1e-100` and `1e100`.
+#' @return A one-row tibble with columns `inconsistent` (`TRUE` if the witness
+#'   proves the table inconsistent), `b_upper` (the rigorous upper bound;
+#'   negative proves inconsistency) and `margin` (the same maximum without the
+#'   floating-point allowance).
+#' @examples
+#' R <- matrix(c(1, 0.9, 0.9, 0.9, 1, -0.9, 0.9, -0.9, 1), 3, 3)
+#'
+#' # The witness found by check_corr_psd():
+#' result <- check_corr_psd(R, decimals = 2)
+#' check_witness(R, certificate(result)$witness, decimals = 2)
+#'
+#' # A witness by hand: variable 1 minus variables 2 and 3.
+#' check_witness(R, c(1, -1, -1), decimals = 2)
+#'
+#' @seealso [check_corr_psd()], [certificate()]
+#' @export
+check_witness <- function(
+  R,
+  witness,
+  decimals = 2,
+  delta = NULL,
+  rounding = c("nearest", "truncate", "floor", "ceiling")
+) {
+  rounding <- match.arg(rounding)
+  if (is.data.frame(R)) {
+    R <- as.matrix(R)
+  }
+  has_na <- is.matrix(R) && is.numeric(R) && anyNA(R)
+  R <- .validate_corr(R, allow_na = has_na)
+  p <- nrow(R)
+  .validate_precision(decimals, delta, rounding, p)
+  if (
+    !is.numeric(witness) ||
+      length(witness) != p ||
+      !all(is.finite(witness)) ||
+      all(witness == 0)
+  ) {
+    stop(
+      sprintf(
+        "`witness` must be a numeric vector of length %d, finite and not all zero.",
+        p
+      ),
+      call. = FALSE
+    )
+  }
+  witness <- as.numeric(witness)
+  # The bound scales with ||witness||^2, so the verdict does not depend on the
+  # scale; this range keeps every intermediate clear of overflow and makes
+  # underflow error negligible next to the bound's slack (>= u * max v_i^2).
+  scale <- max(abs(witness))
+  if (scale < 1e-100 || scale > 1e100) {
+    stop(
+      "The largest absolute entry of `witness` must lie between 1e-100 and ",
+      "1e100. Rescaling the witness does not change the verdict.",
+      call. = FALSE
+    )
+  }
+
+  bound <- if (.is_uniform_box(has_na, decimals, delta, rounding)) {
+    if (is.null(delta)) {
+      delta <- 0.5 * 10^(-decimals)
+    }
+    .witness_bound(R, witness, delta)
+  } else {
+    box <- .reported_box(R, decimals, delta, rounding)
+    .witness_box_bound(box$lo, box$hi, box$off, witness)
+  }
+  tibble::tibble(
+    inconsistent = bound$B_upper < 0,
+    b_upper = bound$B_upper,
+    margin = bound$M_hat
   )
 }

@@ -1,9 +1,9 @@
 # -----------------------------------------------------------------------------
 # Self-contained consistency search by projections onto convex sets (POCS).
 #
-# Escalation tier used only in the precision-limited ambiguous zone, when the
-# cheap constructions in construct.R did not settle consistency. It is fully
-# self-contained: no external solver or optional dependency.
+# Escalation tier used only in the ambiguous zone, when neither the witness
+# search nor the cheap constructions in construct.R settled the verdict. It is
+# fully self-contained: no external solver or optional dependency.
 #
 # The feasible set is the intersection of two closed convex sets:
 #   * the box  B = { X symmetric : X_ii = 1, X_ij in [lo_ij, hi_ij] };
@@ -14,8 +14,9 @@
 # strictly positive definite, so the one-sided Cholesky test of verify.R can
 # certify it. The witness path remains the source of truth: POCS is used only to
 # *find* a candidate, which is then independently Rump-verified. A failure to
-# find a verifiable point is inconclusive (undecided), never an inconsistency
-# certificate.
+# find a verifiable point is inconclusive, never an inconsistency certificate
+# by itself. .pocs_witness() (below) can still certify inconsistency, but only
+# through the rigorous witness bound, like any other test direction.
 # -----------------------------------------------------------------------------
 
 # Euclidean projection onto the box (unit diagonal; off-diagonals clipped).
@@ -76,4 +77,47 @@
     }
   }
   NULL
+}
+
+# Witness from alternating projections between the box and the PSD cone, run
+# without a margin. If the box is inconsistent, the iterates approach a closest
+# pair (X in the box, its projection Y on the cone), and Y - X, the negative
+# eigen-part of X with the sign flipped, separates the box from the cone. The
+# bottom eigenvector of X is its leading rank-one term. It is only a test
+# direction: `bound(v)` must return a rigorous bound record with element
+# `B_upper`, and every direction goes through it, so failure to converge costs
+# power, never soundness. The direction is tested every `every` iterations and
+# the search stops at the first certificate. Returns the last record tested.
+# The iteration converges slowly near the boundary: on held-out matrices a cap
+# of 1000 iterations would leave 9 of 546 open cases undecided, and 10000
+# leaves 6 (special-scripts/sparse-witness-simulation.R).
+# ponytail: up to max_iter eigendecompositions (about 17 s at p = 100 if no
+# certificate turns up), so check_corr_psd() uses it only
+# where the verdict would otherwise be "undecided", and the localizers' oracle
+# does not use it at all. Add it there if undecided oracle calls turn out to
+# matter. The full matrix Y - X is a stronger certificate than its leading
+# term, but the result object holds a single witness vector.
+.pocs_witness <- function(
+  lo,
+  hi,
+  off,
+  bound,
+  max_iter = 10000L,
+  every = 100L,
+  tol = 1e-13
+) {
+  p <- nrow(lo)
+  X <- matrix(0, p, p)
+  X[off] <- (lo[off] + hi[off]) / 2
+  diag(X) <- 1
+  for (k in seq_len(max_iter)) {
+    Xn <- .proj_box(.proj_psd_margin(X, 0), lo, hi, off)
+    done <- k == max_iter || max(abs(Xn - X)) < tol
+    X <- Xn
+    if (done || k %% every == 0L) {
+      wb <- bound(eigen(X, symmetric = TRUE)$vectors[, p])
+      if (done || wb$B_upper < 0) break
+    }
+  }
+  wb
 }

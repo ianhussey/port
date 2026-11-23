@@ -5,3 +5,5 @@ Meta/
 
 *.DS_store
 *.Rhistory
+# research PDFs: download links are in special-scripts/info.md
+special-scripts/*.pdf

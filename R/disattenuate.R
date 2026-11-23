@@ -62,7 +62,19 @@ disattenuate <- function(R, reliability) {
 }
 
 # Per-cell disattenuated intervals from the boxed correlations and boxed
-# reliabilities (sound interval arithmetic; denominators are strictly positive).
+# reliabilities (interval arithmetic; denominators are strictly positive).
+#
+# Floating point: each endpoint s_i * s_j * (R_ij -/+ delta_R) takes about ten
+# roundings, each of relative size u, on top of the inputs' representation
+# error (R_ij - delta_R can cancel, so that error is relative to
+# |R_ij| + delta_R). Every interval is therefore widened outward by
+# gamma_32 * ss_hi * (|R_ij| + delta_R), which covers this when rel - delta_rel
+# is not itself a cancellation. When it is (a reliability within a few ulps of
+# its rounding half-width), s_hi is huge and the affected endpoints are clipped
+# to [-1, 1] anyway. The widening keeps "certainly |D| > 1" and the box witness
+# sound for inconsistency; it does not make a "consistent" verdict rigorous,
+# which the product box cannot be anyway (the reliabilities are shared across
+# cells, so the true set of D matrices is smaller than the box).
 # Returns clipped [lo, hi] for the PSD box, the unclipped minimum achievable
 # magnitude per cell (for the range / plausibility flags), and the point centre.
 .disattenuated_intervals <- function(
@@ -90,8 +102,9 @@ disattenuate <- function(R, reliability) {
       rlo <- R[i, j] - delta_R
       rhi <- R[i, j] + delta_R
       prods <- c(ss_lo * rlo, ss_lo * rhi, ss_hi * rlo, ss_hi * rhi)
-      dlo <- min(prods)
-      dhi <- max(prods)
+      slack <- .gamma(32L) * ss_hi * (abs(R[i, j]) + delta_R)
+      dlo <- min(prods) - slack
+      dhi <- max(prods) + slack
       ma <- if (dlo <= 0 && dhi >= 0) 0 else min(abs(dlo), abs(dhi))
       loD[i, j] <- loD[j, i] <- max(dlo, -1)
       hiD[i, j] <- hiD[j, i] <- min(dhi, 1)
@@ -226,7 +239,10 @@ disattenuate <- function(R, reliability) {
 #' `consistent but implausible` (valid, but a corrected correlation exceeds `max_plausible_r`),
 #' `consistent`, or `undecided`. The inconsistency side is rigorous and box-aware
 #' (it reuses the package's witness / Rump machinery); rounding of both the
-#' correlations and the reliabilities is taken into account.
+#' correlations and the reliabilities is taken into account. A `consistent`
+#' verdict is weaker: each corrected correlation is given its own interval,
+#' although the reliabilities are shared across cells, so the box can contain
+#' matrices that no single set of reliabilities produces.
 #'
 #' With `reliability = NULL` the function instead reports the *critical
 #' reliability* thresholds (the reliability below which disattenuation is
@@ -276,11 +292,19 @@ check_disattenuated_psd <- function(
   ) {
     stop("`max_plausible_r` must be a single number in (0, 1].", call. = FALSE)
   }
-  delta_R <- 0.5 * 10^(-decimals)
-  delta_rel <- if (is.infinite(reliability_decimals)) {
+  delta_R <- .uniform_delta(decimals, NULL, p)
+  delta_rel <- if (identical(reliability_decimals, Inf)) {
     0
   } else {
-    0.5 * 10^(-reliability_decimals)
+    tryCatch(
+      .uniform_delta(reliability_decimals, NULL, p),
+      error = function(e) {
+        stop(
+          "`reliability_decimals` must be a single non-negative integer or Inf.",
+          call. = FALSE
+        )
+      }
+    )
   }
   cutoff <- max_plausible_r
 

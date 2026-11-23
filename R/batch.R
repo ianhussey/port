@@ -12,7 +12,7 @@
 #'
 #' @param mats A list of matrices (each a candidate correlation matrix). May be
 #'   named; names become the `id` column (otherwise a positional index is used).
-#' @param decimals,delta,tau Passed through to [check_corr_psd()].
+#' @param decimals,delta,tau,rounding Passed through to [check_corr_psd()].
 #' @param on_error How to handle a matrix that fails validation: `"row"`
 #'   (default) records a verdict of `"error"` with the message; `"stop"`
 #'   re-raises the error.
@@ -35,9 +35,11 @@ check_corr_psd_batch <- function(
   decimals = 2,
   delta = NULL,
   tau = NULL,
+  rounding = c("nearest", "truncate", "floor", "ceiling"),
   on_error = c("row", "stop"),
   quiet = FALSE
 ) {
+  rounding <- match.arg(rounding)
   on_error <- match.arg(on_error)
   if (!is.list(mats)) {
     stop("`mats` must be a list of matrices.", call. = FALSE)
@@ -64,7 +66,13 @@ check_corr_psd_batch <- function(
 
   for (i in seq_len(n)) {
     res <- tryCatch(
-      check_corr_psd(mats[[i]], decimals = decimals, delta = delta, tau = tau),
+      check_corr_psd(
+        mats[[i]],
+        decimals = decimals,
+        delta = delta,
+        tau = tau,
+        rounding = rounding
+      ),
       error = function(e) e
     )
     if (inherits(res, "error")) {
