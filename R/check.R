@@ -128,9 +128,11 @@
 #' reported `inconsistent`.
 #'
 #' @section Running time:
-#' Most tables take well under a second. When neither the dense witness
-#' directions nor a cheap construction settle the verdict, a sparse witness
-#' search runs whose cost grows like `p^5`: about 1.5 s at `p = 80`, 4 s at
+#' Most tables take well under a second. When the dense witness directions
+#' prove nothing and no in-box PSD matrix is found (by a cheap construction or,
+#' for the general box of other rounding rules, per-cell precision or missing
+#' cells, by alternating projections), a sparse witness search runs whose cost
+#' grows like `p^5`: about 1.5 s at `p = 80`, 4 s at
 #' `p = 100` and 20 s at `p = 150`. If a verdict is still `undecided` after
 #' that, the alternating-projection witness search can add up to about 17 s at
 #' `p = 100`.
@@ -421,8 +423,11 @@ check_corr_psd <- function(
     ))
   }
 
-  # Tier 2: box witness (primary inconsistency path). As in the uniform path,
-  # the sparse search is deferred until POCS has failed to certify consistency.
+  # Tier 2: box witness (primary inconsistency path). The general box has no
+  # cheap constructions, so POCS takes their place: the O(p^5) sparse search
+  # runs only if the dense directions certify nothing and POCS finds no in-box
+  # PSD matrix. (The uniform path runs it after the constructions and before
+  # POCS.)
   imp <- .box_inconsistent(bx$lo, bx$hi, bx$off, sparse = FALSE)
   hit <- NULL
   if (!isTRUE(imp$inconsistent)) {
@@ -568,7 +573,7 @@ check_corr_psd <- function(
 #'
 #' @inheritParams check_corr_psd
 #' @param witness A numeric vector of length `p` with finite entries, not all
-#'   zero.
+#'   zero, whose largest absolute entry lies between `1e-100` and `1e100`.
 #' @return A one-row tibble with columns `inconsistent` (`TRUE` if the witness
 #'   proves the table inconsistent), `b_upper` (the rigorous upper bound;
 #'   negative proves inconsistency) and `margin` (the same maximum without the
@@ -615,6 +620,17 @@ check_witness <- function(
     )
   }
   witness <- as.numeric(witness)
+  # The bound scales with ||witness||^2, so the verdict does not depend on the
+  # scale; this range keeps every intermediate clear of overflow and makes
+  # underflow error negligible next to the bound's slack (>= u * max v_i^2).
+  scale <- max(abs(witness))
+  if (scale < 1e-100 || scale > 1e100) {
+    stop(
+      "The largest absolute entry of `witness` must lie between 1e-100 and ",
+      "1e100. Rescaling the witness does not change the verdict.",
+      call. = FALSE
+    )
+  }
 
   bound <- if (.is_uniform_box(has_na, decimals, delta, rounding)) {
     if (is.null(delta)) {

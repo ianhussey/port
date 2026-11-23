@@ -245,17 +245,37 @@
 # and lo_st otherwise. If B_upper < 0 then no in-box matrix is PSD along v.
 # A rigorous a-priori forward-error slack is added (Higham gamma bounds), so the
 # verdict is floating-point-safe (same model as the base witness bound).
+#
+# Computed without forming p x p matrices per call, which made this function
+# most of the running time of the localizers and check_disattenuated_psd().
+# Coordinates with v_i = 0 contribute nothing and are dropped. With
+# v = a - b (a, b >= 0, disjoint supports), same-sign pairs take hi and
+# opposite-sign pairs take lo, so the off-diagonal sum is
+#     a'Ha + b'Hb - a'Lb - b'La      (H, L = hi, lo with zero diagonal),
+# four quadratic forms, each a sum of products, with |.| in place of each
+# factor giving the magnitude scaffold P. Every term passes through at most
+# 3p + 3 roundings, within the gamma_{2p^2+2} used here for p >= 2.
 .witness_box_bound <- function(lo, hi, off, v) {
   p <- length(v)
   u <- .unit_roundoff()
-  vv <- outer(v, v) # v_s v_t
-  best <- ifelse(vv >= 0, hi, lo) # box-optimal entry per pair
-  best[!off] <- 0
+  S <- which(v != 0)
+  H <- hi[S, S, drop = FALSE]
+  L <- lo[S, S, drop = FALSE]
+  H[!off[S, S]] <- 0
+  L[!off[S, S]] <- 0
+  AB <- cbind(pmax(v[S], 0), pmax(-v[S], 0)) # columns a, b
   diag_term <- sum(v * v) # sum_i v_i^2 (diagonal = 1)
-  cross <- sum(vv[off] * best[off]) # sum over ALL ordered off pairs = 2 * sum_{s<t}
+  HAB <- H %*% AB
+  LAB <- L %*% AB
+  cross <- sum(AB * HAB) - sum(AB[, 1] * LAB[, 2]) - sum(AB[, 2] * LAB[, 1])
   M_hat <- diag_term + cross
   # Magnitude scaffold for the error bound.
-  P <- sum(v * v) + sum(abs(vv[off]) * abs(best[off]))
+  HAB <- abs(H) %*% AB
+  LAB <- abs(L) %*% AB
+  P <- diag_term +
+    sum(AB * HAB) +
+    sum(AB[, 1] * LAB[, 2]) +
+    sum(AB[, 2] * LAB[, 1])
   E <- (.gamma(2L * p * p + 2L) + u) * P
   E <- E * 1.000001
   list(v = v, M_hat = M_hat, E = E, B_upper = M_hat + E)
@@ -406,14 +426,16 @@
   # margins: they rarely succeed and cost the most when they fail, which
   # bisection near the boundary often makes them do (run after them, the sparse
   # search made localize_psd_fault() 2.4 times as slow over eight tables, p = 8
-  # to 30). Whether it also goes before the first margin depends on p. The
-  # sparse search costs O(p^5) and POCS about O(p^3) per iteration, and the
-  # first margin settles nearly every feasible box. For p > 20 the first margin
-  # therefore runs first, so feasible boxes skip the sparse search (8 s at
-  # p = 100); implied_interval() then took less than half the 53 s for one
-  # cell at p = 40. For p <= 20 the sparse search runs first; the other order made
-  # implied_interval() take about 1.5 times as long at p = 10.
-  # ponytail: crossover p = 20 from timings on one machine; ties at p = 20-30.
+  # to 30, measured before the box bound was made faster). Whether it also goes
+  # before the first margin depends on p. The sparse search costs O(p^5) and
+  # POCS about O(p^3) per iteration, and the first margin settles nearly every
+  # feasible box. For p > 20 the first margin therefore runs first, so feasible
+  # boxes skip the sparse search. Timed with implied_interval(hold = "box") for
+  # one cell of two near-boundary tables, POCS first takes 1.3 times as long as
+  # sparse first at p = 10, 1.03 and 1.1 times at p = 20 and 30, and 0.54 and
+  # 0.85 times at p = 40 and 60.
+  # ponytail: crossover from timings on one machine, two tables per p; anywhere
+  # in p = 20-30 is within noise. Move it to 30 if larger samples agree.
   mus <- c(1e-2, 1e-3, 1e-4, 1e-6)
   sparse_first <- nrow(lo) <= 20L
   imp <- .box_inconsistent(lo, hi, off, sparse = sparse_first)

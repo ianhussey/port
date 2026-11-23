@@ -21,7 +21,7 @@ large ones error. \code{p >= 2} is required. Off-diagonal \code{NA} entries
 stronger claim "inconsistent whatever the unreported values were").}
 
 \item{witness}{A numeric vector of length \code{p} with finite entries, not all
-zero.}
+zero, whose largest absolute entry lies between \code{1e-100} and \code{1e100}.}
 
 \item{decimals}{Decimal places the off-diagonals were rounded to: a single
 integer, or a \verb{p x p} symmetric matrix for mixed-precision tables.}

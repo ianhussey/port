@@ -389,3 +389,22 @@ test_that("the feasibility oracle settles both kinds of box above p = 20", {
   expect_equal(oracle$status, "feasible")
   expect_true(.verify_psd(oracle$X))
 })
+
+test_that("the box bound matches the direct maximum over the box", {
+  # Direct evaluation: the box-optimal entry per pair, summed over the matrix.
+  direct <- function(lo, hi, off, v) {
+    vv <- outer(v, v)
+    best <- ifelse(vv >= 0, hi, lo)
+    sum(v^2) + sum((vv * best)[off])
+  }
+  set.seed(11)
+  for (k in 1:50) {
+    p <- sample(2:12, 1)
+    R <- round(cor(matrix(rnorm(p * (p + 3)), ncol = p)), 2)
+    bx <- .reported_box(R, 2, NULL, sample(c("nearest", "truncate", "floor"), 1))
+    v <- rnorm(p)
+    v[sample(p, sample(0:(p - 2), 1))] <- 0
+    wb <- .witness_box_bound(bx$lo, bx$hi, bx$off, v)
+    expect_lt(abs(wb$M_hat - direct(bx$lo, bx$hi, bx$off, v)), wb$E)
+  }
+})

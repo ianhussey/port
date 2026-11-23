@@ -47,5 +47,7 @@ test_that("check_witness() rejects malformed witnesses", {
   expect_error(check_witness(triad, c(1, -1), decimals = 2), "length 3")
   expect_error(check_witness(triad, c(0, 0, 0), decimals = 2), "not all zero")
   expect_error(check_witness(triad, c(1, NA, 1), decimals = 2), "finite")
+  expect_error(check_witness(triad, c(1, -1, -1) * 1e160, decimals = 2), "1e100")
+  expect_error(check_witness(triad, c(1, -1, -1) * 1e-170, decimals = 2), "1e-100")
   expect_error(check_witness(triad, c(1, -1, -1), decimals = -1), "decimals")
 })

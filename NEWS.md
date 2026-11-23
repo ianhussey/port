@@ -30,6 +30,8 @@
 
 * `check_corr_psd()` certifies more near-boundary tables as `inconsistent`. When the existing witness directions certify nothing and no in-box PSD matrix is constructed, a greedy backward elimination over principal submatrices searches for a sparse witness and polishes it on its own support. If that finds nothing either and no in-box PSD matrix is found, the direction that separates the box from the PSD cone under alternating projections is tried before the verdict is `undecided`; a certificate found this way has `tier = "pocs"`. Some tables that were `undecided` are now `inconsistent`, and `b_upper` can be smaller than before. Because a smaller `b_upper` can fall below `tau`, some tables that were presumed `consistent` (`certified = FALSE`) now reach the alternating-projection search, which in the cases examined certified them `consistent`. The localizers and `check_disattenuated_psd()` use the sparse search.
 
+* The witness bound for general boxes (used by the localizers, `implied_interval()`, `check_disattenuated_psd()` and `check_corr_psd()` with missing cells, per-cell precision or rounding other than `"nearest"`) no longer builds p x p matrices for every test direction, which took most of their running time. `check_disattenuated_psd()` at p = 70 takes 14 s instead of 33 s. The bound is the same; only floating-point rounding in `b_upper` can differ.
+
 # port 0.1.0
 
 First release.

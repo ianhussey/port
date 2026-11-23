@@ -136,9 +136,11 @@ reported \code{inconsistent}.
 
 \section{Running time}{
 
-Most tables take well under a second. When neither the dense witness
-directions nor a cheap construction settle the verdict, a sparse witness
-search runs whose cost grows like \code{p^5}: about 1.5 s at \code{p = 80}, 4 s at
+Most tables take well under a second. When the dense witness directions
+prove nothing and no in-box PSD matrix is found (by a cheap construction or,
+for the general box of other rounding rules, per-cell precision or missing
+cells, by alternating projections), a sparse witness search runs whose cost
+grows like \code{p^5}: about 1.5 s at \code{p = 80}, 4 s at
 \code{p = 100} and 20 s at \code{p = 150}. If a verdict is still \code{undecided} after
 that, the alternating-projection witness search can add up to about 17 s at
 \code{p = 100}.
